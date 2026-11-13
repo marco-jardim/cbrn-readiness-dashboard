@@ -1,0 +1,15 @@
+CBRN Readiness Dashboard - antes de instalar
+
+Version preliminar - indicadores no validados institucionalmente.
+
+- No use los indicadores en decisiones que requieran una herramienta validada.
+- No introduzca datos reales todavia. Espere a que la institucion responda las preguntas Q19
+  (clasificacion formal de los datos), Q4 (datos personales), Q11 (seguridad de la informacion)
+  y Q13 (despliegue). Hasta entonces, use el modo de demostracion (cbrn-dashboard.exe --demo):
+  sus datos son ficticios.
+- El programa funciona sin conexion. Sus datos permanecen en este equipo, en
+  %LOCALAPPDATA%\cbrn-readiness-dashboard, fuera de la carpeta del programa.
+- Desinstalar elimina solo el programa. Sus datos se conservan. Para borrarlos, elimine usted
+  mismo esa carpeta.
+- Este instalador no esta firmado digitalmente; por eso Windows SmartScreen puede advertir.
+- No se necesitan derechos de administrador: el programa se instala solo para su usuario.

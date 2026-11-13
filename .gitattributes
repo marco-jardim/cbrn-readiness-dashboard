@@ -2,3 +2,7 @@
 # default, core.autocrlf=true, would turn them into CRLF and change the bytes that are shipped
 # and tested). Binary files are detected and left alone.
 * text=auto eol=lf
+# The installer script and the notices that its wizard shows are read by Windows tools (Inno Setup
+# shows plain text with its own rich-text control): CRLF is the safe line end for them.
+packaging/installer/*.iss text eol=crlf
+packaging/installer/*.txt text eol=crlf

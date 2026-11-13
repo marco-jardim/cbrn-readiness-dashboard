@@ -26,6 +26,12 @@ Todo lo que sigue sobre la descarga describe los archivos de esa página y los s
 `scripts/` que los producen. Ninguna persona ha probado todavía el programa en un perfil limpio de
 Windows.
 
+Como el flujo de publicación construye un **instalador** por usuario (`...-setup.exe`) en cada
+versión, sin ningún paso manual, las versiones posteriores a la 1.0.1 lo llevan junto al zip; la
+propia 1.0.1 solo tiene el zip. El flujo lo instala en modo silencioso, ejecuta la autoprueba del
+programa instalado y lo vuelve a quitar antes de crear la versión; un fallo ahí hace fallar la
+publicación. Ninguna persona lo ha instalado todavía en un perfil limpio de Windows.
+
 Para probar el programa hoy, ejecútelo desde una copia del código fuente (requiere
 [uv](https://docs.astral.sh/uv/)):
 
@@ -37,24 +43,28 @@ uv run cbrn-dashboard --demo
 ## 2. Requisitos
 
 - Windows 10 (versión 1809 o posterior) o Windows 11, de 64 bits (x64).
-- Sin derechos de administrador y sin instalador: el programa es una carpeta que se extrae.
-- Python y Qt están dentro de la carpeta; no hay que instalar nada más.
+- Sin derechos de administrador. Dos formas de obtener el programa: el **instalador** (recomendado
+  para el usuario final; instala solo para su usuario de Windows) o el **zip** que se extrae (modo
+  portátil, equipos de TI).
+- Python y Qt están dentro del instalador y del zip; no hay que instalar nada más.
 - Una carpeta donde Windows permita ejecutar programas (vea la sección 7 sobre equipos restringidos).
 - El puesto de trabajo debe usar cifrado de disco completo (por ejemplo, BitLocker). El programa no
   puede comprobarlo.
 
 ## 3. Descarga
 
-La página de versiones de `https://github.com/marco-jardim/cbrn-readiness-dashboard` lleva tres
+La página de versiones de `https://github.com/marco-jardim/cbrn-readiness-dashboard` lleva estos
 archivos por versión:
 
 | Archivo | Contenido |
 |---|---|
-| `cbrn-readiness-dashboard-<version>-win-x64.zip` | el programa |
-| `SHA256SUMS.txt` | la suma de comprobación SHA-256 del zip |
+| `cbrn-readiness-dashboard-<version>-win-x64-setup.exe` | el instalador (recomendado para el usuario final) |
+| `cbrn-readiness-dashboard-<version>-win-x64.zip` | el programa en una carpeta (modo portátil, TI) |
+| `SHA256SUMS.txt` | la suma de comprobación SHA-256 del instalador y del zip |
 | `SHA256-FILES.txt` | la suma SHA-256 de cada archivo dentro de la carpeta del zip |
 
-Descargue los tres de la **misma** página de versión. El zip contiene una carpeta,
+Descargue el archivo que quiera y `SHA256SUMS.txt` de la **misma** página de versión. El zip
+contiene una carpeta,
 `cbrn-readiness-dashboard\`, con `cbrn-dashboard.exe`, la carpeta `_internal\`, la carpeta
 `licenses\` (textos de las licencias de terceros), las tres notas de primera ejecución y
 `portable.ini.example`.
@@ -69,7 +79,14 @@ Abra PowerShell en la carpeta de los archivos y ejecute:
 Get-FileHash .\cbrn-readiness-dashboard-<version>-win-x64.zip -Algorithm SHA256
 ```
 
-Compare el valor de `Hash` con la línea del zip en `SHA256SUMS.txt`. Deben ser iguales.
+Compare el valor de `Hash` con la línea del zip en `SHA256SUMS.txt`. Deben ser iguales. Haga lo
+mismo con el instalador, antes de ejecutarlo:
+
+```powershell
+Get-FileHash .\cbrn-readiness-dashboard-<version>-win-x64-setup.exe -Algorithm SHA256
+```
+
+`SHA256SUMS.txt` tiene una línea para el instalador y otra para el zip.
 
 ### 4.2 Procedencia con gh attestation verify (opcional)
 
@@ -78,6 +95,7 @@ compilación:
 
 ```powershell
 gh attestation verify .\cbrn-readiness-dashboard-<version>-win-x64.zip --repo marco-jardim/cbrn-readiness-dashboard
+gh attestation verify .\cbrn-readiness-dashboard-<version>-win-x64-setup.exe --repo marco-jardim/cbrn-readiness-dashboard
 ```
 
 Este paso necesita acceso a la red **de su lado**. El programa en sí sigue sin conexión: no tiene
@@ -97,8 +115,32 @@ código de red, ni comprobación de actualizaciones, ni telemetría.
   `Get-AuthenticodeSignature .\cbrn-readiness-dashboard\cbrn-dashboard.exe`: el estado debe ser
   `Valid` y el firmante "SignPath Foundation". Solo ese ejecutable se firmaría, no los archivos de
   Qt, de Python y de Microsoft que lo acompañan.
+- El instalador (el `.exe` de instalación) **tampoco está firmado**, y no se prevé firmarlo: el
+  paso de firma se ejecuta antes de que el instalador exista. SmartScreen también avisa sobre él
+  (sección 6).
 
-## 5. Desbloquear y extraer
+## 5. Instalar: instalador o zip
+
+### 5.1 El instalador (recomendado)
+
+1. Descargue `cbrn-readiness-dashboard-<version>-win-x64-setup.exe` y `SHA256SUMS.txt` de la misma
+   página de versión y compruebe el hash (sección 4.1).
+2. Ejecute el instalador. SmartScreen puede avisar (sección 6). No se necesitan derechos de
+   administrador: instala solo para su usuario de Windows, en
+   `%LOCALAPPDATA%\Programs\CBRN Readiness Dashboard`, y crea un acceso directo en el menú Inicio
+   (un icono en el escritorio es opcional y viene desactivado). El instalador está en portugués de
+   Brasil, inglés o español, según el idioma de su Windows. Muestra la licencia y un aviso breve
+   antes de instalar.
+3. Inicie el programa desde el menú Inicio, o marque la opción al final de la instalación.
+4. Para los equipos de TI, el cuadro de diálogo del inicio del instalador ofrece instalar para todos
+   los usuarios (exige administrador y usa `Program Files`; vea la sección 7). Instalación
+   silenciosa para scripts: `...-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER /DIR="C:\carpeta"`.
+
+El programa instalado no usa el modo portátil: sus datos permanecen en
+`%LOCALAPPDATA%\cbrn-readiness-dashboard` (sección 10.1). El instalador no escribe ninguna clave del
+registro salvo la entrada que Windows muestra en Configuración > Aplicaciones, y no usa la red.
+
+### 5.2 El zip (modo portátil, equipos de TI)
 
 1. Pulse con el botón derecho en el zip, elija *Propiedades*, marque *Desbloquear* si aparece y
    pulse *Aceptar*. Hágalo **antes** de extraer: el extractor de Windows transmite la marca de la
@@ -110,9 +152,10 @@ código de red, ni comprobación de actualizaciones, ni telemetría.
 
 ## 6. Primer inicio y SmartScreen
 
-Como el ejecutable no está firmado, Microsoft Defender SmartScreen puede mostrar "Windows protegió
-su PC" la primera vez. Elija "Más información" y después "Ejecutar de todas formas", salvo que su
-organización lo prohíba; en ese caso consulte a su equipo de TI (sección 7).
+Como el instalador y el ejecutable no están firmados, Microsoft Defender SmartScreen puede mostrar
+"Windows protegió su PC" al ejecutar el instalador y de nuevo la primera vez que inicia el
+programa. Elija "Más información" y después "Ejecutar de todas formas", salvo que su organización
+lo prohíba; en ese caso consulte a su equipo de TI (sección 7).
 
 ## 7. Equipos restringidos (AppLocker, WDAC, Smart App Control)
 
@@ -122,6 +165,14 @@ Para los equipos de TI:
   programas en la carpeta de Windows, en Program Files y para administradores. Elija una carpeta de
   extracción que su política permita. La compilación en una carpeta está pensada para no necesitar
   nunca ejecutar código desde `%TEMP%`.
+- **Instalador.** La instalación por usuario va a `%LOCALAPPDATA%\Programs`, una carpeta en la que
+  el usuario puede escribir; por eso las reglas predeterminadas de AppLocker la bloquean. TI puede
+  elegir la instalación para todos los usuarios (el cuadro de diálogo del instalador la ofrece;
+  exige administrador e instala en `Program Files`, que las reglas predeterminadas permiten), o
+  instalar con `/DIR=` en una carpeta que la política permita, o comprobar los archivos instalados
+  con `SHA256-FILES.txt` y crear las reglas con las herramientas de política de su propia
+  organización. El propio instalador también debe tener permiso para ejecutarse, y no está
+  firmado.
 - **Comprobar los archivos.** `SHA256-FILES.txt` de la misma versión lista el SHA-256 de cada
   archivo de la carpeta, incluidos los archivos `.pyd` y DLL (los valores que muestra
   `Get-FileHash`); úselo para comprobar cada archivo extraído. `SHA256SUMS.txt` cubre solo el zip.
@@ -207,7 +258,9 @@ Los datos pasan entonces a la carpeta `data\` junto al programa. El programa sol
 `portable.ini` exista; las claves que contiene no se leen. `--data-dir` y
 `CBRN_DASHBOARD_DATA_DIR` tienen prioridad.
 
-**Aviso:** copiar la carpeta del programa copia también los datos.
+**Aviso:** copiar la carpeta del programa copia también los datos. El modo portátil es para el zip:
+el instalador nunca crea `portable.ini`; así, el programa instalado guarda los datos en el perfil,
+no junto al programa.
 
 ### 10.4 Carpetas de solo lectura y de red
 
@@ -249,7 +302,9 @@ perfil limpio.
 
 ## 12. Actualizaciones
 
-Extraiga la nueva versión a una carpeta **nueva** e iníciela; los datos del perfil no se tocan. En
+Con el instalador, ejecute el instalador de la versión más nueva: reconoce el programa instalado,
+sustituye sus archivos en la misma carpeta y conserva los datos. Con el zip, extraiga la nueva
+versión a una carpeta **nueva** e iníciela; los datos del perfil no se tocan. En
 el primer inicio, si la nueva versión tiene una migración de la base de datos que aplicar, el
 programa hace primero una copia de seguridad de la base de datos (la de antes de cada actualización
 de la base de datos, sección 11) y después la migra. Si no hay migración pendiente, no hace esa
@@ -262,8 +317,10 @@ nuevo con `--data-dir` apuntando a la carpeta `data\` antigua.
 
 ## 13. Desinstalación
 
-Elimine la carpeta del programa. Los datos permanecen en `%LOCALAPPDATA%\cbrn-readiness-dashboard`
-hasta que usted mismo elimine esa carpeta; contiene la base de datos, las copias de seguridad y el
+Instalado con el instalador: abra Configuración > Aplicaciones > Aplicaciones instaladas, elija
+"CBRN Readiness Dashboard" y desinstálelo. El desinstalador elimina solo el programa. Con el zip:
+elimine la carpeta del programa. En ambos casos los datos permanecen en
+`%LOCALAPPDATA%\cbrn-readiness-dashboard` hasta que usted mismo elimine esa carpeta; contiene la base de datos, las copias de seguridad y el
 registro. En modo portátil los datos están dentro de la carpeta del programa y se eliminan con ella.
 Las copias cifradas guardadas en otros medios no se ven afectadas en ninguno de los dos casos.
 
@@ -271,6 +328,8 @@ Las copias cifradas guardadas en otros medios no se ven afectadas en ninguno de 
 
 - La versión 1.0.1 está publicada, pero su prueba manual en un perfil limpio sigue pendiente
   (sección 1). El ejecutable no está firmado.
+- El instalador lo construye y lo prueba en modo silencioso solo el flujo de publicación; no está
+  firmado (sección 4.3), y una persona todavía no lo ha ejecutado en un perfil limpio.
 - Una base de datos de solo lectura en una ruta UNC (`\\servidor\recurso\...`) nunca se probó en un
   recurso compartido de red real. La forma en que el programa construye la dirección de solo
   lectura para esa ruta solo está cubierta por una prueba con una ruta inventada.

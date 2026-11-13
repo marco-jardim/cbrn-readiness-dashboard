@@ -24,6 +24,12 @@ belongs to the foundation, not to the maintainer of this project.
   runtime, the Microsoft Visual C++ runtime and every `.dll` and `.pyd` file. They belong to other
   publishers; this project does not sign upstream binaries and keeps them as their publishers
   shipped them.
+- The per-user installer (`cbrn-readiness-dashboard-<version>-win-x64-setup.exe`, made with Inno
+  Setup after the signing step) is **not signed** and is not part of the SignPath request: the
+  signing step runs before the installer exists, and the artifact configuration signs one file
+  only. Windows SmartScreen may warn for the setup file even in a release where
+  `cbrn-dashboard.exe` carries a signature. Signing the installer would need a second signing
+  request and is not planned.
 - The signed executable carries the product name "CBRN Readiness Dashboard" and the package
   version in its version resource. The signing request of each release states the same version.
 

@@ -25,6 +25,12 @@ Everything below that talks about a download describes the files of that release
 scripts in `scripts/` that produce them. The program has not yet been tried by a person on a clean
 Windows profile.
 
+Since the release workflow builds a per-user **installer** (`...-setup.exe`) on every release, with
+no manual step, the releases after 1.0.1 carry it next to the zip; release 1.0.1 itself has the zip
+only. The workflow installs it silently, runs the self-test of the installed program and removes
+it again before the release is created; a failure there fails the release. A person has not yet
+installed it on a clean Windows profile.
+
 To try the program today, run it from a source checkout (needs [uv](https://docs.astral.sh/uv/)):
 
 ```text
@@ -35,24 +41,28 @@ uv run cbrn-dashboard --demo
 ## 2. Requirements
 
 - Windows 10 (version 1809 or later) or Windows 11, 64-bit (x64).
-- No administrator rights and no installer: the program is a folder that you extract.
-- Python and Qt are inside the folder; nothing else has to be installed.
+- No administrator rights. Two ways to get the program: the **installer** (recommended for end
+  users; it installs for your Windows user only) or the **zip** that you extract (portable mode, IT
+  teams).
+- Python and Qt are inside the installer and the zip; nothing else has to be installed.
 - A folder where Windows lets you run programs (see section 7 on locked-down machines).
 - The workstation should use full-disk encryption (for example BitLocker). The program cannot
   check that.
 
 ## 3. Download
 
-The release page of `https://github.com/marco-jardim/cbrn-readiness-dashboard` carries three
+The release page of `https://github.com/marco-jardim/cbrn-readiness-dashboard` carries these
 files for a version (the source archives of Qt and PySide6 are attached too):
 
 | File | Content |
 |---|---|
-| `cbrn-readiness-dashboard-<version>-win-x64.zip` | the program |
-| `SHA256SUMS.txt` | the SHA-256 checksum of the zip |
+| `cbrn-readiness-dashboard-<version>-win-x64-setup.exe` | the installer (recommended for end users) |
+| `cbrn-readiness-dashboard-<version>-win-x64.zip` | the program as a folder (portable mode, IT) |
+| `SHA256SUMS.txt` | the SHA-256 checksum of the setup file and of the zip |
 | `SHA256-FILES.txt` | the SHA-256 checksum of every file inside the zip's folder |
 
-Download all three from the **same** release page. The zip holds one folder,
+Download the file you want and `SHA256SUMS.txt` from the **same** release page. The zip holds one
+folder,
 `cbrn-readiness-dashboard\`, with `cbrn-dashboard.exe`, the folder `_internal\`, the folder
 `licenses\` (third-party licence texts), the three first-run notes and `portable.ini.example`.
 
@@ -66,7 +76,14 @@ Open PowerShell in the folder with the files and run:
 Get-FileHash .\cbrn-readiness-dashboard-<version>-win-x64.zip -Algorithm SHA256
 ```
 
-Compare the `Hash` value with the line for the zip in `SHA256SUMS.txt`. They must be equal.
+Compare the `Hash` value with the line for the zip in `SHA256SUMS.txt`. They must be equal. Do the
+same for the installer, before you run it:
+
+```powershell
+Get-FileHash .\cbrn-readiness-dashboard-<version>-win-x64-setup.exe -Algorithm SHA256
+```
+
+`SHA256SUMS.txt` has one line for the setup file and one for the zip.
 
 ### 4.2 Provenance with gh attestation verify (optional)
 
@@ -74,6 +91,7 @@ If you have the [GitHub CLI](https://cli.github.com/), you can verify the build 
 
 ```powershell
 gh attestation verify .\cbrn-readiness-dashboard-<version>-win-x64.zip --repo marco-jardim/cbrn-readiness-dashboard
+gh attestation verify .\cbrn-readiness-dashboard-<version>-win-x64-setup.exe --repo marco-jardim/cbrn-readiness-dashboard
 ```
 
 This step needs network access **on your side**. The program itself stays offline: it has no
@@ -92,8 +110,30 @@ network code, no update check and no telemetry.
   `Get-AuthenticodeSignature .\cbrn-readiness-dashboard\cbrn-dashboard.exe` in PowerShell: the
   status must be `Valid` and the signer "SignPath Foundation". Only that executable would be
   signed, not the Qt, Python and Microsoft files next to it.
+- The installer (the setup `.exe`) is **not signed** either, and signing is not planned for it:
+  the signing step runs before the installer exists. SmartScreen warns for it as well (section 6).
 
-## 5. Unblock and extract
+## 5. Install: installer or zip
+
+### 5.1 The installer (recommended)
+
+1. Download `cbrn-readiness-dashboard-<version>-win-x64-setup.exe` and `SHA256SUMS.txt` from the
+   same release page and check the hash (section 4.1).
+2. Run the setup. SmartScreen may warn (section 6). No administrator rights are needed: the setup
+   installs for your Windows user only, into `%LOCALAPPDATA%\Programs\CBRN Readiness Dashboard`,
+   and creates a Start-menu shortcut (a desktop icon is an option, off by default). The setup is
+   in Brazilian Portuguese, English or Spanish, after your Windows language. It shows the licence
+   and a short notice before it installs.
+3. Start the program from the Start menu, or tick the option at the end of the setup.
+4. For IT teams, the setup dialog at the start offers an install for all users instead (it needs an
+   administrator and uses `Program Files`; see section 7). A silent install for scripts:
+   `...-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER /DIR="C:\path"`.
+
+The installed program does not use portable mode: its data stays in
+`%LOCALAPPDATA%\cbrn-readiness-dashboard` (section 10.1). The setup writes no registry key except
+the entry that Windows shows under Settings > Apps, and it uses no network.
+
+### 5.2 The zip (portable mode, IT teams)
 
 1. Right-click the zip, choose *Properties*, tick *Unblock* if it is shown, and click *OK*. Do this
    **before** extracting: the extractor of Windows passes the Mark-of-the-Web on to the extracted
@@ -104,9 +144,10 @@ network code, no update check and no telemetry.
 
 ## 6. First start and SmartScreen
 
-Because the executable is unsigned, Microsoft Defender SmartScreen can show "Windows protected your
-PC" the first time. Choose "More info" and then "Run anyway", unless your organisation forbids it;
-in that case ask your IT team (section 7).
+Because the setup file and the executable are unsigned, Microsoft Defender SmartScreen can show
+"Windows protected your PC" when you run the setup, and again the first time you start the program.
+Choose "More info" and then "Run anyway", unless your organisation forbids it; in that case ask
+your IT team (section 7).
 
 ## 7. Locked-down machines (AppLocker, WDAC, Smart App Control)
 
@@ -116,6 +157,12 @@ For IT teams:
   Windows folder, in Program Files and for administrators. Choose an extraction folder that your
   policy allows. The one-folder build is designed so that it never needs to run code from
   `%TEMP%`.
+- **Installer.** The per-user install goes to `%LOCALAPPDATA%\Programs`, a folder the user can
+  write to, so the default AppLocker rules block it. IT can choose the all-users install (the
+  setup dialog offers it; it needs an administrator and installs into `Program Files`, which the
+  default rules allow), or install with `/DIR=` into a folder the policy allows, or verify the
+  installed files against `SHA256-FILES.txt` and create the rules with the policy tooling of
+  your own organisation. The setup file itself also has to be allowed to run, and it is unsigned.
 - **Verifying the files.** `SHA256-FILES.txt` of the same release lists the SHA-256 of every file
   in the folder, the `.pyd` and DLL files included (the values `Get-FileHash` prints); use it to
   verify each extracted file. `SHA256SUMS.txt` covers only the zip. Create your allow-listing
@@ -196,7 +243,9 @@ Rename `portable.ini.example` to `portable.ini` and keep it next to `cbrn-dashbo
 then goes to the folder `data\` beside the program. The program only checks that `portable.ini`
 exists; the keys in it are not read. `--data-dir` and `CBRN_DASHBOARD_DATA_DIR` take precedence.
 
-**Warning:** copying the program folder copies the data too.
+**Warning:** copying the program folder copies the data too. Portable mode is meant for the zip:
+the installer never creates `portable.ini`, so an installed program keeps its data in the profile,
+not beside the program.
 
 ### 10.4 Read-only and network folders
 
@@ -234,7 +283,9 @@ profile.
 
 ## 12. Upgrades
 
-Extract the new version to a **new** folder and start it; the data in the profile is untouched. On
+With the installer, run the setup of the newer version: it recognises the installed program,
+replaces its files in the same folder and keeps the data. With the zip, extract the new version to
+a **new** folder and start it; the data in the profile is untouched. On
 the first start, if the new version has a database migration to apply, the program first makes a
 backup of the database (the one before each upgrade of the database, section 11) and then migrates
 it. If no migration is pending, it makes no such backup and migrates nothing. A database written by
@@ -246,7 +297,9 @@ pointing to the old `data\` folder.
 
 ## 13. Removal
 
-Delete the program folder. The data stays in `%LOCALAPPDATA%\cbrn-readiness-dashboard` until you
+Installed with the installer: open Settings > Apps > Installed apps, choose "CBRN Readiness
+Dashboard" and uninstall it. The uninstaller removes the program only. For the zip: delete the
+program folder. In both cases the data stays in `%LOCALAPPDATA%\cbrn-readiness-dashboard` until you
 remove that folder yourself; it holds the database, the backups and the log. In portable mode the
 data is inside the program folder and is deleted with it. Copies of encrypted backups on other
 media are not touched by either.
@@ -255,6 +308,8 @@ media are not touched by either.
 
 - Release 1.0.1 is published, but its manual test on a clean profile is still pending (section 1).
   The executable is unsigned.
+- The installer is built and smoke-tested by the release workflow only; it is unsigned (section
+  4.3), and a person has not yet run it on a clean profile.
 - A read-only database on a UNC path (`\\server\share\...`) was never tried on a real network
   share. The way the program builds the read-only address for such a path is covered by a test with
   a made-up path only.

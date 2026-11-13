@@ -782,7 +782,9 @@ def test_release_uploads_the_zip_and_the_release_job_attests_that_zip() -> None:
     release = _release_job()
     attest = next((i for i, line in enumerate(release) if _ATTEST_ACTION.search(line)), -1)
     assert attest != -1, "no actions/attest-build-provenance@<sha> step"
-    assert "subject-path: release/*.zip" in _stripped(release)
+    stripped_release = _stripped(release)
+    at = stripped_release.index("subject-path: |")
+    assert stripped_release[at + 1 : at + 3] == ["release/*.zip", "release/*-setup.exe"]
     # The artefact moves between the jobs with the pinned download action (the documented way to
     # share data between jobs of one run), not with a CLI call that needs another permission.
     download = index_containing(release, "uses: actions/download-artifact@")
@@ -824,6 +826,145 @@ def test_release_never_publishes() -> None:
     assert "--draft=false" not in joined
     assert "gh release edit" not in joined
     assert "gh release upload" not in joined
+
+
+# --------------------------------------------------------------------------------------------
+# Release workflow: the installer is made, tested and attached on every release, automatically
+# --------------------------------------------------------------------------------------------
+
+
+def job_steps(lines: list[str]) -> list[list[str]]:
+    """Split the body lines of a job into its steps (each a list of stripped lines).
+
+    A step starts at a ``- `` line at the indentation of the first ``- `` line after ``steps:``.
+    """
+    start = next((i for i, line in enumerate(lines) if line.strip() == "steps:"), None)
+    if start is None:
+        return []
+    body = lines[start + 1 :]
+    dashes = [line for line in body if line.lstrip().startswith("- ")]
+    if not dashes:
+        return []
+    indent = min(len(line) - len(line.lstrip()) for line in dashes)
+    steps: list[list[str]] = []
+    for line in body:
+        if len(line) - len(line.lstrip()) == indent and line.lstrip().startswith("- "):
+            steps.append([])
+        if steps:
+            steps[-1].append(line.strip())
+    return steps
+
+
+def step_with(lines: list[str], fragment: str) -> list[str]:
+    """Return the stripped lines of the one step that contains ``fragment``; fail otherwise."""
+    found = [step for step in job_steps(lines) if any(fragment in line for line in step)]
+    assert len(found) == 1, f"{len(found)} steps contain {fragment!r}"
+    return found[0]
+
+
+def step_index(lines: list[str], fragment: str) -> int:
+    """Return the position (among the steps) of the step that contains ``fragment``."""
+    for index, step in enumerate(job_steps(lines)):
+        if any(fragment in line for line in step):
+            return index
+    return -1
+
+
+def test_job_steps_splits_the_steps_of_a_job() -> None:
+    lines = [
+        "    steps:",
+        "      - uses: a/b@x",
+        "        with:",
+        "          k: v",
+        "      - name: two",
+        "        run: |",
+        "          - not a step",
+    ]
+    assert job_steps(lines) == [
+        ["- uses: a/b@x", "with:", "k: v"],
+        ["- name: two", "run: |", "- not a step"],
+    ]
+    assert job_steps(["    runs-on: x"]) == []
+    assert step_index(lines, "two") == 1
+    assert step_index(lines, "absent") == -1
+
+
+def test_release_package_job_builds_the_installer_from_the_bundle_folder() -> None:
+    """Owner requirement: the installer is built by CI on every release, never by hand."""
+    package = _package_job()
+    step = step_with(package, "scripts/build_installer.py")
+    command = "uv run python scripts/build_installer.py --bundle-dir bundle --out-dir release"
+    assert f"run: {command}" in step
+    # No condition on the step: it runs for a signed and for an unsigned release alike.
+    assert not [line for line in step if line.startswith(("if:", "continue-on-error"))]
+    downloads = max(
+        step_index(package, "name: cbrn-dashboard-bundle-${{ github.run_id }}"),
+        step_index(package, "name: cbrn-dashboard-bundle-signed-${{ github.run_id }}"),
+    )
+    assert 0 <= downloads < step_index(package, "scripts/build_installer.py")
+
+
+def test_release_package_job_checksums_the_installer_with_the_zip() -> None:
+    package = _package_job()
+    step = step_with(package, "make_release_zip.py package")
+    assert any("--installer $setup[0].FullName" in line for line in step), step
+    assert step_index(package, "scripts/build_installer.py") < step_index(
+        package, "make_release_zip.py package"
+    )
+    assert not [line for line in step if line.startswith(("if:", "continue-on-error"))]
+
+
+def test_release_package_job_smoke_tests_the_installer_before_the_upload() -> None:
+    package = _package_job()
+    step = step_with(package, "scripts/smoke_installer.ps1")
+    joined = "\n".join(step)
+    assert "-Setup $setup[0].FullName" in joined
+    assert "$LASTEXITCODE -ne 0" in joined
+    assert "throw" in joined
+    assert not [line for line in step if line.startswith(("if:", "continue-on-error"))]
+    built = step_index(package, "scripts/build_installer.py")
+    smoke = step_index(package, "scripts/smoke_installer.ps1")
+    notes = step_index(package, "make_release_zip.py release-body")
+    upload = step_index(package, "uses: actions/upload-artifact@")
+    assert -1 not in (built, smoke, notes, upload)
+    assert built < smoke < upload
+    assert smoke < notes < upload
+
+
+def test_release_notes_get_the_installer_section() -> None:
+    package = _package_job()
+    step = step_with(package, "make_release_zip.py release-body")
+    command = next(line for line in step if "make_release_zip.py release-body" in line)
+    assert "--installer $setup" in command
+    assert command.endswith("@signedFlag")
+
+
+def test_release_job_attests_and_attaches_the_installer() -> None:
+    release = _release_job()
+    attest = step_with(release, "actions/attest-build-provenance@")
+    assert "subject-path: |" in attest
+    assert "release/*.zip" in attest
+    assert "release/*-setup.exe" in attest
+    create = step_with(release, "gh release create")
+    joined = "\n".join(create)
+    assert "-Filter '*-setup.exe'" in joined
+    assert "$setup[0].FullName" in joined
+    assert "$zip" in joined
+
+
+def test_release_has_no_manual_or_optional_path_for_the_installer() -> None:
+    """A failing installer step must fail the release: nothing may be allowed to fail, and the
+    workflow has no trigger other than a version tag (so nobody builds the installer by hand)."""
+    text = _release_text()
+    assert "continue-on-error" not in "\n".join(code_lines(text))
+    assert "workflow_dispatch" not in trigger_names(text)
+    assert trigger_names(text) == {"push"}
+    for name, lines in (("package", _package_job()), ("release", _release_job())):
+        for step in job_steps(lines):
+            if any("setup" in line and "exe" in line for line in step):
+                assert not [line for line in step if line.startswith("if:")], (name, step[:2])
+    # The package job does not skip because of the signing variable either.
+    assert "SIGNPATH" not in "\n".join(_package_job())
 
 
 # --------------------------------------------------------------------------------------------

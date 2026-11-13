@@ -2221,6 +2221,8 @@ That is enough for the committee to review the indicators and placeholders with 
 
 **X6 status:** integration prepared (SignPath Foundation OSS program); not active until the project is accepted. The release workflow has an optional `sign` job that is skipped while the repository variable `SIGNPATH_ORGANIZATION_ID` is empty, so releases stay unsigned (D10). Only `cbrn-dashboard.exe` is signed (`.signpath/artifact-configurations/release.xml`); the policy page is `CODE-SIGNING-POLICY.md`.
 
+**X5 status:** a one-file executable is still deferred. What exists instead is a per-user **installer**: the release workflow builds `cbrn-readiness-dashboard-<version>-win-x64-setup.exe` with Inno Setup 6 from the tested one-folder bundle on every release (`packaging/installer/cbrn-dashboard.iss`, `scripts/build_installer.py`), smoke-tests it (silent install, frozen self-test, silent uninstall that keeps the data), checksums and attests it. It needs no administrator rights, so Q13 does not have to be answered for a single download, and it keeps the one-folder build (D01). The installer is not signed (X6 signs `cbrn-dashboard.exe` only).
+
 **Sizing.** Sizes use the labels of §10.1 (S ≈ under 200 changed lines, M ≈ 200–600, L ≈ over 600). There are no L tasks: everything larger was split.
 
 | Phase | Tasks | S | M | Release |

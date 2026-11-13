@@ -14,12 +14,15 @@ name: Release
 #             The signing action lives in its own job on purpose: GitHub fetches every action of a
 #             job when the job starts, so a skipped job never touches it.
 #   package - read-only. Downloads the signed folder when "sign" ran, otherwise the unsigned one.
-#             The zip is made from that very folder, so the zip is the bundle that was tested (and
-#             signed). The zip, the checksum files and the release notes are uploaded as one
-#             workflow artefact.
+#             The zip and the per-user installer (Inno Setup 6, preinstalled on the image) are made
+#             from that very folder, so both are the bundle that was tested (and signed). The
+#             installer is built, smoke-tested (silent install, frozen self-test, silent uninstall
+#             that keeps the data) and checksummed on EVERY release, automatically; a failure of
+#             any of these steps fails the release. The zip, the installer, the checksum files and
+#             the release notes are uploaded as one workflow artefact.
 #   release - the only job with write permissions. It downloads that artefact, attests the build
-#             provenance of the zip and creates a DRAFT release. It installs no dependency and
-#             runs no project code.
+#             provenance of the zip and of the installer and creates a DRAFT release with both. It
+#             installs no dependency and runs no project code.
 # Nothing is published here: a person publishes the draft after a manual smoke test of the zip on
 # a clean Windows machine.
 on:
@@ -194,8 +197,29 @@ jobs:
           name: cbrn-dashboard-bundle-signed-${{ github.run_id }}-${{ github.run_attempt }}
           path: bundle
 
+      # The per-user installer is built from that same folder on every release, automatically: no
+      # person builds or uploads it. Inno Setup 6 is preinstalled on the windows-2025 image
+      # (nothing is downloaded); scripts/build_installer.py fails when ISCC.exe is missing.
+      - name: Build the installer from the bundle folder
+        run: uv run python scripts/build_installer.py --bundle-dir bundle --out-dir release
+
       - name: Zip the bundle and write the checksum files
-        run: uv run python scripts/make_release_zip.py package --bundle-dir bundle --out-dir release
+        shell: pwsh
+        run: |
+          $setup = @(Get-ChildItem -Path release -Filter '*-setup.exe')
+          if ($setup.Count -ne 1) { throw "expected exactly one setup file in release/, found $($setup.Count)" }
+          uv run python scripts/make_release_zip.py package --bundle-dir bundle --out-dir release --installer $setup[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw "package failed" }
+
+      # Silent install into a temporary folder, the frozen self-test of the installed program,
+      # silent uninstall; the data folder must survive. A failure here fails the release.
+      - name: Smoke-test the installer
+        shell: pwsh
+        run: |
+          $setup = @(Get-ChildItem -Path release -Filter '*-setup.exe')
+          if ($setup.Count -ne 1) { throw "expected exactly one setup file in release/, found $($setup.Count)" }
+          & ./scripts/smoke_installer.ps1 -Setup $setup[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw "the installer smoke test failed (exit code $LASTEXITCODE)" }
 
       - name: Write the release notes and the prerelease flag
         shell: pwsh
@@ -203,9 +227,10 @@ jobs:
           SIGNED: ${{ needs.sign.outputs.signed }}
         run: |
           $zip = (Get-ChildItem -Path release -Filter '*.zip').FullName
+          $setup = (Get-ChildItem -Path release -Filter '*-setup.exe').FullName
           $signedFlag = @()
           if ($env:SIGNED -eq 'true') { $signedFlag = @('--signed') }
-          uv run python scripts/make_release_zip.py release-body --template .github/release-body.template.md --out release/body.md --zip $zip @signedFlag
+          uv run python scripts/make_release_zip.py release-body --template .github/release-body.template.md --out release/body.md --zip $zip --installer $setup @signedFlag
           if ($LASTEXITCODE -ne 0) { throw "release-body failed" }
           $pre = uv run python scripts/make_release_zip.py prerelease-flag
           if ($LASTEXITCODE -ne 0) { throw "prerelease-flag failed" }
@@ -235,10 +260,13 @@ jobs:
           name: cbrn-dashboard-release
           path: release
 
-      - name: Attest the build provenance of the zip
+      # Both downloads of the release: the zip and the installer.
+      - name: Attest the build provenance of the zip and the installer
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: release/*.zip
+          subject-path: |
+            release/*.zip
+            release/*-setup.exe
 
       - name: Create the draft release
         shell: pwsh
@@ -248,8 +276,10 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           $zip = (Get-ChildItem -Path release -Filter '*.zip').FullName
+          $setup = @(Get-ChildItem -Path release -Filter '*-setup.exe')
+          if ($setup.Count -ne 1) { throw "expected exactly one setup file in release/, found $($setup.Count)" }
           $pre = (Get-Content -Path release/prerelease.txt -Raw).Trim()
-          $arguments = @($env:TAG, $zip, 'release/SHA256SUMS.txt', 'release/SHA256-FILES.txt')
+          $arguments = @($env:TAG, $zip, $setup[0].FullName, 'release/SHA256SUMS.txt', 'release/SHA256-FILES.txt')
           $arguments += @('--draft', '--title', "CBRN Readiness Dashboard $env:TAG", '--notes-file', 'release/body.md')
           if ($pre) { $arguments += $pre }
           gh release create @arguments

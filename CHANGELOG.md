@@ -9,6 +9,36 @@ This file records only the **status** of each open question (open / answered and
 answered and implemented in task Tn), never the content of an answer. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and section 12 of [PLAN.md](PLAN.md).
 
+## [Unreleased]
+
+### Added
+
+- A per-user **installer** (`cbrn-readiness-dashboard-<version>-win-x64-setup.exe`), built with
+  Inno Setup 6 from the tested one-folder bundle (`packaging/installer/cbrn-dashboard.iss`,
+  `scripts/build_installer.py`). It needs no administrator rights (the setup dialog also offers an
+  all-users install), installs under `%LOCALAPPDATA%\Programs`, adds a Start-menu shortcut, is
+  available in Brazilian Portuguese, English and Spanish, upgrades in place, and never creates
+  `portable.ini`. Uninstalling removes the program only; the data in
+  `%LOCALAPPDATA%\cbrn-readiness-dashboard` is kept.
+- The release workflow builds the installer on every version tag, with no manual step. It
+  smoke-tests it (`scripts/smoke_installer.ps1`: silent install, the frozen `--self-test` of the
+  installed program, silent uninstall that keeps the data), lists it in `SHA256SUMS.txt`, attests
+  its build provenance and attaches it to the draft release next to the zip. A failure in any of
+  these steps fails the release. The packaging tests build and smoke-test the installer too, so CI
+  does it on every push to `main`; on GitHub Actions a missing Inno Setup is a failure.
+- The release notes have an "Installer" section; the install guides recommend the installer for
+  end users and keep the zip for IT teams and portable mode.
+
+### Known limits of the installer
+
+- The installer is not signed (the signing step runs before it exists), so SmartScreen warns for
+  it. A per-user install under `%LOCALAPPDATA%\Programs` is blocked by the default AppLocker
+  rules; IT can choose the all-users install.
+- Inno Setup's licence ("Inno Setup License", permissive; `license.txt` in its install folder)
+  applies to the setup stub of the installer. It is not part of the bundle, so it is not in the
+  bundle's `licenses\` folder.
+- No person has run the installer on a clean Windows profile yet.
+
 ## [1.0.1] - 2026-11-13
 
 **Version 1.0.0 was withdrawn.** The tag `v1.0.0` was created and the release workflow built it,

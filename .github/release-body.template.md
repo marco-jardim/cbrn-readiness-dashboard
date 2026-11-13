@@ -6,6 +6,38 @@ This is a Windows desktop program that helps a hospital look at its own CBRN rea
 indicators it shows are not yet validated by any institution; do not use them for decisions that
 need a validated tool.
 
+<!-- installer:start -->
+## Installer (recommended)
+
+Download **`{{installer_name}}`**, check it (below) and run it. It installs the program **for your
+Windows user only**, so no administrator rights are needed: the program goes to
+`%LOCALAPPDATA%\Programs\CBRN Readiness Dashboard`, and a Start-menu shortcut is created. The
+setup can also ask for an all-users install (it then needs an administrator), for example for IT
+teams. To upgrade, run the setup of the newer version. To remove the program, use Settings > Apps
+> Installed apps: the uninstaller keeps your data in `%LOCALAPPDATA%\cbrn-readiness-dashboard`.
+The setup is available in Brazilian Portuguese, English and Spanish.
+
+The setup program is **not signed**, and neither is the installed program unless the notes below
+say so: Microsoft Defender SmartScreen shows "Windows protected your PC" for it as well ("More
+info", then "Run anyway", unless your organisation forbids it). The installer is built by the
+release workflow with [Inno Setup](https://jrsoftware.org/isinfo.php) (Inno Setup licence:
+permissive, see its `license.txt`); the program inside it is the same tested bundle as in the zip.
+
+Prefer the zip if you need the portable mode or want to extract the program to a folder of your
+own choice: see the install guides in `docs/`.
+
+Hash of the setup (also in `SHA256SUMS.txt`):
+
+```text
+{{installer_sha256}}
+```
+
+```powershell
+Get-FileHash .\{{installer_name}} -Algorithm SHA256
+gh attestation verify {{installer_name}} --repo marco-jardim/cbrn-readiness-dashboard
+```
+<!-- installer:end -->
+
 <!-- signing-notice:start -->
 ## The program is unsigned
 

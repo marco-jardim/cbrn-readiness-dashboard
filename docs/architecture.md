@@ -475,7 +475,24 @@ fictitious.
   `Qt version:` header is not the bundled one, so a PySide6 upgrade needs a refresh. The build and
   the application never use the network for this.
 - `scripts/make_release_zip.py` writes the reproducible zip, `SHA256SUMS.txt` and
-  `SHA256-FILES.txt` and fills the release-notes template.
+  `SHA256-FILES.txt` and fills the release-notes template. With `--installer` it also puts the
+  setup file into `SHA256SUMS.txt` and the "Installer" section into the notes.
+- `scripts/build_installer.py` builds the per-user Windows installer with Inno Setup 6 from the
+  tested bundle folder (`packaging/installer/cbrn-dashboard.iss`; `cbrn-readiness-dashboard-<version>-win-x64-setup.exe`).
+  The installer needs no administrator rights (`PrivilegesRequired=lowest`; the setup dialog also
+  offers an all-users install), installs under `%LOCALAPPDATA%\Programs`, has the three interface
+  languages and never creates `portable.ini`. It has no `[UninstallDelete]` section, so the
+  uninstaller never touches `%LOCALAPPDATA%\cbrn-readiness-dashboard`. The workflow runs
+  `scripts/smoke_installer.ps1` on it on every release: silent install, the frozen `--self-test` of
+  the installed program, silent uninstall, and a check that the data folder survived. The same
+  smoke test runs in the packaging tests (`tests/packaging/test_installer.py`, so on every push to
+  `main` in CI), where a missing compiler is a failure on GitHub Actions. Inno Setup 6 is
+  preinstalled on the `windows-2025` image; nothing is downloaded. The installer is built from the
+  folder the `package` job downloaded, after the optional signing step, so it is not signed (see
+  [CODE-SIGNING-POLICY.md](../CODE-SIGNING-POLICY.md)). Inno Setup's own licence (permissive; the
+  file `license.txt` in its install folder) applies to the setup stub only. It is not part of the
+  bundle, so it is not in the bundle's `licenses\` folder; the release notes and the changelog
+  name it.
 - The release workflow runs on a version tag in four jobs. The read-only `build` job runs the tests
   and the packaging tests and uploads the bundle folder those tests built. The optional `sign` job
   runs only when the repository variable `SIGNPATH_ORGANIZATION_ID` is not empty: it sends that
@@ -483,9 +500,10 @@ fictitious.
   the manual approval, checks the signature of `cbrn-dashboard.exe` and uploads the signed folder.
   Only `cbrn-dashboard.exe` is signed (`.signpath/artifact-configurations/release.xml`). The
   read-only `package` job zips the signed folder when `sign` ran and the tested folder otherwise,
-  writes the checksum files and the release notes (`release-body --signed` only after signing).
-  The `release` job, the only one with write permissions, attests the zip's build provenance and
-  creates a **draft** release. Signing needs the repository variables `SIGNPATH_ORGANIZATION_ID`,
+  builds and smoke-tests the installer from the same folder, writes the checksum files and the
+  release notes (`release-body --signed` only after signing).
+  The `release` job, the only one with write permissions, attests the build provenance of the zip
+  and of the installer and creates a **draft** release with both. Signing needs the repository variables `SIGNPATH_ORGANIZATION_ID`,
   `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG` (optionally
   `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`) and the secret `SIGNPATH_API_TOKEN`; it is not active
   until the project is accepted by SignPath. See [CODE-SIGNING-POLICY.md](../CODE-SIGNING-POLICY.md).

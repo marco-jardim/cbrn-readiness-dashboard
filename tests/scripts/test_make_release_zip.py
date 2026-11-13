@@ -858,3 +858,226 @@ def test_cli_release_body_fails_loudly_without_the_placeholder_function(
     assert script.main(args) == 1
     assert not out.exists()
     assert "Cannot read the flagged placeholders" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------------------------
+# The installer (Inno Setup): checksum line, release notes section
+# --------------------------------------------------------------------------------------------
+
+SETUP_NAME = "cbrn-readiness-dashboard-0.1.0-win-x64-setup.exe"
+INSTALLER_START = "<!-- installer:start -->"
+INSTALLER_END = "<!-- installer:end -->"
+SETUP_SAMPLE = {"installer_name": SETUP_NAME, "installer_sha256": "cd" * 32}
+
+
+def _setup_file(folder: Path, content: bytes = b"MZ fake setup") -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / SETUP_NAME
+    path.write_bytes(content)
+    return path
+
+
+def test_sha256sums_lists_the_zip_and_then_the_installer(
+    script: ModuleType, bundle: Path, tmp_path: Path
+) -> None:
+    out = tmp_path / "out"
+    zip_path = script.make_zip(bundle, out, "0.1.0")
+    setup = _setup_file(out)
+    sums = script.write_sha256sums(zip_path, out, setup)
+    raw = sums.read_bytes()
+    assert (
+        raw
+        == (
+            f"{hashlib.sha256(zip_path.read_bytes()).hexdigest()}  {zip_path.name}\n"
+            f"{hashlib.sha256(setup.read_bytes()).hexdigest()}  {SETUP_NAME}\n"
+        ).encode()
+    )
+    assert b"\r" not in raw
+
+
+def test_sha256sums_refuses_a_missing_installer(
+    script: ModuleType, bundle: Path, tmp_path: Path
+) -> None:
+    zip_path = script.make_zip(bundle, tmp_path / "out", "0.1.0")
+    with pytest.raises(ValueError, match="Not a file"):
+        script.write_sha256sums(zip_path, tmp_path / "out", tmp_path / "missing-setup.exe")
+
+
+def test_place_installer_copies_a_file_from_elsewhere_and_keeps_one_in_place(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    elsewhere = _setup_file(tmp_path / "elsewhere")
+    placed = script.place_installer(elsewhere, tmp_path / "out")
+    assert placed == tmp_path / "out" / SETUP_NAME
+    assert placed.read_bytes() == elsewhere.read_bytes()
+    assert script.place_installer(placed, tmp_path / "out") == placed
+    assert placed.read_bytes() == b"MZ fake setup"
+
+
+def test_place_installer_refuses_other_names_and_missing_files(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    other = tmp_path / "program.exe"
+    other.write_bytes(b"MZ")
+    with pytest.raises(ValueError, match=r"setup\.exe"):
+        script.place_installer(other, tmp_path / "out")
+    with pytest.raises(ValueError, match="Not a file"):
+        script.place_installer(tmp_path / SETUP_NAME, tmp_path / "out")
+
+
+def test_cli_package_with_an_installer_checksums_it_but_does_not_zip_it(
+    script: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    bundle: Path,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    out = tmp_path / "release"
+    setup = _setup_file(tmp_path / "built")
+    args = ["package", "--bundle-dir", str(bundle), "--out-dir", str(out)]
+    assert script.main([*args, "--installer", str(setup)]) == 0
+    printed = [Path(item).name for item in capsys.readouterr().out.splitlines()]
+    assert printed == [
+        "cbrn-readiness-dashboard-0.1.0-win-x64.zip",
+        "SHA256SUMS.txt",
+        "SHA256-FILES.txt",
+        SETUP_NAME,
+    ]
+    assert (out / SETUP_NAME).read_bytes() == setup.read_bytes()
+    lines = (out / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()
+    assert [line.split("  ")[1] for line in lines] == [
+        "cbrn-readiness-dashboard-0.1.0-win-x64.zip",
+        SETUP_NAME,
+    ]
+    assert lines[1].split("  ")[0] == hashlib.sha256(setup.read_bytes()).hexdigest()
+    # The per-file manifest and the zip are about the bundle only.
+    assert SETUP_NAME not in (out / "SHA256-FILES.txt").read_text(encoding="utf-8")
+    with zipfile.ZipFile(out / "cbrn-readiness-dashboard-0.1.0-win-x64.zip") as archive:
+        names = archive.namelist()
+    assert not [name for name in names if "setup" in name]
+
+
+def test_cli_package_without_an_installer_is_unchanged(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, bundle: Path, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    out = tmp_path / "release"
+    assert script.main(["package", "--bundle-dir", str(bundle), "--out-dir", str(out)]) == 0
+    assert len((out / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_template_has_one_installer_section_with_its_tokens(template_text: str) -> None:
+    assert template_text.count(INSTALLER_START) == 1
+    assert template_text.count(INSTALLER_END) == 1
+    inner = template_text.split(INSTALLER_START)[1].split(INSTALLER_END)[0]
+    assert "## Installer (recommended)" in inner
+    assert "{{installer_name}}" in inner
+    assert "{{installer_sha256}}" in inner
+    flat = " ".join(inner.split())
+    assert "no administrator rights are needed" in flat
+    assert "%LOCALAPPDATA%\\Programs\\CBRN Readiness Dashboard" in flat
+    assert "Start-menu shortcut" in flat
+    assert "Settings > Apps" in flat
+    assert "keeps your data" in flat
+    assert "is **not signed**" in flat
+    assert "SmartScreen" in flat
+    assert "Inno Setup" in flat
+    assert "Get-FileHash .\\{{installer_name}} -Algorithm SHA256" in inner
+    assert "gh attestation verify {{installer_name}} --repo" in inner
+    assert "portable mode" in flat
+    # The installer section is outside the signing section, so a signed release keeps it.
+    assert template_text.index(INSTALLER_END) < template_text.index(START)
+
+
+def test_notes_with_an_installer_keep_and_fill_the_section(
+    script: ModuleType, template_text: str
+) -> None:
+    body = script.render_release_body(
+        template_text, flagged_placeholders=["x"], **SAMPLE, **SETUP_SAMPLE
+    )
+    assert "{{" not in body
+    assert "<!--" not in body
+    assert "## Installer (recommended)" in body
+    assert f"Download **`{SETUP_NAME}`**" in body
+    assert SETUP_SAMPLE["installer_sha256"] in body
+    assert f"Get-FileHash .\\{SETUP_NAME} -Algorithm SHA256" in body
+    assert f"gh attestation verify {SETUP_NAME} --repo marco-jardim/" in body
+    assert "## The program is unsigned" in body
+
+
+def test_notes_without_an_installer_leave_the_section_out(
+    script: ModuleType, template_text: str
+) -> None:
+    body = _render(script, template_text)
+    assert "Installer" not in body
+    assert "-setup.exe" not in body
+    assert "{{" not in body
+    assert "<!--" not in body
+
+
+def test_a_signed_release_keeps_the_installer_section_and_says_it_is_not_signed(
+    script: ModuleType, template_text: str
+) -> None:
+    body = script.render_release_body(
+        template_text, flagged_placeholders=["x"], signed=True, **SAMPLE, **SETUP_SAMPLE
+    )
+    assert "## The executable is signed" in body
+    assert "## Installer (recommended)" in body
+    flat = " ".join(body.split())
+    assert "The setup program is **not signed**" in flat
+    assert body.index("## Installer (recommended)") < body.index("## The executable is signed")
+
+
+def test_installer_name_and_hash_go_together(script: ModuleType, template_text: str) -> None:
+    with pytest.raises(ValueError, match="go together"):
+        script.render_release_body(
+            template_text, flagged_placeholders=[], installer_name=SETUP_NAME, **SAMPLE
+        )
+    with pytest.raises(ValueError, match="go together"):
+        script.render_release_body(
+            template_text, flagged_placeholders=[], installer_sha256="ab" * 32, **SAMPLE
+        )
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        f"a\n{INSTALLER_START}\nb\n",
+        f"a\n{INSTALLER_END}\nb\n",
+        f"{INSTALLER_END}\nb\n{INSTALLER_START}\n",
+        f"{INSTALLER_START}\n{INSTALLER_START}\nb\n{INSTALLER_END}\n",
+    ],
+)
+def test_broken_installer_markers_are_refused(script: ModuleType, template: str) -> None:
+    with pytest.raises(ValueError, match="installer"):
+        script.render_release_body(template, flagged_placeholders=[], **SAMPLE)
+
+
+def test_a_template_without_installer_markers_is_filled_as_it_is(script: ModuleType) -> None:
+    template = "{{version}} {{installer_name}}"
+    body = script.render_release_body(template, flagged_placeholders=[], **SAMPLE, **SETUP_SAMPLE)
+    assert body == f"0.1.0 {SETUP_NAME}"
+
+
+def test_cli_release_body_with_an_installer(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, bundle: Path, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    monkeypatch.setattr(script, "read_qt_versions", lambda: ("6.12.0", "6.12.0"))
+    monkeypatch.setattr(script, "read_flagged_placeholders", lambda: ["demo_flag"])
+    zip_path = script.make_zip(bundle, tmp_path / "release", "0.1.0")
+    setup = _setup_file(tmp_path / "release")
+    out = tmp_path / "with.md"
+    args = ["release-body", "--template", str(TEMPLATE_PATH), "--zip", str(zip_path)]
+    assert script.main([*args, "--out", str(out), "--installer", str(setup)]) == 0
+    body = out.read_text(encoding="utf-8")
+    assert hashlib.sha256(setup.read_bytes()).hexdigest() in body
+    assert SETUP_NAME in body
+    plain = tmp_path / "without.md"
+    assert script.main([*args, "--out", str(plain)]) == 0
+    assert SETUP_NAME not in plain.read_text(encoding="utf-8")
+    missing = tmp_path / "missing.md"
+    absent = str(tmp_path / "no.exe")
+    assert script.main([*args, "--out", str(missing), "--installer", absent]) == 1
+    assert not missing.exists()

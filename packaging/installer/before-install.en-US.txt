@@ -1,0 +1,15 @@
+CBRN Readiness Dashboard - before you install
+
+Preliminary version - indicators not institutionally validated.
+
+- Do not use the indicators for decisions that need a validated tool.
+- Do not enter real data yet. Wait until the institution has answered the questions Q19
+  (formal classification of the data), Q4 (personal data), Q11 (information security) and
+  Q13 (deployment). Until then, use the demo mode (cbrn-dashboard.exe --demo): its data is
+  fictitious.
+- The program works offline. Your data stays on this computer, in
+  %LOCALAPPDATA%\cbrn-readiness-dashboard, outside the program folder.
+- Uninstalling removes the program only. Your data is kept. To delete it, remove that folder
+  yourself.
+- This setup program is not signed, so Windows SmartScreen may warn about it.
+- No administrator rights are needed: the program is installed for your user only.

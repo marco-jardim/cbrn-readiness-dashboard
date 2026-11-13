@@ -5,19 +5,24 @@ Sub-commands, all used by ``.github/workflows/release.yml``:
 
 ``check-tag --tag TAG``
     Fail unless ``TAG`` equals ``v`` + ``cbrn_dashboard.__version__``.
-``package --bundle-dir DIR --out-dir DIR [--extra FILE ...]``
+``package --bundle-dir DIR --out-dir DIR [--extra FILE ...] [--installer FILE]``
     Write ``cbrn-readiness-dashboard-<version>-win-x64.zip`` (top folder
     ``cbrn-readiness-dashboard/``), ``SHA256SUMS.txt`` and ``SHA256-FILES.txt``; print the paths.
     The three first-run notes and ``portable.ini.example`` from ``packaging/`` always go at the
     root of the top folder (and into ``SHA256-FILES.txt``); ``--extra`` adds more.
+    ``--installer`` names the ``*-setup.exe`` that ``scripts/build_installer.py`` made: it is
+    copied into ``--out-dir`` when it is elsewhere and gets its own line in ``SHA256SUMS.txt``
+    (after the zip's); ``SHA256-FILES.txt`` stays about the bundle.
 ``prerelease-flag``
     Print ``--prerelease`` when the current version is a prerelease (below 1.0.0, or with a
     pre/dev suffix), otherwise an empty line.
 ``print-version``
     Print ``cbrn_dashboard.__version__`` (the workflow passes it to the SignPath request).
-``release-body --template FILE --out FILE --zip FILE [--signed]``
+``release-body --template FILE --out FILE --zip FILE [--installer FILE] [--signed]``
     Fill the release-notes template. ``--signed`` (given only when the workflow signed the
     executable through SignPath) swaps the "unsigned" section for the signed one.
+    ``--installer`` keeps the "Installer" section of the template and fills it with the name and
+    the SHA-256 of the setup file; without it the section is left out.
 
 The zip is reproducible: entries in a fixed order, a fixed timestamp, fixed attributes, a fixed
 compression level, no extra fields. Two runs over the same file contents give identical bytes,
@@ -31,6 +36,7 @@ import argparse
 import hashlib
 import importlib
 import re
+import shutil
 import sys
 import zipfile
 from collections.abc import Sequence
@@ -53,6 +59,9 @@ TOP_FOLDER = "cbrn-readiness-dashboard"
 ZIP_NAME_FORMAT = "cbrn-readiness-dashboard-{version}-win-x64.zip"
 SUMS_NAME = "SHA256SUMS.txt"
 FILES_MANIFEST_NAME = "SHA256-FILES.txt"
+#: The per-user installer built by ``scripts/build_installer.py``
+#: (``cbrn-readiness-dashboard-<version>-win-x64-setup.exe``).
+INSTALLER_SUFFIX = "-setup.exe"
 
 #: ZIP cannot store dates before 1980; every entry gets this one.
 FIXED_DATE_TIME: tuple[int, int, int, int, int, int] = (1980, 1, 1, 0, 0, 0)
@@ -101,6 +110,13 @@ _TOKEN = re.compile(r"\{\{[^{}]*\}\}")
 #: ``signed=True`` everything between them is replaced by :data:`SIGNED_NOTICE`.
 SIGNING_START_MARKER = "<!-- signing-notice:start -->"
 SIGNING_END_MARKER = "<!-- signing-notice:end -->"
+
+#: The template wraps its "Installer" section in these two lines. Without an installer
+#: (:func:`render_release_body` called with ``installer_name=None``) the lines and everything
+#: between them are removed; with one, only the marker lines are removed and the tokens
+#: ``{{installer_name}}`` and ``{{installer_sha256}}`` are filled.
+INSTALLER_START_MARKER = "<!-- installer:start -->"
+INSTALLER_END_MARKER = "<!-- installer:end -->"
 
 #: What the release notes say when the executable was signed through SignPath. ``{{version}}`` is
 #: filled like every other token. Only ``cbrn-dashboard.exe`` is signed; the third-party files of
@@ -248,11 +264,36 @@ def _write_text(path: Path, text: str) -> None:
     path.write_bytes(text.encode("utf-8"))
 
 
-def write_sha256sums(zip_path: Path, out_dir: Path) -> Path:
-    """Write ``SHA256SUMS.txt`` (``sha256sum`` text format) for ``zip_path``; return its path."""
+def write_sha256sums(zip_path: Path, out_dir: Path, installer_path: Path | None = None) -> Path:
+    """Write ``SHA256SUMS.txt`` (``sha256sum`` text format); return its path.
+
+    One line for ``zip_path`` and, when given, a second one for the setup file
+    ``installer_path``. The per-file manifest (``SHA256-FILES.txt``) stays about the bundle.
+    """
     path = out_dir / SUMS_NAME
-    _write_text(path, f"{sha256_file(zip_path)}  {zip_path.name}\n")
+    lines = [f"{sha256_file(zip_path)}  {zip_path.name}\n"]
+    if installer_path is not None:
+        if not installer_path.is_file():
+            raise ValueError(f"Not a file: {installer_path}")
+        lines.append(f"{sha256_file(installer_path)}  {installer_path.name}\n")
+    _write_text(path, "".join(lines))
     return path
+
+
+def place_installer(installer: Path, out_dir: Path) -> Path:
+    """Return the setup file inside ``out_dir`` (copied there when it is somewhere else).
+
+    Raise :class:`ValueError` when ``installer`` is not a ``*-setup.exe`` file.
+    """
+    if not installer.is_file():
+        raise ValueError(f"Not a file: {installer}")
+    if not installer.name.endswith(INSTALLER_SUFFIX):
+        raise ValueError(f"The installer must be named *{INSTALLER_SUFFIX}: {installer.name}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    target = out_dir / installer.name
+    if target.resolve() != installer.resolve():
+        shutil.copyfile(installer, target)
+    return target
 
 
 def default_root_files(packaging_dir: Path = PACKAGING_DIR) -> list[Path]:
@@ -334,6 +375,28 @@ def apply_signing_notice(template: str, *, signed: bool) -> str:
     return "\n".join([*lines[:start], *inner, *lines[end + 1 :]])
 
 
+def apply_installer_section(template: str, *, present: bool) -> str:
+    """Resolve the installer section of ``template``, delimited by the two marker lines.
+
+    With the installer: only the marker lines are dropped. Without: the lines between them go as
+    well. A template without any installer marker is returned as it is. Raise
+    :class:`ValueError` when the markers are not exactly one start line followed by one end line.
+    """
+    if INSTALLER_START_MARKER not in template and INSTALLER_END_MARKER not in template:
+        return template
+    lines = template.split("\n")
+    starts = [i for i, line in enumerate(lines) if line.strip() == INSTALLER_START_MARKER]
+    ends = [i for i, line in enumerate(lines) if line.strip() == INSTALLER_END_MARKER]
+    if len(starts) != 1 or len(ends) != 1 or starts[0] >= ends[0]:
+        raise ValueError(
+            f"The template needs one {INSTALLER_START_MARKER} line followed by one "
+            f"{INSTALLER_END_MARKER} line"
+        )
+    start, end = starts[0], ends[0]
+    inner = lines[start + 1 : end] if present else []
+    return "\n".join([*lines[:start], *inner, *lines[end + 1 :]])
+
+
 def render_release_body(
     template: str,
     *,
@@ -344,14 +407,20 @@ def render_release_body(
     sha256: str,
     flagged_placeholders: Sequence[str],
     signed: bool = False,
+    installer_name: str | None = None,
+    installer_sha256: str | None = None,
 ) -> str:
     """Fill the ``{{name}}`` tokens of ``template``; raise :class:`ValueError` on a leftover.
 
-    A template that has the signing markers is resolved first (see
-    :func:`apply_signing_notice`); one without them is filled as it is, unless ``signed`` is
-    true, which then raises :class:`ValueError`.
+    The installer section is resolved first (see :func:`apply_installer_section`;
+    ``installer_name`` and ``installer_sha256`` go together). A template that has the signing
+    markers is resolved next (see :func:`apply_signing_notice`); one without them is filled as
+    it is, unless ``signed`` is true, which then raises :class:`ValueError`.
     """
+    if (installer_name is None) != (installer_sha256 is None):
+        raise ValueError("installer_name and installer_sha256 go together")
     flagged = ", ".join(f"`{name}`" for name in flagged_placeholders) or "none"
+    template = apply_installer_section(template, present=installer_name is not None)
     if SIGNING_START_MARKER in template or SIGNING_END_MARKER in template or signed:
         template = apply_signing_notice(template, signed=signed)
     values = {
@@ -366,6 +435,9 @@ def render_release_body(
         "qt_source_url": qt_source_url(qt_version),
         "pyside_source_url": pyside_source_url(pyside_version),
     }
+    if installer_name is not None and installer_sha256 is not None:
+        values["installer_name"] = installer_name
+        values["installer_sha256"] = installer_sha256
     body = template
     for name, value in values.items():
         body = body.replace("{{" + name + "}}", value)
@@ -427,9 +499,15 @@ def _command_package(args: argparse.Namespace) -> int:
     version = read_version()
     root_files = [*default_root_files(), *args.extra]
     zip_path = make_zip(args.bundle_dir, args.out_dir, version, root_files)
-    sums_path = write_sha256sums(zip_path, args.out_dir)
+    installer_path = None
+    if args.installer is not None:
+        installer_path = place_installer(args.installer, args.out_dir)
+    sums_path = write_sha256sums(zip_path, args.out_dir, installer_path)
     manifest_path = write_file_manifest(args.bundle_dir, args.out_dir, root_files)
-    for path in (zip_path, sums_path, manifest_path):
+    printed = [zip_path, sums_path, manifest_path]
+    if installer_path is not None:
+        printed.append(installer_path)
+    for path in printed:
         print(path)
     return 0
 
@@ -446,6 +524,13 @@ def _command_print_version(_args: argparse.Namespace) -> int:
 
 def _command_release_body(args: argparse.Namespace) -> int:
     pyside_version, qt_version = read_qt_versions()
+    installer_name: str | None = None
+    installer_sha256: str | None = None
+    if args.installer is not None:
+        if not args.installer.is_file():
+            raise ValueError(f"Not a file: {args.installer}")
+        installer_name = args.installer.name
+        installer_sha256 = sha256_file(args.installer)
     body = render_release_body(
         args.template.read_text(encoding="utf-8"),
         version=read_version(),
@@ -455,6 +540,8 @@ def _command_release_body(args: argparse.Namespace) -> int:
         sha256=sha256_file(args.zip),
         flagged_placeholders=read_flagged_placeholders(),
         signed=args.signed,
+        installer_name=installer_name,
+        installer_sha256=installer_sha256,
     )
     _write_text(args.out, body)
     print(args.out)
@@ -476,6 +563,12 @@ def build_parser() -> argparse.ArgumentParser:
     package.add_argument("--bundle-dir", type=Path, required=True)
     package.add_argument("--out-dir", type=Path, required=True)
     package.add_argument("--extra", type=Path, action="append", default=[])
+    package.add_argument(
+        "--installer",
+        type=Path,
+        default=None,
+        help="the *-setup.exe made by build_installer.py: it goes into SHA256SUMS.txt too",
+    )
     package.set_defaults(handler=_command_package)
 
     flag = commands.add_parser("prerelease-flag", help="print --prerelease below 1.0.0")
@@ -488,6 +581,12 @@ def build_parser() -> argparse.ArgumentParser:
     body.add_argument("--template", type=Path, required=True)
     body.add_argument("--out", type=Path, required=True)
     body.add_argument("--zip", type=Path, required=True)
+    body.add_argument(
+        "--installer",
+        type=Path,
+        default=None,
+        help="the *-setup.exe of the release: the notes then have the Installer section",
+    )
     body.add_argument(
         "--signed",
         action="store_true",
