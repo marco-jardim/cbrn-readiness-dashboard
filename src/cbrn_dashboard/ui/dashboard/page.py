@@ -151,7 +151,7 @@ class TileWidget(QFrame):
         self.value_label = _plain(QLabel(value_text(tile, lang), self))
         self.value_label.setObjectName("tile_value")
         _bold(self.value_label, 1.6)
-        self.unit_label = _plain(QLabel(unit_label(tile.code, tile.unit.value), self))
+        self.unit_label = _plain(QLabel(unit_label(tile.code, tile.unit.value, tile.value), self))
         self.unit_label.setObjectName("tile_unit")
         status_text = status_label(status)
         self.status_icon = QLabel(self)

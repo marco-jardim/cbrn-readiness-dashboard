@@ -46,12 +46,12 @@
         <translation>Information</translation>
     </message>
     <message>
-        <source>Valid certificates</source>
-        <translation>Valid certificates</translation>
+        <source>Valid qualifications</source>
+        <translation>Valid qualifications</translation>
     </message>
     <message>
-        <source>Certificates expiring</source>
-        <translation>Certificates expiring</translation>
+        <source>Qualifications expiring</source>
+        <translation>Qualifications expiring</translation>
     </message>
     <message>
         <source>Staff needing retraining</source>
@@ -146,14 +146,6 @@
         <translation>Active staff</translation>
     </message>
     <message>
-        <source>Valid certificates, level %1</source>
-        <translation>Valid certificates, level %1</translation>
-    </message>
-    <message>
-        <source>Certificates expiring, level %1</source>
-        <translation>Certificates expiring, level %1</translation>
-    </message>
-    <message>
         <source>Staff needing retraining, level %1</source>
         <translation>Staff needing retraining, level %1</translation>
     </message>
@@ -168,10 +160,6 @@
     <message>
         <source>Assets with maintenance due soon</source>
         <translation>Assets with maintenance due soon</translation>
-    </message>
-    <message>
-        <source>Valid certificates by protection level</source>
-        <translation>Valid certificates by protection level</translation>
     </message>
     <message>
         <source>Assets available and in service by type</source>
@@ -262,6 +250,10 @@
         <translation>(*) At least one value of this group is a small count and is not drawn.</translation>
     </message>
     <message>
+        <source>Qualification status</source>
+        <translation>Qualification status</translation>
+    </message>
+    <message>
         <source>None.</source>
         <translation>None.</translation>
     </message>
@@ -276,10 +268,6 @@
     <message>
         <source>Valid until</source>
         <translation>Valid until</translation>
-    </message>
-    <message>
-        <source>Certificate status</source>
-        <translation>Certificate status</translation>
     </message>
     <message>
         <source>Asset tag</source>
@@ -330,10 +318,6 @@
         <translation>Source</translation>
     </message>
     <message>
-        <source>Certificates expired, level %1</source>
-        <translation>Certificates expired, level %1</translation>
-    </message>
-    <message>
         <source>%1: %2</source>
         <translation>%1: %2</translation>
     </message>
@@ -344,6 +328,22 @@
     <message>
         <source>%1 (%2)</source>
         <translation>%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Valid qualifications, level %1</source>
+        <translation>Valid qualifications, level %1</translation>
+    </message>
+    <message>
+        <source>Qualifications expiring, level %1</source>
+        <translation>Qualifications expiring, level %1</translation>
+    </message>
+    <message>
+        <source>Qualifications expired, level %1</source>
+        <translation>Qualifications expired, level %1</translation>
+    </message>
+    <message>
+        <source>Valid qualifications by protection level</source>
+        <translation>Valid qualifications by protection level</translation>
     </message>
     <message>
         <source>%1, %2</source>

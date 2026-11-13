@@ -430,7 +430,9 @@ class AlertsSection(QWidget):
 
     def retranslate(self) -> None:
         self.cert_caption.setText(
-            QCoreApplication.translate("Settings", "Warn about certificates expiring within (days)")
+            QCoreApplication.translate(
+                "Settings", "Warn about PPE qualifications expiring within (days)"
+            )
         )
         self.maintenance_caption.setText(
             QCoreApplication.translate("Settings", "Warn about maintenance due within (days)")

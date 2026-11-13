@@ -109,10 +109,10 @@ def _source_name(code: str, names: DisplayNames) -> str:
 
 _INDICATOR_NAMES: dict[str, Callable[[], str]] = {
     "PERS_CERT_VALID": lambda: QCoreApplication.translate(
-        "Dashboard", "Staff with a valid certificate"
+        "Dashboard", "Staff with a valid PPE qualification"
     ),
     "PERS_CERT_EXPIRING": lambda: QCoreApplication.translate(
-        "Dashboard", "Certificates expiring soon"
+        "Dashboard", "PPE qualifications expiring soon"
     ),
     "PERS_RETRAINING_NEEDED": lambda: QCoreApplication.translate(
         "Dashboard", "Staff needing retraining"
@@ -140,18 +140,48 @@ _INDICATOR_NAMES: dict[str, Callable[[], str]] = {
 #: The indicator codes that have a name (for the completeness test).
 INDICATOR_CODES: tuple[str, ...] = tuple(_INDICATOR_NAMES)
 
-_INDICATOR_UNITS: dict[str, Callable[[], str]] = {
-    "PERS_CERT_VALID": lambda: QCoreApplication.translate("Dashboard", "people"),
-    "PERS_CERT_EXPIRING": lambda: QCoreApplication.translate("Dashboard", "certificates"),
-    "PERS_RETRAINING_NEEDED": lambda: QCoreApplication.translate("Dashboard", "people"),
-    "PERS_DEGREE": lambda: QCoreApplication.translate("Dashboard", "people"),
-    "PERS_TRAINING_12M": lambda: QCoreApplication.translate("Dashboard", "records"),
-    "INFRA_AVAILABLE": lambda: QCoreApplication.translate("Dashboard", "units"),
-    "INFRA_MAINT_OVERDUE": lambda: QCoreApplication.translate("Dashboard", "units"),
-    "EX_LAST_PARTICIPANTS": lambda: QCoreApplication.translate("Dashboard", "participants"),
-    "EX_LAST_COUNTRIES": lambda: QCoreApplication.translate("Dashboard", "countries"),
-    "EX_DAYS_SINCE_LAST": lambda: QCoreApplication.translate("Dashboard", "days"),
-    "BUD_EXEC_RATE": lambda: QCoreApplication.translate("Dashboard", "of the allocation"),
+_PERSON = (
+    lambda: QCoreApplication.translate("Dashboard", "person"),
+    lambda: QCoreApplication.translate("Dashboard", "people"),
+)
+_UNIT = (
+    lambda: QCoreApplication.translate("Dashboard", "unit"),
+    lambda: QCoreApplication.translate("Dashboard", "units"),
+)
+
+#: The unit noun of a tile: (singular, plural). The number itself stays in the value label, so the
+#: nouns are plain messages (a Qt numerus message must contain %n); the singular is for 1 in the
+#: three languages.
+_INDICATOR_UNITS: dict[str, tuple[Callable[[], str], Callable[[], str]]] = {
+    "PERS_CERT_VALID": _PERSON,
+    "PERS_CERT_EXPIRING": (
+        lambda: QCoreApplication.translate("Dashboard", "qualification"),
+        lambda: QCoreApplication.translate("Dashboard", "qualifications"),
+    ),
+    "PERS_RETRAINING_NEEDED": _PERSON,
+    "PERS_DEGREE": _PERSON,
+    "PERS_TRAINING_12M": (
+        lambda: QCoreApplication.translate("Dashboard", "record"),
+        lambda: QCoreApplication.translate("Dashboard", "records"),
+    ),
+    "INFRA_AVAILABLE": _UNIT,
+    "INFRA_MAINT_OVERDUE": _UNIT,
+    "EX_LAST_PARTICIPANTS": (
+        lambda: QCoreApplication.translate("Dashboard", "participant"),
+        lambda: QCoreApplication.translate("Dashboard", "participants"),
+    ),
+    "EX_LAST_COUNTRIES": (
+        lambda: QCoreApplication.translate("Dashboard", "country"),
+        lambda: QCoreApplication.translate("Dashboard", "countries"),
+    ),
+    "EX_DAYS_SINCE_LAST": (
+        lambda: QCoreApplication.translate("Dashboard", "day"),
+        lambda: QCoreApplication.translate("Dashboard", "days"),
+    ),
+    "BUD_EXEC_RATE": (
+        lambda: QCoreApplication.translate("Dashboard", "of the allocation"),
+        lambda: QCoreApplication.translate("Dashboard", "of the allocation"),
+    ),
 }
 
 _UNIT_KIND_LABELS: dict[str, Callable[[], str]] = {
@@ -182,10 +212,24 @@ def indicator_name(code: str) -> str:
     return label_for(_INDICATOR_NAMES, str(code))
 
 
-def unit_label(code: str, unit: str) -> str:
-    """The unit noun of an indicator ("people"); the kind of unit when the code is unknown."""
-    if code in _INDICATOR_UNITS:
-        return label_for(_INDICATOR_UNITS, code)
+def _plural_count(value: float | None) -> int:
+    """The count that picks the number form of a unit: ``value`` when it is a whole number, else a
+    count that selects the plural form (also for a missing value)."""
+    if value is None or not float(value).is_integer():
+        return 2
+    return int(value)
+
+
+def unit_label(code: str, unit: str, value: float | None = None) -> str:
+    """The unit noun of an indicator ("person" for 1, "people" otherwise).
+
+    ``value`` is the number shown next to the unit; a missing or non-integer value selects the
+    plural. The kind of unit is returned when the code is unknown.
+    """
+    forms = _INDICATOR_UNITS.get(code)
+    if forms is not None:
+        singular, plural = forms
+        return singular() if _plural_count(value) == 1 else plural()
     return label_for(_UNIT_KIND_LABELS, str(unit))
 
 
@@ -378,7 +422,7 @@ def severity_pixmap(severity: str) -> QPixmap:
 # --------------------------------------------------------------------------- charts
 
 _SERIES_LABELS: dict[str, Callable[[], str]] = {
-    "valid": lambda: QCoreApplication.translate("Dashboard", "Valid certificates"),
+    "valid": lambda: QCoreApplication.translate("Dashboard", "Valid qualifications"),
     "available": lambda: QCoreApplication.translate("Dashboard", "Available"),
     "in_service": lambda: QCoreApplication.translate("Dashboard", "In service"),
     "participants": lambda: QCoreApplication.translate("Dashboard", "Participants"),
@@ -397,7 +441,7 @@ def chart_title(spec: ChartSpec) -> str:
     """The translated title of a chart; a budget chart names its currency and fiscal year."""
     if spec.key == CHART_PERSONNEL:
         return QCoreApplication.translate(
-            "Dashboard", "Staff with a valid certificate, by PPE level"
+            "Dashboard", "Staff with a valid PPE qualification, by level"
         )
     if spec.key == CHART_INFRASTRUCTURE:
         return QCoreApplication.translate("Dashboard", "Availability by asset type")

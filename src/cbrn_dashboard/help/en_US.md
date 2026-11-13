@@ -18,7 +18,7 @@ Every figure on the pages is calculated for the as-of date shown in the toolbar.
 
 Choose another date in the date field (it has a calendar) to see the situation on that day, for example to look at the past. The Today button sets it back to the current date.
 
-The indicators, the alerts, the status of certificates and assets and the budget execution all follow the as-of date. Changing the as-of date never changes stored data.
+The indicators, the alerts, the status of PPE qualifications and assets and the budget execution all follow the as-of date. Changing the as-of date never changes stored data.
 
 ## Dashboard
 <!-- topic: dashboard -->
@@ -32,11 +32,11 @@ The page also shows the number of alerts by severity and some charts. Each chart
 ## Personnel
 <!-- topic: personnel -->
 
-The Personnel page lists the staff with filters, shows their status per PPE certificate level on the as-of date and counts the people per level. Select a person to see the certificates, the training records and the academic degrees.
+The Personnel page lists the staff with filters, shows their status per PPE qualification level on the as-of date and counts the people per level. A PPE qualification is a practical qualification in donning and doffing the protective ensemble of a level, with a valid-until date. Select a person to see the PPE qualifications, the training records and the academic degrees.
 
 People are identified by an internal code and an optional short label. Do not enter national ID numbers or other personal data: the program refuses an identifier that looks like a national ID number.
 
-You can add, edit, deactivate and delete people, and add, edit and delete certificates, training records and degrees. "Set no renewal" marks that no renewal of a certificate is expected, and "Clear no renewal" undoes it. "Pseudonymise person" replaces the identifier and the free text with random codes and cannot be undone. Deleting a person also deletes their certificates, training records and degrees. Deleting and pseudonymising ask for confirmation first.
+You can add, edit, deactivate and delete people, and add, edit and delete PPE qualifications, training records and degrees. "Set no renewal" marks that no renewal of a qualification is expected, and "Clear no renewal" undoes it. "Pseudonymise person" replaces the identifier and the free text with random codes and cannot be undone. Deleting a person also deletes their PPE qualifications, training records and degrees. Deleting and pseudonymising ask for confirmation first.
 
 The list of training courses is kept in Settings.
 
@@ -76,7 +76,7 @@ Double-click an alert, press Enter on it or use "Open record" to go to the page 
 
 Alerts are never stored; they are calculated each time from the data and the as-of date. The page only reads data, so it also works in read-only mode.
 
-The status bar shows the alert counts. At start-up a banner can summarise the warning and critical alerts, with a button that opens this page. The number of days before a certificate expires or a maintenance is due that raises an alert is set in Settings.
+The status bar shows the alert counts. At start-up a banner can summarise the warning and critical alerts, with a button that opens this page. The number of days before a PPE qualification expires or a maintenance is due that raises an alert is set in Settings.
 
 ## Reports
 <!-- topic: reports -->
@@ -98,7 +98,7 @@ The files that you export are ordinary files. They contain internal data and are
 
 "Import CSV file..." on the Reports page reads a CSV file of one kind of data, for example to enter past records. "Write templates..." writes empty files, with the header row only, into a folder that you choose; fill them in or edit an export.
 
-The file must be UTF-8, and the separator is a semicolon or a comma. Import one kind of data at a time, and import the lists that other records refer to first: the lists (courses, asset types, metrics and funding sources), then the staff, the certificates, training records and degrees, the assets, their status and maintenance events, the exercise editions with their countries and results, the budget entries and finally the budget executions.
+The file must be UTF-8, and the separator is a semicolon or a comma. Import one kind of data at a time, and import the lists that other records refer to first: the lists (courses, asset types, metrics and funding sources), then the staff, the PPE qualifications, training records and degrees, the assets, their status and maintenance events, the exercise editions with their countries and results, the budget entries and finally the budget executions.
 
 A file is imported completely or not at all. If any row has a problem, nothing is written and the problems are reported. The import dialog lets you check a file first. Import only adds records: an existing record is never changed or merged. Importing is switched off in read-only mode.
 

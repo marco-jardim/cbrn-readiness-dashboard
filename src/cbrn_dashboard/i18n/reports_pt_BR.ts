@@ -46,12 +46,12 @@
         <translation type="unfinished">Informação</translation>
     </message>
     <message>
-        <source>Valid certificates</source>
-        <translation type="unfinished">Certificados válidos</translation>
+        <source>Valid qualifications</source>
+        <translation type="unfinished">Habilitações válidas</translation>
     </message>
     <message>
-        <source>Certificates expiring</source>
-        <translation type="unfinished">Certificados a vencer</translation>
+        <source>Qualifications expiring</source>
+        <translation type="unfinished">Habilitações a vencer</translation>
     </message>
     <message>
         <source>Staff needing retraining</source>
@@ -146,14 +146,6 @@
         <translation type="unfinished">Pessoal ativo</translation>
     </message>
     <message>
-        <source>Valid certificates, level %1</source>
-        <translation type="unfinished">Certificados válidos, nível %1</translation>
-    </message>
-    <message>
-        <source>Certificates expiring, level %1</source>
-        <translation type="unfinished">Certificados a vencer, nível %1</translation>
-    </message>
-    <message>
         <source>Staff needing retraining, level %1</source>
         <translation type="unfinished">Pessoal que precisa de reciclagem, nível %1</translation>
     </message>
@@ -168,10 +160,6 @@
     <message>
         <source>Assets with maintenance due soon</source>
         <translation type="unfinished">Ativos com manutenção próxima do vencimento</translation>
-    </message>
-    <message>
-        <source>Valid certificates by protection level</source>
-        <translation type="unfinished">Certificados válidos por nível de proteção</translation>
     </message>
     <message>
         <source>Assets available and in service by type</source>
@@ -262,6 +250,10 @@
         <translation type="unfinished">(*) Pelo menos um valor deste grupo é uma contagem pequena e não é desenhado.</translation>
     </message>
     <message>
+        <source>Qualification status</source>
+        <translation type="unfinished">Situação da habilitação</translation>
+    </message>
+    <message>
         <source>None.</source>
         <translation type="unfinished">Nenhum.</translation>
     </message>
@@ -276,10 +268,6 @@
     <message>
         <source>Valid until</source>
         <translation type="unfinished">Válido até</translation>
-    </message>
-    <message>
-        <source>Certificate status</source>
-        <translation type="unfinished">Situação do certificado</translation>
     </message>
     <message>
         <source>Asset tag</source>
@@ -330,10 +318,6 @@
         <translation type="unfinished">Origem</translation>
     </message>
     <message>
-        <source>Certificates expired, level %1</source>
-        <translation type="unfinished">Certificados vencidos, nível %1</translation>
-    </message>
-    <message>
         <source>%1: %2</source>
         <translation type="unfinished">%1: %2</translation>
     </message>
@@ -344,6 +328,22 @@
     <message>
         <source>%1 (%2)</source>
         <translation type="unfinished">%1 (%2)</translation>
+    </message>
+    <message>
+        <source>Valid qualifications, level %1</source>
+        <translation type="unfinished">Habilitações válidas, nível %1</translation>
+    </message>
+    <message>
+        <source>Qualifications expiring, level %1</source>
+        <translation type="unfinished">Habilitações a vencer, nível %1</translation>
+    </message>
+    <message>
+        <source>Qualifications expired, level %1</source>
+        <translation type="unfinished">Habilitações vencidas, nível %1</translation>
+    </message>
+    <message>
+        <source>Valid qualifications by protection level</source>
+        <translation type="unfinished">Habilitações válidas por nível de proteção</translation>
     </message>
     <message>
         <source>%1, %2</source>

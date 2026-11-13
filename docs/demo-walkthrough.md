@@ -4,7 +4,7 @@ The demo mode opens a separate database full of fictitious data, so every page c
 without touching real records. Nothing in it is real: the people, units, editions and amounts are
 generated from a fixed seed and are placed relative to the day the demo database is created. The
 situations described below are those of that creation day. The data is not regenerated when the
-demo is opened again, so it ages with the calendar: a certificate that "expires in 30 days" expires
+demo is opened again, so it ages with the calendar: a PPE qualification that "expires in 30 days" expires
 a day closer each day, and an alert that is a warning today becomes critical later. When you open
 an existing demo database on another day, the application offers to create the demo data again for
 today (see "Start the demo").
@@ -49,14 +49,14 @@ database, not by the command-line option: any database marked as a demo database
 
 The Personnel page shows the 24 fictitious people of the demo database. Six are fixed cases:
 
-- `DEMO-P001` holds level A and level B certificates that stay valid for a long time, and has a
+- `DEMO-P001` holds level A and level B PPE qualifications that stay valid for a long time, and has a
   completed specialisation and a completed master degree.
-- `DEMO-P002` has a level A certificate that expires in 30 days, inside the warning window.
-- `DEMO-P003` has a level A certificate that expired 45 days ago.
-- `DEMO-P004` has a valid level A certificate that is marked "no renewal" from 10 days ago, so it
+- `DEMO-P002` has a level A PPE qualification that expires in 30 days, inside the warning window.
+- `DEMO-P003` has a level A PPE qualification that expired 45 days ago.
+- `DEMO-P004` has a valid level A PPE qualification that is marked "no renewal" from 10 days ago, so it
   raises no expiry alert.
 - `DEMO-P005` was deactivated 60 days ago and is not counted in the indicators.
-- `DEMO-P006` has a renewal chain at level B: an old expired certificate and a newer valid one,
+- `DEMO-P006` has a renewal chain at level B: an old expired PPE qualification and a newer valid one,
   which counts once.
 
 The courses are `DEMO-C1`, `DEMO-C2` and `DEMO-C3`. Training dates lie both inside and outside the
@@ -163,7 +163,7 @@ produces every kind, and each severity:
 | `INDICATOR_WARNING` | warning | `PERS_CERT_VALID`, level B |
 
 The random filler people and assets can add more alerts of the same kinds. `DEMO-P004` raises no
-alert although its certificate is marked "no renewal", and `DEMO-A004` raises none because it has
+alert although its PPE qualification is marked "no renewal", and `DEMO-A004` raises none because it has
 no scheduled maintenance.
 
 ## Snapshots
@@ -204,7 +204,7 @@ are disabled.
 The Settings page has one tab per group of settings; each tab holds one box per section.
 
 - General: language, operator label, institution name and unit name.
-- Alerts: how many days ahead certificates and maintenance are warned about.
+- Alerts: how many days ahead PPE qualifications and maintenance are warned about.
 - Targets: the table of indicator targets. In the demo database it lists the illustrative targets
   of the Dashboard section. A target can be added, edited, switched on or off, or deleted. The
   budget execution rate is entered as a year-end value; the note on the page says that it is scaled

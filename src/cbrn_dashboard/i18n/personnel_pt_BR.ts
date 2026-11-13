@@ -40,10 +40,6 @@
         <translation type="unfinished">Sem renovação</translation>
     </message>
     <message>
-        <source>No certificate</source>
-        <translation type="unfinished">Sem certificado</translation>
-    </message>
-    <message>
         <source>Left the unit</source>
         <translation type="unfinished">Saiu da unidade</translation>
     </message>
@@ -80,8 +76,12 @@
         <translation type="unfinished">O fim da validade não pode ser anterior à data de emissão.</translation>
     </message>
     <message>
-        <source>The person already has a certificate of this level issued on this date.</source>
-        <translation type="unfinished">A pessoa já tem um certificado deste nível emitido nesta data.</translation>
+        <source>No qualification</source>
+        <translation type="unfinished">Sem habilitação</translation>
+    </message>
+    <message>
+        <source>The person already has a qualification of this level issued on this date.</source>
+        <translation type="unfinished">A pessoa já tem uma habilitação deste nível emitida nesta data.</translation>
     </message>
     <message>
         <source>The reason for no renewal is not valid.</source>
@@ -270,6 +270,14 @@
         <translation type="unfinished">Referência</translation>
     </message>
     <message>
+        <source>Add qualification</source>
+        <translation type="unfinished">Adicionar habilitação</translation>
+    </message>
+    <message>
+        <source>Edit qualification</source>
+        <translation type="unfinished">Editar habilitação</translation>
+    </message>
+    <message>
         <source>Course</source>
         <translation type="unfinished">Curso</translation>
     </message>
@@ -325,14 +333,6 @@
     <message>
         <source>Edit person</source>
         <translation type="unfinished">Editar pessoa</translation>
-    </message>
-    <message>
-        <source>Add certificate</source>
-        <translation type="unfinished">Adicionar certificado</translation>
-    </message>
-    <message>
-        <source>Edit certificate</source>
-        <translation type="unfinished">Editar certificado</translation>
     </message>
     <message>
         <source>Mark as no renewal</source>
@@ -399,8 +399,8 @@
         <translation type="unfinished">Pseudonimizar pessoa</translation>
     </message>
     <message>
-        <source>Delete certificate</source>
-        <translation type="unfinished">Excluir certificado</translation>
+        <source>Delete qualification</source>
+        <translation type="unfinished">Excluir habilitação</translation>
     </message>
     <message>
         <source>Set no renewal</source>
@@ -431,16 +431,40 @@
         <translation type="unfinished">Todos os níveis</translation>
     </message>
     <message>
-        <source>Certificates per level on the as-of date</source>
-        <translation type="unfinished">Certificados por nível na data de referência</translation>
+        <source>PPE qualifications per level on the as-of date</source>
+        <translation type="unfinished">Habilitações de EPI por nível na data de referência</translation>
+    </message>
+    <message>
+        <source>PPE qualifications</source>
+        <translation type="unfinished">Habilitações de EPI</translation>
+    </message>
+    <message>
+        <source>Delete person %1 together with the PPE qualifications, training records and degrees?</source>
+        <translation type="unfinished">Excluir a pessoa %1 junto com as habilitações de EPI, os registros de treinamento e os títulos?</translation>
+    </message>
+    <message>
+        <source>Delete the level %1 qualification issued on %2?</source>
+        <translation type="unfinished">Excluir a habilitação de nível %1 emitida em %2?</translation>
+    </message>
+    <message>
+        <source>Qualifications that count for other levels</source>
+        <translation type="unfinished">Habilitações que valem para outros níveis</translation>
+    </message>
+    <message>
+        <source>A qualification also counts for other levels</source>
+        <translation type="unfinished">Uma habilitação também vale para outros níveis</translation>
+    </message>
+    <message>
+        <source>A level %1 qualification counts for:</source>
+        <translation type="unfinished">Uma habilitação de nível %1 vale para:</translation>
+    </message>
+    <message>
+        <source>Validity of a qualification in months</source>
+        <translation type="unfinished">Validade de uma habilitação em meses</translation>
     </message>
     <message>
         <source>Details of the selected person</source>
         <translation type="unfinished">Detalhes da pessoa selecionada</translation>
-    </message>
-    <message>
-        <source>Certificates</source>
-        <translation type="unfinished">Certificados</translation>
     </message>
     <message>
         <source>Training</source>
@@ -459,16 +483,8 @@
         <translation type="unfinished">Desativar a pessoa %1 em %2?</translation>
     </message>
     <message>
-        <source>Delete person %1 together with the certificates, training records and degrees?</source>
-        <translation type="unfinished">Excluir a pessoa %1 junto com os certificados, registros de treinamento e titulações?</translation>
-    </message>
-    <message>
         <source>Pseudonymise %1? Identifier and free text become random codes. This cannot be undone.</source>
         <translation type="unfinished">Pseudonimizar %1? O identificador e o texto livre viram códigos aleatórios. Isto não pode ser desfeito.</translation>
-    </message>
-    <message>
-        <source>Delete the level %1 certificate issued on %2?</source>
-        <translation type="unfinished">Excluir o certificado de nível %1 emitido em %2?</translation>
     </message>
     <message>
         <source>Delete the training record of course %1?</source>
@@ -494,22 +510,6 @@
     <message>
         <source>Delete course</source>
         <translation type="unfinished">Excluir curso</translation>
-    </message>
-    <message>
-        <source>Certificates that count for other levels</source>
-        <translation type="unfinished">Certificados que valem para outros níveis</translation>
-    </message>
-    <message>
-        <source>A certificate also counts for other levels</source>
-        <translation type="unfinished">Um certificado também vale para outros níveis</translation>
-    </message>
-    <message>
-        <source>A level %1 certificate counts for:</source>
-        <translation type="unfinished">Um certificado de nível %1 vale para:</translation>
-    </message>
-    <message>
-        <source>Validity of a certificate in months</source>
-        <translation type="unfinished">Validade de um certificado em meses</translation>
     </message>
     <message>
         <source>Not set</source>

@@ -8,14 +8,6 @@
         <translation type="unfinished">Panel</translation>
     </message>
     <message>
-        <source>Staff with a valid certificate</source>
-        <translation type="unfinished">Personal con certificado válido</translation>
-    </message>
-    <message>
-        <source>Certificates expiring soon</source>
-        <translation type="unfinished">Certificados próximos a vencer</translation>
-    </message>
-    <message>
         <source>Staff needing retraining</source>
         <translation type="unfinished">Personal que necesita reentrenamiento</translation>
     </message>
@@ -52,37 +44,20 @@
         <translation type="unfinished">Tasa de ejecución presupuestaria</translation>
     </message>
     <message>
-        <source>people</source>
-        <extracomment>The indicator codes that have a name (for the completeness test).</extracomment>
-        <translation type="unfinished">personas</translation>
-    </message>
-    <message>
-        <source>certificates</source>
-        <translation type="unfinished">certificados</translation>
-    </message>
-    <message>
-        <source>records</source>
-        <translation type="unfinished">registros</translation>
-    </message>
-    <message>
-        <source>units</source>
-        <translation type="unfinished">unidades</translation>
-    </message>
-    <message>
-        <source>participants</source>
-        <translation type="unfinished">participantes</translation>
-    </message>
-    <message>
-        <source>countries</source>
-        <translation type="unfinished">países</translation>
-    </message>
-    <message>
         <source>days</source>
         <translation type="unfinished">días</translation>
     </message>
     <message>
         <source>of the allocation</source>
         <translation type="unfinished">de la dotación</translation>
+    </message>
+    <message>
+        <source>Staff with a valid PPE qualification</source>
+        <translation type="unfinished">Personal con habilitación de EPP válida</translation>
+    </message>
+    <message>
+        <source>PPE qualifications expiring soon</source>
+        <translation type="unfinished">Habilitaciones de EPP próximas a caducar</translation>
     </message>
     <message>
         <source>count</source>
@@ -185,13 +160,71 @@
         <translation type="unfinished">Alertas informativas: %1</translation>
     </message>
     <message>
-        <source>Valid certificates</source>
+        <source>Valid qualifications</source>
         <extracomment>Status -&gt; colour, all from the Okabe-Ito palette of the chart adapter. Status -&gt; (shape, filled). Every status has its own shape: colour is never the only cue.</extracomment>
-        <translation type="unfinished">Certificados válidos</translation>
+        <translation type="unfinished">Habilitaciones válidas</translation>
+    </message>
+    <message>
+        <source>Staff with a valid PPE qualification, by level</source>
+        <translation type="unfinished">Personal con habilitación de EPP válida, por nivel</translation>
     </message>
     <message>
         <source>Available</source>
         <translation type="unfinished">Disponibles</translation>
+    </message>
+    <message>
+        <source>person</source>
+        <extracomment>The indicator codes that have a name (for the completeness test).</extracomment>
+        <translation type="unfinished">persona</translation>
+    </message>
+    <message>
+        <source>people</source>
+        <translation type="unfinished">personas</translation>
+    </message>
+    <message>
+        <source>unit</source>
+        <translation type="unfinished">unidad</translation>
+    </message>
+    <message>
+        <source>units</source>
+        <translation type="unfinished">unidades</translation>
+    </message>
+    <message>
+        <source>qualification</source>
+        <extracomment>The unit noun of a tile: (singular, plural). The number itself stays in the value label, so the nouns are plain messages (a Qt numerus message must contain %n); the singular is for 1 in the three languages.</extracomment>
+        <translation type="unfinished">habilitación</translation>
+    </message>
+    <message>
+        <source>qualifications</source>
+        <translation type="unfinished">habilitaciones</translation>
+    </message>
+    <message>
+        <source>record</source>
+        <translation type="unfinished">registro</translation>
+    </message>
+    <message>
+        <source>records</source>
+        <translation type="unfinished">registros</translation>
+    </message>
+    <message>
+        <source>participant</source>
+        <translation type="unfinished">participante</translation>
+    </message>
+    <message>
+        <source>participants</source>
+        <translation type="unfinished">participantes</translation>
+    </message>
+    <message>
+        <source>country</source>
+        <translation type="unfinished">país</translation>
+    </message>
+    <message>
+        <source>countries</source>
+        <translation type="unfinished">países</translation>
+    </message>
+    <message>
+        <source>day</source>
+        <translation type="unfinished">día</translation>
     </message>
     <message>
         <source>In service</source>
@@ -212,10 +245,6 @@
     <message>
         <source>Executed</source>
         <translation type="unfinished">Ejecutado</translation>
-    </message>
-    <message>
-        <source>Staff with a valid certificate, by PPE level</source>
-        <translation type="unfinished">Personal con certificado válido, por nivel de EPP</translation>
     </message>
     <message>
         <source>Availability by asset type</source>

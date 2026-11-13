@@ -40,10 +40,6 @@
         <translation>No renewal</translation>
     </message>
     <message>
-        <source>No certificate</source>
-        <translation>No certificate</translation>
-    </message>
-    <message>
         <source>Left the unit</source>
         <translation>Left the unit</translation>
     </message>
@@ -80,8 +76,12 @@
         <translation>The validity end cannot be before the issue date.</translation>
     </message>
     <message>
-        <source>The person already has a certificate of this level issued on this date.</source>
-        <translation>The person already has a certificate of this level issued on this date.</translation>
+        <source>No qualification</source>
+        <translation>No qualification</translation>
+    </message>
+    <message>
+        <source>The person already has a qualification of this level issued on this date.</source>
+        <translation>The person already has a qualification of this level issued on this date.</translation>
     </message>
     <message>
         <source>The reason for no renewal is not valid.</source>
@@ -270,6 +270,14 @@
         <translation>Reference</translation>
     </message>
     <message>
+        <source>Add qualification</source>
+        <translation>Add qualification</translation>
+    </message>
+    <message>
+        <source>Edit qualification</source>
+        <translation>Edit qualification</translation>
+    </message>
+    <message>
         <source>Course</source>
         <translation>Course</translation>
     </message>
@@ -325,14 +333,6 @@
     <message>
         <source>Edit person</source>
         <translation>Edit person</translation>
-    </message>
-    <message>
-        <source>Add certificate</source>
-        <translation>Add certificate</translation>
-    </message>
-    <message>
-        <source>Edit certificate</source>
-        <translation>Edit certificate</translation>
     </message>
     <message>
         <source>Mark as no renewal</source>
@@ -399,8 +399,8 @@
         <translation>Pseudonymise person</translation>
     </message>
     <message>
-        <source>Delete certificate</source>
-        <translation>Delete certificate</translation>
+        <source>Delete qualification</source>
+        <translation>Delete qualification</translation>
     </message>
     <message>
         <source>Set no renewal</source>
@@ -431,16 +431,40 @@
         <translation>All levels</translation>
     </message>
     <message>
-        <source>Certificates per level on the as-of date</source>
-        <translation>Certificates per level on the as-of date</translation>
+        <source>PPE qualifications per level on the as-of date</source>
+        <translation>PPE qualifications per level on the as-of date</translation>
+    </message>
+    <message>
+        <source>PPE qualifications</source>
+        <translation>PPE qualifications</translation>
+    </message>
+    <message>
+        <source>Delete person %1 together with the PPE qualifications, training records and degrees?</source>
+        <translation>Delete person %1 together with the PPE qualifications, training records and degrees?</translation>
+    </message>
+    <message>
+        <source>Delete the level %1 qualification issued on %2?</source>
+        <translation>Delete the level %1 qualification issued on %2?</translation>
+    </message>
+    <message>
+        <source>Qualifications that count for other levels</source>
+        <translation>Qualifications that count for other levels</translation>
+    </message>
+    <message>
+        <source>A qualification also counts for other levels</source>
+        <translation>A qualification also counts for other levels</translation>
+    </message>
+    <message>
+        <source>A level %1 qualification counts for:</source>
+        <translation>A level %1 qualification counts for:</translation>
+    </message>
+    <message>
+        <source>Validity of a qualification in months</source>
+        <translation>Validity of a qualification in months</translation>
     </message>
     <message>
         <source>Details of the selected person</source>
         <translation>Details of the selected person</translation>
-    </message>
-    <message>
-        <source>Certificates</source>
-        <translation>Certificates</translation>
     </message>
     <message>
         <source>Training</source>
@@ -459,16 +483,8 @@
         <translation>Deactivate person %1 as of %2?</translation>
     </message>
     <message>
-        <source>Delete person %1 together with the certificates, training records and degrees?</source>
-        <translation>Delete person %1 together with the certificates, training records and degrees?</translation>
-    </message>
-    <message>
         <source>Pseudonymise %1? Identifier and free text become random codes. This cannot be undone.</source>
         <translation>Pseudonymise %1? Identifier and free text become random codes. This cannot be undone.</translation>
-    </message>
-    <message>
-        <source>Delete the level %1 certificate issued on %2?</source>
-        <translation>Delete the level %1 certificate issued on %2?</translation>
     </message>
     <message>
         <source>Delete the training record of course %1?</source>
@@ -494,22 +510,6 @@
     <message>
         <source>Delete course</source>
         <translation>Delete course</translation>
-    </message>
-    <message>
-        <source>Certificates that count for other levels</source>
-        <translation>Certificates that count for other levels</translation>
-    </message>
-    <message>
-        <source>A certificate also counts for other levels</source>
-        <translation>A certificate also counts for other levels</translation>
-    </message>
-    <message>
-        <source>A level %1 certificate counts for:</source>
-        <translation>A level %1 certificate counts for:</translation>
-    </message>
-    <message>
-        <source>Validity of a certificate in months</source>
-        <translation>Validity of a certificate in months</translation>
     </message>
     <message>
         <source>Not set</source>

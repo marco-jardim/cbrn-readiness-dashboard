@@ -9,7 +9,7 @@ translations). Two variants are built from the same figures:
   header with the institution and unit names, the locally set handling notice, key figures, the
   indicator table, the alert summary and the two lists (staff identifiers needing retraining,
   overdue asset tags);
-* ``ANONYMISED`` - the aggregated report for the OPCW Technical Secretariat (R13), made by
+* ``ANONYMISED`` - the aggregated report (R13) for internal use, made by
   :func:`cbrn_dashboard.reports.anonymise.anonymise` from the internal document: counts only, with
   small-count suppression (A11).
 

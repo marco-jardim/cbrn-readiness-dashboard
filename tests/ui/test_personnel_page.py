@@ -273,7 +273,7 @@ def test_adding_a_person_and_a_certificate_through_the_dialogs(
         "REF-1",
     ]
     # the status per level shows in the staff table
-    assert _cells(page.staff_model, 0, 8)[5:] == ["No certificate", "Valid", "No certificate"]
+    assert _cells(page.staff_model, 0, 8)[5:] == ["No qualification", "Valid", "No qualification"]
 
     app_context.translator_manager.set_language("pt_BR")
     assert page.staff_model.index(0, 3).data() == "12/01/2026"
@@ -797,7 +797,7 @@ def test_headers_and_actions_follow_the_language(app_context: AppContext, qtbot:
     assert page.add_staff_action.text() == QCoreApplication.translate("Personnel", "Add person")
     assert page.add_staff_action.text() != "Add person"
     assert page.retraining_check.text() != "Needs retraining"
-    assert page.tabs.tabText(0) != "Certificates"
+    assert page.tabs.tabText(0) != "PPE qualifications"
 
 
 def test_deactivating_and_deleting_a_person_ask_for_confirmation(

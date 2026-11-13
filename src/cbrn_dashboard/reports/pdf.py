@@ -456,7 +456,7 @@ def _add_lists(doc: _Doc, document: ReportDocument, texts: ReportTexts, fmt: _Fo
                 texts.translate("Reports", "Identifier"),
                 texts.translate("Reports", "Protection level"),
                 texts.translate("Reports", "Valid until"),
-                texts.translate("Reports", "Certificate status"),
+                texts.translate("Reports", "Qualification status"),
             ),
             [
                 (

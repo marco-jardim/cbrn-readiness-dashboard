@@ -2,11 +2,11 @@
 
 An offline Windows desktop application for recording and monitoring a hospital's chemical-defence (CBRN) readiness indicators:
 
-- staff certified per PPE level, certificate validity, training and academic degrees;
+- staff with a PPE qualification per level (practical qualification in donning and doffing the protective ensemble), its validity, training and academic degrees;
 - status and maintenance of beds, bays, negative-pressure and filtration equipment, and decontamination tents;
 - the history of training courses and exercises, with participants, countries and aggregated evaluation results;
 - annual budget execution per funding source;
-- alerts for expiring certificates, pending maintenance and indicators outside their targets.
+- alerts for expiring PPE qualifications, pending maintenance and indicators outside their targets.
 
 The interface is in Brazilian Portuguese (default), English and Spanish.
 

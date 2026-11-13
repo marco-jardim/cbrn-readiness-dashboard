@@ -353,9 +353,9 @@ class CertificateDialog(_PersonnelDialog):
     def retranslate(self) -> None:
         super().retranslate()
         if self._certificate is None:
-            self.setWindowTitle(QCoreApplication.translate("Personnel", "Add certificate"))
+            self.setWindowTitle(QCoreApplication.translate("Personnel", "Add qualification"))
         else:
-            self.setWindowTitle(QCoreApplication.translate("Personnel", "Edit certificate"))
+            self.setWindowTitle(QCoreApplication.translate("Personnel", "Edit qualification"))
         self.no_renewal_check.setText(QCoreApplication.translate("Personnel", "Mark as no renewal"))
         self.reason_combo.setItemText(0, QCoreApplication.translate("Personnel", "Not specified"))
         for index in range(1, self.reason_combo.count()):

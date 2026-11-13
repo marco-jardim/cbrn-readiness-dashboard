@@ -307,10 +307,10 @@ class ExpectedChart:
 
 CHARTS_AS_OF: dict[str, ExpectedChart] = {
     "personnel_valid_by_level": ExpectedChart(
-        "Staff with a valid certificate, by PPE level",
+        "Staff with a valid PPE qualification, by level",
         "Count",
         ChartKind.BAR,
-        ["PPE level", "Valid certificates"],
+        ["PPE level", "Valid qualifications"],
         [["A", "3"], ["B", "1"], ["C", "0"]],
         ((3.0, 1.0, 0.0),),
     ),
@@ -383,9 +383,10 @@ def test_tiles_name_unit_dimension_thresholds_and_context(
     page = _page(app_context, qtbot)
 
     valid_b = _tile(page, "PERS_CERT_VALID", "level=B")
-    assert valid_b.name_label.text() == "Staff with a valid certificate"
+    assert valid_b.name_label.text() == "Staff with a valid PPE qualification"
     assert valid_b.dimension_label.text() == "Level B"
-    assert valid_b.unit_label.text() == "people"
+    assert valid_b.value_label.text() == "1"
+    assert valid_b.unit_label.text() == "person"
     assert valid_b.thresholds_label.text() == "Thresholds in force: warning 2, critical 1"
     assert valid_b.context_label.isHidden()
 
@@ -398,7 +399,8 @@ def test_tiles_name_unit_dimension_thresholds_and_context(
 
     training = _tile(page, "PERS_TRAINING_12M")
     assert training.dimension_label.isHidden()
-    assert training.unit_label.text() == "records"
+    assert training.value_label.text() == "1"
+    assert training.unit_label.text() == "record"
 
     available = _tile(page, "INFRA_AVAILABLE", "type=DEMO-TYPE-A")
     assert available.dimension_label.text() == "Type Tipo demo A"
@@ -506,7 +508,7 @@ def test_the_chart_adapter_really_stores_the_values(app_context: AppContext, qtb
     _seed(app_context)
     page = _page(app_context, qtbot)
     chart = _need(_panel(page, "personnel_valid_by_level").chart_view.chart())
-    assert read_back(chart) == (("A", "B", "C"), (("Valid certificates", (3.0, 1.0, 0.0)),))
+    assert read_back(chart) == (("A", "B", "C"), (("Valid qualifications", (3.0, 1.0, 0.0)),))
     # a participant count that is not recorded has no bar, stays None, and the legend says so
     exercises = _panel(page, "exercises_by_edition")
     assert read_back(_need(exercises.chart_view.chart()))[1] == (
@@ -1103,6 +1105,28 @@ def test_every_code_has_a_label_in_all_languages(app_context: AppContext) -> Non
     for lang in ("pt_BR", "es_ES"):
         for name, text in found[lang].items():
             assert text != english[name], (lang, name)
+
+
+def test_the_unit_of_a_tile_agrees_in_number_with_its_value(app_context: AppContext) -> None:
+    app_context.translator_manager.set_language("en_US")
+    expected = {
+        "PERS_CERT_VALID": ("person", "people"),
+        "PERS_CERT_EXPIRING": ("qualification", "qualifications"),
+        "PERS_TRAINING_12M": ("record", "records"),
+        "INFRA_AVAILABLE": ("unit", "units"),
+        "EX_LAST_PARTICIPANTS": ("participant", "participants"),
+        "EX_LAST_COUNTRIES": ("country", "countries"),
+        "EX_DAYS_SINCE_LAST": ("day", "days"),
+    }
+    for code, (singular, plural) in expected.items():
+        assert labels.unit_label(code, "COUNT", 1.0) == singular, code
+        assert labels.unit_label(code, "COUNT", 2.0) == plural, code
+        assert labels.unit_label(code, "COUNT", 0.0) == plural, code
+        assert labels.unit_label(code, "COUNT", 2.5) == plural, code  # not a whole number
+        assert labels.unit_label(code, "COUNT", None) == plural, code  # nothing recorded
+        assert labels.unit_label(code, "COUNT") == plural, code
+    # The unit of a rate is not a countable noun.
+    assert labels.unit_label("BUD_EXEC_RATE", "RATIO", 1.0) == "of the allocation"
 
 
 def test_the_status_texts_of_the_five_statuses_are_distinct(app_context: AppContext) -> None:

@@ -93,7 +93,7 @@ _CERT_STATUS_LABELS: dict[str, Callable[[], str]] = {
     CertStatus.EXPIRING.value: lambda: QCoreApplication.translate("Personnel", "Expiring"),
     CertStatus.EXPIRED.value: lambda: QCoreApplication.translate("Personnel", "Expired"),
     CertStatus.NO_RENEWAL.value: lambda: QCoreApplication.translate("Personnel", "No renewal"),
-    CertStatus.NONE.value: lambda: QCoreApplication.translate("Personnel", "No certificate"),
+    CertStatus.NONE.value: lambda: QCoreApplication.translate("Personnel", "No qualification"),
 }
 
 _REASON_LABELS: dict[str, Callable[[], str]] = {
@@ -121,7 +121,7 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
         "Personnel", "The validity end cannot be before the issue date."
     ),
     DUPLICATE_CERTIFICATE: lambda: QCoreApplication.translate(
-        "Personnel", "The person already has a certificate of this level issued on this date."
+        "Personnel", "The person already has a qualification of this level issued on this date."
     ),
     INVALID_NO_RENEWAL_REASON: lambda: QCoreApplication.translate(
         "Personnel", "The reason for no renewal is not valid."

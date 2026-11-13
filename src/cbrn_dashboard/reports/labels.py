@@ -192,8 +192,8 @@ class ReportTexts:
 
     def _build_indicators(self) -> dict[str, str]:
         return {
-            "PERS_CERT_VALID": self.translate("Reports", "Valid certificates"),
-            "PERS_CERT_EXPIRING": self.translate("Reports", "Certificates expiring"),
+            "PERS_CERT_VALID": self.translate("Reports", "Valid qualifications"),
+            "PERS_CERT_EXPIRING": self.translate("Reports", "Qualifications expiring"),
             "PERS_RETRAINING_NEEDED": self.translate("Reports", "Staff needing retraining"),
             "PERS_DEGREE": self.translate("Reports", "Postgraduate degrees"),
             "INFRA_AVAILABLE": self.translate("Reports", "Assets available"),
@@ -217,7 +217,7 @@ class ReportTexts:
 
     def _build_series(self) -> dict[str, str]:
         return {
-            "valid": self.translate("Reports", "Valid certificates"),
+            "valid": self.translate("Reports", "Valid qualifications"),
             "available": self.translate("Reports", "Available"),
             "in_service": self.translate("Reports", "In service"),
             "participants": self.translate("Reports", "Participants"),
@@ -331,11 +331,11 @@ class ReportTexts:
         if name == "active_staff":
             return self.translate("Reports", "Active staff")
         if name == "valid":
-            return fill(self.translate("Reports", "Valid certificates, level %1"), argument)
+            return fill(self.translate("Reports", "Valid qualifications, level %1"), argument)
         if name == "expiring":
-            return fill(self.translate("Reports", "Certificates expiring, level %1"), argument)
+            return fill(self.translate("Reports", "Qualifications expiring, level %1"), argument)
         if name == "expired":
-            return fill(self.translate("Reports", "Certificates expired, level %1"), argument)
+            return fill(self.translate("Reports", "Qualifications expired, level %1"), argument)
         if name == "retraining":
             return fill(self.translate("Reports", "Staff needing retraining, level %1"), argument)
         if name == "degree_completed":
@@ -349,7 +349,7 @@ class ReportTexts:
     def chart_title(self, key: str, parameters: dict[str, str]) -> str:
         """The title of a report chart; a budget chart names its currency and fiscal year."""
         if key == "personnel_valid_by_level":
-            return self.translate("Reports", "Valid certificates by protection level")
+            return self.translate("Reports", "Valid qualifications by protection level")
         if key == "infrastructure_availability":
             return self.translate("Reports", "Assets available and in service by type")
         if key == "exercises_by_edition":

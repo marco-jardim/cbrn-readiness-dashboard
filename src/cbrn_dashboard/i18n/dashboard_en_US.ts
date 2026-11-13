@@ -8,14 +8,6 @@
         <translation>Dashboard</translation>
     </message>
     <message>
-        <source>Staff with a valid certificate</source>
-        <translation>Staff with a valid certificate</translation>
-    </message>
-    <message>
-        <source>Certificates expiring soon</source>
-        <translation>Certificates expiring soon</translation>
-    </message>
-    <message>
         <source>Staff needing retraining</source>
         <translation>Staff needing retraining</translation>
     </message>
@@ -52,37 +44,20 @@
         <translation>Budget execution rate</translation>
     </message>
     <message>
-        <source>people</source>
-        <extracomment>The indicator codes that have a name (for the completeness test).</extracomment>
-        <translation>people</translation>
-    </message>
-    <message>
-        <source>certificates</source>
-        <translation>certificates</translation>
-    </message>
-    <message>
-        <source>records</source>
-        <translation>records</translation>
-    </message>
-    <message>
-        <source>units</source>
-        <translation>units</translation>
-    </message>
-    <message>
-        <source>participants</source>
-        <translation>participants</translation>
-    </message>
-    <message>
-        <source>countries</source>
-        <translation>countries</translation>
-    </message>
-    <message>
         <source>days</source>
         <translation>days</translation>
     </message>
     <message>
         <source>of the allocation</source>
         <translation>of the allocation</translation>
+    </message>
+    <message>
+        <source>Staff with a valid PPE qualification</source>
+        <translation>Staff with a valid PPE qualification</translation>
+    </message>
+    <message>
+        <source>PPE qualifications expiring soon</source>
+        <translation>PPE qualifications expiring soon</translation>
     </message>
     <message>
         <source>count</source>
@@ -185,13 +160,71 @@
         <translation>Information alerts: %1</translation>
     </message>
     <message>
-        <source>Valid certificates</source>
+        <source>Valid qualifications</source>
         <extracomment>Status -&gt; colour, all from the Okabe-Ito palette of the chart adapter. Status -&gt; (shape, filled). Every status has its own shape: colour is never the only cue.</extracomment>
-        <translation>Valid certificates</translation>
+        <translation>Valid qualifications</translation>
+    </message>
+    <message>
+        <source>Staff with a valid PPE qualification, by level</source>
+        <translation>Staff with a valid PPE qualification, by level</translation>
     </message>
     <message>
         <source>Available</source>
         <translation>Available</translation>
+    </message>
+    <message>
+        <source>person</source>
+        <extracomment>The indicator codes that have a name (for the completeness test).</extracomment>
+        <translation>person</translation>
+    </message>
+    <message>
+        <source>people</source>
+        <translation>people</translation>
+    </message>
+    <message>
+        <source>unit</source>
+        <translation>unit</translation>
+    </message>
+    <message>
+        <source>units</source>
+        <translation>units</translation>
+    </message>
+    <message>
+        <source>qualification</source>
+        <extracomment>The unit noun of a tile: (singular, plural). The number itself stays in the value label, so the nouns are plain messages (a Qt numerus message must contain %n); the singular is for 1 in the three languages.</extracomment>
+        <translation>qualification</translation>
+    </message>
+    <message>
+        <source>qualifications</source>
+        <translation>qualifications</translation>
+    </message>
+    <message>
+        <source>record</source>
+        <translation>record</translation>
+    </message>
+    <message>
+        <source>records</source>
+        <translation>records</translation>
+    </message>
+    <message>
+        <source>participant</source>
+        <translation>participant</translation>
+    </message>
+    <message>
+        <source>participants</source>
+        <translation>participants</translation>
+    </message>
+    <message>
+        <source>country</source>
+        <translation>country</translation>
+    </message>
+    <message>
+        <source>countries</source>
+        <translation>countries</translation>
+    </message>
+    <message>
+        <source>day</source>
+        <translation>day</translation>
     </message>
     <message>
         <source>In service</source>
@@ -212,10 +245,6 @@
     <message>
         <source>Executed</source>
         <translation>Executed</translation>
-    </message>
-    <message>
-        <source>Staff with a valid certificate, by PPE level</source>
-        <translation>Staff with a valid certificate, by PPE level</translation>
     </message>
     <message>
         <source>Availability by asset type</source>

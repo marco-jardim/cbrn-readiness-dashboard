@@ -33,17 +33,17 @@
         <translation>Budget</translation>
     </message>
     <message numerus="yes">
-        <source>The level %1 certificate of %2 expired %n day(s) ago.</source>
+        <source>The level %1 PPE qualification of %2 expired %n day(s) ago.</source>
         <translation>
-            <numerusform>The level %1 certificate of %2 expired %n day ago.</numerusform>
-            <numerusform>The level %1 certificate of %2 expired %n days ago.</numerusform>
+            <numerusform>The level %1 PPE qualification of %2 expired %n day ago.</numerusform>
+            <numerusform>The level %1 PPE qualification of %2 expired %n days ago.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>The level %1 certificate of %2 expires in %n day(s).</source>
+        <source>The level %1 PPE qualification of %2 expires in %n day(s).</source>
         <translation>
-            <numerusform>The level %1 certificate of %2 expires in %n day.</numerusform>
-            <numerusform>The level %1 certificate of %2 expires in %n days.</numerusform>
+            <numerusform>The level %1 PPE qualification of %2 expires in %n day.</numerusform>
+            <numerusform>The level %1 PPE qualification of %2 expires in %n days.</numerusform>
         </translation>
     </message>
     <message numerus="yes">

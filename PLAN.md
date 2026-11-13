@@ -15,7 +15,7 @@ Contents: 1 Summary · 2 Scope and non-goals · 3 Requirements · 4 Architecture
 ## 1. Summary
 
 The CBRN Readiness Dashboard is an offline Windows desktop application. The hospital's CBRN defence committee (CDQBRN) uses it to record, in one place, the readiness indicators that Appendix A lists for "PTT 2", and to monitor them continuously. The indicators are:
-- staff certified per PPE level, with certificate validity, training and academic degrees;
+- staff with a PPE qualification per level, with its validity, training and academic degrees;
 - beds, bays, negative-pressure and filtration equipment, and decontamination tents, with their status and maintenance;
 - the history of the CBRAMED and EXBRAMED editions;
 - annual budget execution per funding source;
@@ -62,7 +62,7 @@ Labels used in this plan:
 - Any text from the WHO guide "Initial clinical management of chemical weapons" (CC BY-NC-SA) or from internal hospital documents (F06).
 - Servers, web or mobile versions, several users editing at the same time, databases on network shares (D05).
 - Integration with hospital, human-resources or financial systems; automatic data collection.
-- Sending anything to DIRSA, the Air Force Command or the OPCW. The app produces files; people send them.
+- Sending anything to anyone outside the app: the app produces files; people decide where they go.
 - The statistical analysis of predictive validity. The app exports the data; the analysis happens elsewhere.
 - Institutional homologation (R30), code signing (D10), installers, auto-update.
 - Personal data of exercise participants (D20).
@@ -74,9 +74,10 @@ Labels used in this plan:
 | CDQBRN | The hospital's CBRN defence committee: the primary user and the audience for management views (L69). |
 | CTH | The hospital's hybrid treatment centre, whose beds, bays and equipment are tracked (L65, L76). |
 | EPI / PPE levels A, B, C | Protection levels named in L74. The app records them; it does not define them. |
+| PPE qualification (level A/B/C) | Practical qualification in donning and doffing the protective ensemble of that level, with a valid-until date. Levels classify ensembles (OSHA 29 CFR 1910.120 App. B), not people; no official per-person certification per level was found (research 2026-11-13). The thesis term "certificação por nível de EPI" maps to this record. |
 | CBRAMED, EXBRAMED | The course and exercise series whose history the exercises module records (L78). |
 | DIRSA | The Air Force health directorate. It is both a report recipient and a funding source (L65, L80). |
-| OPAQ / OPCW | Organisation for the Prohibition of Chemical Weapons. Its Trust Fund receives the contribution of Brazil; it is not a funding source of the hospital. Its Technical Secretariat receives anonymised reports (L69). |
+| OPAQ / OPCW | Organisation for the Prohibition of Chemical Weapons. Its Trust Fund receives the contribution of Brazil; it is not a funding source of the hospital. The thesis (L69) names its Technical Secretariat as a recipient of aggregated anonymised reports; the app's anonymised report is for internal use, and any external release is decided by the chain of command (owner decision 2026-11-13; see Q10, Q19). |
 | COMAER | Comando da Aeronáutica (Air Force Command), a built-in funding source together with DIRSA (L80). |
 | QBRN | Portuguese and Spanish for CBRN. |
 | Today | The local calendar date on the workstation, defined in `clock.py`. Day and month boundaries (daily backup, monthly snapshot) use it; stored timestamps stay UTC. |
@@ -98,14 +99,14 @@ The appendix defines **five modules**: personnel (L74), infrastructure (L76), ex
 | R04 | "leitos, pessoal qualificado, investimento e evolução histórica do CTH" (L61) | History: as-of-date evaluation, status and maintenance history, snapshots | P1, P3, P8 |
 | R05 | "verificada apenas episodicamente [...] e não por um mecanismo de acompanhamento contínuo" (L61) | Dashboard re-evaluated on every start; start-up alert summary; periodic snapshots | P6, P8 |
 | R06 | "Centralizar e monitorar de forma contínua os indicadores de prontidão QBRN" (L65) | Indicator framework and dashboard | P1, P6 |
-| R07 | "pessoal certificado por nível de EPI e validade da certificação" (L65) | Personnel module | P2 |
+| R07 | "pessoal certificado por nível de EPI e validade da certificação" (L65) | Personnel module (PPE qualification per level, with validity) | P2 |
 | R08 | "disponibilidade de leitos e equipamentos do CTH" (L65) | Infrastructure module | P3 |
 | R09 | "histórico de exercícios realizados" (L65) | Exercises module | P4 |
 | R10 | "execução orçamentária" (L65) | Budget module | P5 |
 | R11 | "subsidiar decisões da CDQBRN/HFAG e a prestação de contas à DIRSA e à OPAQ" (L65) | Internal PDF report; CSV export | P8 |
 | R12 | "Gestão da CDQBRN/HFAG; Diretoria de Saúde da Aeronáutica (DIRSA); Comando da Aeronáutica" (L69) | Audience of the dashboard and internal reports (not app accounts; see D05) | P6, P8 |
-| R13 | "em relatórios agregados e anonimizados, o Secretariado Técnico da OPAQ" (L69) | Aggregated, anonymised report variant | P8 |
-| R14 | "quantitativo de profissionais certificados por nível de EPI (A, B, C)" (L74) | Count of staff with a valid certificate per level, as of a date | P2 |
+| R13 | "em relatórios agregados e anonimizados, o Secretariado Técnico da OPAQ" (L69) | Aggregated, anonymised report variant (internal use; external release outside the app) | P8 |
+| R14 | "quantitativo de profissionais certificados por nível de EPI (A, B, C)" (L74) | Count of staff with a valid PPE qualification per level, as of a date | P2 |
 | R15 | "validade das certificações e necessidade de reciclagem" (L74) | Expiry tracking; list of staff needing retraining | P2, P6 |
 | R16 | "capacitação e titulação (especialização, mestrado, doutorado)" (L74) | Training records; academic degrees | P2 |
 | R17 | "leitos e baias disponíveis no CTH" (L76) | Bed and bay register with operational status; availability counts | P3 |
@@ -116,7 +117,7 @@ The appendix defines **five modules**: personnel (L74), infrastructure (L76), ex
 | R22 | "número de participantes e países representados" (L78) | Participant count and country list per edition | P4 |
 | R23 | "resultados agregados de avaliação" (L78) | Aggregated evaluation results per edition (configurable metrics) | P4 |
 | R24 | "execução financeira anual por fonte (Comando da Aeronáutica, DIRSA)" (L80; revised in thesis commit f8b1d65, 2026-11-13) | Annual budget entries per source; execution rate | P5 |
-| R25 | "certificações a vencer" (L82) | Certificate expiry alerts | P6 |
+| R25 | "certificações a vencer" (L82) | PPE qualification expiry alerts | P6 |
 | R26 | "manutenções pendentes" (L82) | Maintenance due and overdue alerts | P6 |
 | R27 | "indicadores fora do padrão esperado de prontidão" (L82) | Configurable indicator targets; out-of-target alerts | P6 |
 | R28 | "levantamento de requisitos junto à CDQBRN/HFAG, prototipação incremental" (L87) | Open questions (§12); configurable rules; incremental releases (MVP, then 1.0) | all |
@@ -169,14 +170,14 @@ The appendix defines **five modules**: personnel (L74), infrastructure (L76), ex
 | D14 | Indicator statuses OK / Warning / Critical / No target / No data. No default targets | §5.4 |
 | D15 | Money stored as whole minor units (cents) with an ISO 4217 currency code taken from an allow-list that also holds the decimal places (BRL, USD, EUR to start). No conversion; totals never mix currencies | §5 |
 | D16 | Built-in list entries mirror the appendix wording. Users may add entries; only the pt-BR label is mandatory for them, and the other languages fall back as §6 describes | §5, §6 |
-| D17 | Staff identified by an internal code. No national ID numbers, birth dates, contact or health data, and no free-text `notes` columns on personal records. A "pseudonymise person" action replaces the identifier and each degree `field` with random codes and clears the label and certificate references, but keeps certificates and history | §5.1, §7 |
+| D17 | Staff identified by an internal code. No national ID numbers, birth dates, contact or health data, and no free-text `notes` columns on personal records. A "pseudonymise person" action replaces the identifier and each degree `field` with random codes and clears the label and PPE qualification references, but keeps PPE qualifications and history | §5.1, §7 |
 | D18 | Institution and unit names are set locally in Settings, never hard-coded | §7 |
 | D19 | The application contains no clinical or procedural content | §2.2 |
 | D20 | Exercise participants recorded only as counts; countries as ISO 3166-1 alpha-2 codes | §5 |
 | D21 | Snapshots taken manually, monthly, and whenever a report is generated | §5.4 |
 | D22 | Log files contain event codes, exception types and stack frames only, never record contents or exception messages | §7 |
 | D23 | Status shown as text plus icon plus a colour-blind-safe colour, never colour alone | §10 (T6.5, T10.4) |
-| D24 | A certificate can be marked "no renewal" from a date (`no_renewal_from`), which stops expiry alerts for it from that date | §5.5 |
+| D24 | A PPE qualification can be marked "no renewal" from a date (`no_renewal_from`), which stops expiry alerts for it from that date | §5.5 |
 | D25 | Demo data lives in a separate database file with its own backups, every identifier starts with `DEMO`, and a permanent banner is shown. The banner, a PDF watermark and the `DEMO-` prefix on CSV file names are driven by `app_meta.is_demo`, not by the command-line flag | §7 |
 | D26 | An asset with no status event on or before the as-of date has the status "unknown": not available, and flagged as a data-quality issue | T3.2 |
 | D27 | Negative budget amounts are rejected; corrections are made by editing the entry, and every edit is recorded in `change_log` | T5.3 |
@@ -201,9 +202,9 @@ A-items without a setting (A01, A03, A12, A13, A14) are assumptions, not placeho
 | ID | Assumption or placeholder | Default in v1 | Configurable in | Q |
 |---|---|---|---|---|
 | A01 | "Leitos e baias disponíveis" (L76) means units in service whose current status is operational, not how many are free at a given moment | — | — | Q5 |
-| A02 | PPE levels A, B, C are counted independently: a level-A certificate does not also count as B or C | hierarchy off | Settings → Personnel | Q2 |
-| A03 | **Certificate rule (stated once; §5.4, §5.5, T2.2 and T6.2 refer to it).** For a person, a level and a date *d*, the certificate that counts is the one with the latest `valid_until` among those with `issued_on` ≤ *d* (ties: later `issued_on`, then higher id). It is valid when `valid_until` ≥ *d*. A certificate issued after *d* therefore never hides the one that was valid on *d*. "Necessidade de reciclagem" (L74) means that counting certificate has expired or expires within the warning window, and `no_renewal_from` (D24) is not set or is later than *d* | — | — | Q2 |
-| A04 | Each certificate records an explicit valid-until date. An optional validity period per level only pre-fills the form | period not set | Settings → Personnel | Q2 |
+| A02 | PPE levels A, B, C are counted independently: a level-A qualification does not also count as B or C | hierarchy off | Settings → Personnel | Q2 |
+| A03 | **PPE qualification rule (stated once; §5.4, §5.5, T2.2 and T6.2 refer to it).** For a person, a level and a date *d*, the PPE qualification that counts is the one with the latest `valid_until` among those with `issued_on` ≤ *d* (ties: later `issued_on`, then higher id). It is valid when `valid_until` ≥ *d*. A qualification issued after *d* therefore never hides the one that was valid on *d*. "Necessidade de reciclagem" (L74) means that counting qualification has expired or expires within the warning window, and `no_renewal_from` (D24) is not set or is later than *d* | — | — | Q2 |
+| A04 | Each PPE qualification records an explicit valid-until date. An optional validity period per level only pre-fills the form | period not set | Settings → Personnel | Q2 |
 | A05 | Asset statuses are operational, degraded and out of service. Only "operational" counts as available | degraded counts as unavailable | Settings → Infrastructure | Q5 |
 | A06 | Maintenance due date = the `next_due_on` of the latest maintenance on or before the as-of date that records one; records without it (typically corrective or inspection) never reset the schedule. Without any recorded next-due date: an effective interval of 0 means "no scheduled maintenance" (no due date and no `MAINT_SCHEDULE_UNKNOWN` alert); otherwise the latest preventive `performed_on` (or `in_service_from`) plus the interval; with no interval, "schedule unknown". A recorded `next_due_on` always wins over an interval of 0 | interval not set | per asset type, per asset | Q6 |
 | A07 | Evaluation results (L78) are values of user-defined metrics (name, unit, scale) per edition | no metrics seeded | Settings → Exercises | Q7 |
@@ -214,7 +215,7 @@ A-items without a setting (A01, A03, A12, A13, A14) are assumptions, not placeho
 | A12 | One operator, or several people taking turns on one machine; nobody edits at the same time. Taking turns works only with one shared Windows account, or with `--data-dir` pointing to a local folder restricted to the committee; with separate Windows accounts each person gets a separate database | — | — | Q12 |
 | A13 | The exercise register holds CBRAMED and EXBRAMED editions (L78), plus an "other" kind | — | — | Q7 |
 | A14 | A person or an asset has one active or in-service interval; someone who returns, or equipment that comes back, is entered as a new record | — | — | Q4, Q5 |
-| P01 | Warning window before a certificate expires | 90 days | Settings | Q2 |
+| P01 | Warning window before a PPE qualification expires | 90 days | Settings | Q2 |
 | P02 | Warning window before maintenance is due | 30 days | Settings | Q6 |
 | P03 | Indicator targets (warning and critical values) | none, so the status shows "no target" | Settings → Targets | Q1 |
 | P04 | Automatic snapshots (D21) | monthly (first start in a month) and on every report | Settings | Q9 |
@@ -233,7 +234,7 @@ A-items without a setting (A01, A03, A12, A13, A14) are assumptions, not placeho
 ```
 ui/        PySide6 widgets, table models, dialogs, translations (Qt)
   │ calls
-services/  use cases: add a certificate, evaluate indicators, back up... (no Qt)
+services/  use cases: add a PPE qualification, evaluate indicators, back up... (no Qt)
   │ uses                          │ uses
 domain/    pure rules (no Qt, no I/O)    storage/  sqlite3, migrations, backup, CSV (no Qt)
 reports/   model.py + anonymise.py (no Qt)  ──►  pdf.py (Qt rendering only)
@@ -391,7 +392,7 @@ The project's source code is GPL-3.0-or-later. Because the binary bundle include
 **D09 — Reports and export: PDF and CSV in v1; XLSX deferred.**
 - *Decision:* PDF reports are built with Qt's own text-document and PDF-writer classes, with no extra dependency. There are two variants:
   - the internal report, for the committee, DIRSA and the Air Force Command (R11, R12);
-  - the aggregated, anonymised report for the OPCW Technical Secretariat (R13, A11).
+  - the aggregated, anonymised report (R13, A11), for internal use; any external release is a decision of the chain of command.
 
   Both carry the preliminary-version notice (I06, P07). CSV serves data exchange and the retroactive import (R29, D04).
 - The appendix calls for reports and accountability (L65, L69, L95) but does not mention spreadsheets. XLSX is therefore deferred item X3, pending Q10. `openpyxl` (MIT) would be compatible if it is needed.
@@ -678,8 +679,8 @@ Statuses:
 
 | Code | Proposed definition | Unit | Dimension | Source | Default target |
 |---|---|---|---|---|---|
-| `PERS_CERT_VALID` | Active staff whose counting certificate at the level (the rule stated once in A03) is valid on the as-of date | people | level A/B/C | R14 | none |
-| `PERS_CERT_EXPIRING` | Active staff whose counting certificate at the level (A03) is valid, expires within the warning window (P01), and is not marked "no renewal" on the as-of date (D24) | certificates | level | R15, R25 | none |
+| `PERS_CERT_VALID` | Active staff whose counting PPE qualification at the level (the rule stated once in A03) is valid on the as-of date | people | level A/B/C | R14 | none |
+| `PERS_CERT_EXPIRING` | Active staff whose counting PPE qualification at the level (A03) is valid, expires within the warning window (P01), and is not marked "no renewal" on the as-of date (D24) | qualifications | level | R15, R25 | none |
 | `PERS_RETRAINING_NEEDED` | Active staff needing retraining as defined in A03 | people | level | R15, R36 | none |
 | `PERS_DEGREE` | Active staff with a degree at the level (completed; in-progress counted separately) | people | level, status | R16 | none |
 | `PERS_TRAINING_12M` | Training records completed in the 12 months before the as-of date | records | — | R16, A09 | none |
@@ -697,8 +698,8 @@ Alerts are computed when needed, not stored. They are sorted by severity, then b
 
 | Kind | Trigger | Severity | Source |
 |---|---|---|---|
-| `CERT_EXPIRED` | An active person's counting certificate at a level (A03) has expired and `no_renewal_from` is not set or is later than the as-of date (D24) | critical | R25, R15 |
-| `CERT_EXPIRING` | That certificate is valid and expires within P01 | warning | R25 |
+| `CERT_EXPIRED` | An active person's counting PPE qualification at a level (A03) has expired and `no_renewal_from` is not set or is later than the as-of date (D24) | critical | R25, R15 |
+| `CERT_EXPIRING` | That qualification is valid and expires within P01 | warning | R25 |
 | `MAINT_OVERDUE` | An in-service asset's due date (A06) is before the as-of date | critical | R26 |
 | `MAINT_DUE_SOON` | Its due date falls within P02 | warning | R26 |
 | `MAINT_SCHEDULE_UNKNOWN` | An in-service asset has neither an interval nor a recorded next-due date. An interval of 0 with no recorded next-due date means "no scheduled maintenance" and raises no alert (A06) | info (data quality, D) | I05 |
@@ -1186,8 +1187,8 @@ This phase covers R07, R14–R16 and R36, and supplies the inputs for R25. It fo
   - The database rejects a `ppe_level` other than A, B or C; a `valid_until` before `issued_on`; and an unknown degree `level` or `status`.
   - `identifier` is unique.
   - `staff_member`, `ppe_certification` and `training_record` have no `notes` column (D17); `no_renewal_from` is NULL by default; a `no_renewal_reason` outside `left_unit`, `role_change` and `other` is rejected.
-  - The import natural keys are enforced: a second certificate with the same staff member, level and `issued_on`; a second training record with the same staff member, course and `completed_on`; and a second degree with the same staff member, level, field and year (empty field and year included) are rejected.
-  - Deleting a staff member deletes their certificates, training records and degrees.
+  - The import natural keys are enforced: a second PPE qualification with the same staff member, level and `issued_on`; a second training record with the same staff member, course and `completed_on`; and a second degree with the same staff member, level, field and year (empty field and year included) are rejected.
+  - Deleting a staff member deletes their PPE qualifications, training records and degrees.
   - A course that is in use cannot be deleted.
 - Check: `uv run pytest tests/storage/test_schema_personnel.py`
 
@@ -1195,12 +1196,12 @@ This phase covers R07, R14–R16 and R36, and supplies the inputs for R25. It fo
 - Files: `domain/personnel.py`, `domain/registry.py` (one line), `tests/domain/test_personnel.py`.
 - Work: pure functions over plain data objects. Every function takes the as-of date *d*.
   - A person is active when `active_from` ≤ *d* and either `active_until` is empty or *d* ≤ `active_until`.
-  - The certificate rule is the one stated in A03, implemented once here and used by the indicators, the alerts (T6.2) and the lists: for a person, level and date *d*, the counting certificate is the one with the latest `valid_until` among those with `issued_on` ≤ *d* (ties: later `issued_on`, then higher id); it is valid when `valid_until` ≥ *d*.
-  - A certificate is "no renewal" on *d* when `no_renewal_from` is set and ≤ *d* (D24). It is "expiring" when it is the counting certificate, valid on *d*, has `valid_until` ≤ *d* + P01, and is not "no renewal" on *d*.
+  - The PPE qualification rule is the one stated in A03, implemented once here and used by the indicators, the alerts (T6.2) and the lists: for a person, level and date *d*, the counting qualification is the one with the latest `valid_until` among those with `issued_on` ≤ *d* (ties: later `issued_on`, then higher id); it is valid when `valid_until` ≥ *d*.
+  - A PPE qualification is "no renewal" on *d* when `no_renewal_from` is set and ≤ *d* (D24). It is "expiring" when it is the counting qualification, valid on *d*, has `valid_until` ≤ *d* + P01, and is not "no renewal" on *d*.
   - "Retraining needed" follows A03. The function returns the list of staff identifiers for the retraining and expiring views (R36).
   - Level hierarchy (A02):
     - with the switch off, levels are counted independently;
-    - with it on, a certificate also counts for the levels mapped as covered by it in Settings. The mapping stays empty until Q2 is answered.
+    - with it on, a qualification also counts for the levels mapped as covered by it in Settings. The mapping stays empty until Q2 is answered.
   - Validity pre-fill (A04): the proposed `valid_until` is `issued_on` plus the level's validity months when they are configured; otherwise there is no proposal.
   - Indicators, as defined in §5.4:
     - `PERS_CERT_VALID`, `PERS_CERT_EXPIRING` and `PERS_RETRAINING_NEEDED`, with dimension level;
@@ -1208,11 +1209,11 @@ This phase covers R07, R14–R16 and R36, and supplies the inputs for R25. It fo
     - `PERS_TRAINING_12M`.
   - `PERS_DEGREE` and the degree year: a completed degree whose recorded `year` is later than the year of *d* (the local date) is not counted on *d*. A completed degree without a year, and an in-progress degree whatever its year, is counted (QA finding P2-07).
 - Accept: table-driven tests with `FixedClock` show that:
-  - a certificate whose `valid_until` equals the as-of date is still valid that day and counts as expiring;
+  - a PPE qualification whose `valid_until` equals the as-of date is still valid that day and counts as expiring;
   - inactive staff are never counted;
-  - two certificates at the same level count once;
-  - a renewal case: a certificate issued after *d* does not hide the one that was valid on *d*, and the same person read at a later date counts the new certificate; the tie-break (same `valid_until`: later `issued_on`, then higher id) is tested;
-  - certificates with `no_renewal_from` ≤ *d* are left out of both "expiring" and "retraining needed", and one with `no_renewal_from` later than *d* is still included;
+  - two qualifications at the same level count once;
+  - a renewal case: a qualification issued after *d* does not hide the one that was valid on *d*, and the same person read at a later date counts the new qualification; the tie-break (same `valid_until`: later `issued_on`, then higher id) is tested;
+  - qualifications with `no_renewal_from` ≤ *d* are left out of both "expiring" and "retraining needed", and one with `no_renewal_from` later than *d* is still included;
   - A02 behaves as specified both off and on (with a test mapping);
   - the training window is (*d* − 12 months, *d*];
   - degrees are counted per level and status;
@@ -1222,17 +1223,17 @@ This phase covers R07, R14–R16 and R36, and supplies the inputs for R25. It fo
 **T2.3 — Personnel repository and service** (M) · Depends on: T2.1, T2.2, T1.4
 - Files: `storage/personnel_repo.py`, `services/personnel.py`, `tests/services/test_personnel_service.py`.
 - Work:
-  - Create, read, update and delete staff members, certificates, training records, courses and degrees through the T1.4 helpers.
+  - Create, read, update and delete staff members, PPE qualifications, training records, courses and degrees through the T1.4 helpers.
   - "Deactivate" and "delete" are separate actions. Deactivate sets `active_until` and keeps the history. Delete is for entry mistakes and removes the dependent rows too, each logged (T1.4).
-  - "Pseudonymise person" replaces the identifier with a random code, clears the label and each certificate `reference`, and replaces each degree `field` with a per-row random code (so the unique index `academic_degree_key` still holds), keeping certificates, training records and degrees. The `change_log` rows record only that those columns changed (§5.1). Pseudonymising is irreversible.
-  - Setting `no_renewal_from` on a certificate takes an optional `no_renewal_reason` code (`left_unit`, `role_change`, `other`) instead of a note.
+  - "Pseudonymise person" replaces the identifier with a random code, clears the label and each PPE qualification `reference`, and replaces each degree `field` with a per-row random code (so the unique index `academic_degree_key` still holds), keeping PPE qualifications, training records and degrees. The `change_log` rows record only that those columns changed (§5.1). Pseudonymising is irreversible.
+  - Setting `no_renewal_from` on a PPE qualification takes an optional `no_renewal_reason` code (`left_unit`, `role_change`, `other`) instead of a note.
   - Validation returns error codes, never text: for example `VALID_UNTIL_BEFORE_ISSUED`, `DUPLICATE_IDENTIFIER`, `COURSE_IN_USE`. A course needs a pt-BR label (D16).
   - Summaries and lists for an as-of date are built by loading rows and calling the T2.2 functions.
 - Accept:
   - every write produces its `change_log` row;
   - a deactivated person keeps their records and drops out of the counts after `active_until`;
   - deleting a person removes their dependent rows and writes one `delete` row for each of them;
-  - after "pseudonymise person" the old identifier and label appear neither in the tables nor in `change_log`, the certificates and history remain, and the counts are unchanged;
+  - after "pseudonymise person" the old identifier and label appear neither in the tables nor in `change_log`, the PPE qualifications and history remain, and the counts are unchanged;
   - a person with two degrees at the same level and year that differ only in `field` is pseudonymised without a uniqueness error;
   - on a fictitious fixture, the service summaries equal the domain results computed directly;
   - validation failures come back as codes.
@@ -1242,8 +1243,8 @@ This phase covers R07, R14–R16 and R36, and supplies the inputs for R25. It fo
 - Files: `ui/personnel/page.py`, `ui/personnel/models.py`, `ui/personnel/dialogs.py`, `ui/personnel/labels.py`, `i18n/personnel_pt_BR.ts`, `i18n/personnel_en_US.ts`, `i18n/personnel_es_ES.ts`, `i18n/__init__.py` (one line), `ui/shell/registry.py` (one line), `tests/ui/test_personnel_page.py`.
 - Work:
   - A staff table with filters: active, level, needs retraining.
-  - A detail view showing the person's certificates, training records and degrees.
-  - One dialog per record type, with date pickers. The certificate dialog pre-fills `valid_until` from A04 and offers "no renewal from" (a date) with the reason code. There are no free-text note fields. The remaining free-text fields (`label`, `reference`, degree `field`) show a hint: no names, health or contact data; the identifier field hints "a local code, not a service number".
+  - A detail view showing the person's PPE qualifications, training records and degrees.
+  - One dialog per record type, with date pickers. The PPE qualification dialog pre-fills `valid_until` from A04 and offers "no renewal from" (a date) with the reason code. There are no free-text note fields. The remaining free-text fields (`label`, `reference`, degree `field`) show a hint: no names, health or contact data; the identifier field hints "a local code, not a service number".
   - Without configured validity months for the level (A04) there is no proposed `valid_until`: the field shows "Not set" (it is never pre-filled with the issue date), and saving is refused with `REQUIRED` on `valid_until` until a date is entered (QA finding P2-02).
   - A "Pseudonymise person" action, with a confirmation that says it cannot be undone.
   - Summary counts per level for the as-of date.
@@ -1251,7 +1252,7 @@ This phase covers R07, R14–R16 and R36, and supplies the inputs for R25. It fo
   - A module settings section — the A02 mapping, the A04 validity months and the course list (A09) — registered through the T1.9 settings-section registry, which T6.1 renders under Settings → Personnel.
   - Labels for PPE levels, degree levels and statuses, and error codes.
 - Accept:
-  - Adding a staff member and a certificate through the dialogs makes the row appear, with dates formatted for the current language.
+  - Adding a staff member and a PPE qualification through the dialogs makes the row appear, with dates formatted for the current language.
   - A `valid_until` before `issued_on` shows the translated error.
   - The hints are shown on the identifier, label, reference and field inputs, and no dialog has a notes field.
   - "Pseudonymise person" asks for confirmation; cancelling changes nothing; confirming replaces the identifier in the table.
@@ -1579,9 +1580,9 @@ This phase covers R01, R05, R06, R25–R27 and R36. It starts once Phases 2–5 
 - Accept: fixtures with `FixedClock` show that:
   - every kind is produced, with its severity;
   - alerts are sorted by severity, then by due date;
-  - there is one certificate alert per person and level, and one maintenance alert per asset;
-  - the certificate alerts use the certificate rule of A03 (one definition, T2.2): a certificate issued after the as-of date does not hide the one valid on it;
-  - `no_renewal_from` on or before the as-of date suppresses certificate alerts (D24), and a later date does not;
+  - there is one PPE qualification alert per person and level, and one maintenance alert per asset;
+  - the PPE qualification alerts use the PPE qualification rule of A03 (one definition, T2.2): a qualification issued after the as-of date does not hide the one valid on it;
+  - `no_renewal_from` on or before the as-of date suppresses PPE qualification alerts (D24), and a later date does not;
   - `MAINT_SCHEDULE_UNKNOWN` is not raised for an interval of 0 with no recorded next-due date (A06);
   - disabled or absent targets produce no indicator alerts;
   - inactive staff and retired assets produce no alerts;
@@ -1628,7 +1629,7 @@ This phase covers R01, R05, R06, R25–R27 and R36. It starts once Phases 2–5 
   - A Qt-free `DashboardData` for an as-of date holds:
     - one tile per indicator and dimension, with its unit (§5.4), value, status and target (`INFRA_AVAILABLE` also shows the in-service total as context);
     - alert counts by severity;
-    - chart data: staff with a valid certificate per level; availability per asset type; participants and countries per edition; allocated versus executed per (source, currency) for the fiscal year, drawn as one chart per currency with a category per source, so currencies are never mixed (D15).
+    - chart data: staff with a valid PPE qualification per level; availability per asset type; participants and countries per edition; allocated versus executed per (source, currency) for the fiscal year, drawn as one chart per currency with a category per source, so currencies are never mixed (D15).
   - The page shows the tiles, the charts and the alert counts. It is the default page at start-up.
   - Status follows D23: a text label plus an icon plus a colour from the colour-blind-safe palette, never colour alone.
   - Every chart has a "show as table" toggle.
@@ -1854,7 +1855,7 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
   - Natural keys (each backed by a UNIQUE constraint or index in §5.2):
     - training course, asset type, evaluation metric and funding source: `code`;
     - staff: identifier;
-    - certificate: identifier, level, `issued_on`;
+    - PPE qualification: identifier, level, `issued_on`;
     - training record: staff identifier, course code, `completed_on`;
     - academic degree: staff identifier, level, field, year;
     - asset: tag;
@@ -1897,8 +1898,8 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
   - Secondary suppression: any total or sibling cell from which a suppressed value could be recomputed is suppressed too.
   - Charts of the anonymised variant are built only from the suppressed model; suppressed cells are not drawn.
   - Differencing between successive reports (the same population read at two dates) is not prevented; it is recorded as a residual risk (K03, Q10).
-  - The alert summary is split by source (`reports/model.py`). For each of the severities critical and warning it holds a total and three parts: personnel (certificate alerts; personnel-derived; the warning part declares the per-level `kf:PERSONNEL:expiring:<level>` cells as what it sums, the critical part the per-level `kf:PERSONNEL:expired:<level>` cells), infrastructure (maintenance alerts; never suppressed), and indicators (the readings with that status; it declares the personnel count readings that carry a status, so it is hidden whenever one of them is). The total declares its three parts, so a total with a hidden part is hidden too. The info count is maintenance only and is not personnel-derived. The personnel key figures gain an "expired" count per level (expired-certificate alerts at that level), and "retraining needed" (key figure and `PERS_RETRAINING_NEEDED` row) declares the expiring and expired cells of its level (A03), so a hidden expired count cannot be recovered as retraining minus expiring (QA findings P8-01, P8-03).
-  - Residual limit, documented in `reports/anonymise.py` ("Not covered"): relations that are not declared are not considered. In particular `active_staff - valid:<level>` is the number of active people without a valid certificate at that level (expired, no renewal, or none); where every active person holds the level it equals the hidden expired count. That relation is not declared and not prevented (Q10).
+  - The alert summary is split by source (`reports/model.py`). For each of the severities critical and warning it holds a total and three parts: personnel (PPE qualification alerts; personnel-derived; the warning part declares the per-level `kf:PERSONNEL:expiring:<level>` cells as what it sums, the critical part the per-level `kf:PERSONNEL:expired:<level>` cells), infrastructure (maintenance alerts; never suppressed), and indicators (the readings with that status; it declares the personnel count readings that carry a status, so it is hidden whenever one of them is). The total declares its three parts, so a total with a hidden part is hidden too. The info count is maintenance only and is not personnel-derived. The personnel key figures gain an "expired" count per level (expired-qualification alerts at that level), and "retraining needed" (key figure and `PERS_RETRAINING_NEEDED` row) declares the expiring and expired cells of its level (A03), so a hidden expired count cannot be recovered as retraining minus expiring (QA findings P8-01, P8-03).
+  - Residual limit, documented in `reports/anonymise.py` ("Not covered"): relations that are not declared are not considered. In particular `active_staff - valid:<level>` is the number of active people without a valid qualification at that level (expired, no renewal, or none); where every active person holds the level it equals the hidden expired count. That relation is not declared and not prevented (Q10).
   - The internal variant carries a handling notice set locally in Settings (empty by default, like D18). When `app_meta.is_demo` is 1, the report model carries the "DEMO — FICTITIOUS DATA" marker, which T8.6 draws.
 - Accept:
   - on a fixture, the internal variant contains the expected sections and figures;
@@ -2292,15 +2293,16 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Confirms: F05, §7.1 and the first-run notice (T7.5).
 - Until answered: only demo data is used; "sensitive" in this plan is a working label, not a classification.
 
-**Q1 — Indicators and targets.** Is the proposed indicator list (§5.4) right, including the design proposal `EX_DAYS_SINCE_LAST`? Which indicators make up the "padrão esperado de prontidão" (L82), and what warning and critical values apply to each — for example, a minimum number of staff with a valid level-A certificate?
+**Q1 — Indicators and targets.** Is the proposed indicator list (§5.4) right, including the design proposal `EX_DAYS_SINCE_LAST`? Which indicators make up the "padrão esperado de prontidão" (L82), and what warning and critical values apply to each — for example, a minimum number of staff with a valid level-A PPE qualification?
 - Answered by: the committee.
 - Confirms: P03 and the indicator list. Enables the `INDICATOR_WARNING` and `INDICATOR_CRITICAL` alerts (R27).
 - Until answered: no targets are set. Every indicator shows "No target" and raises no indicator alert.
 
-**Q2 — PPE certificates and retraining.** Does each level (A, B, C) have a fixed validity period, and how long is it? Does a certificate at one level also count for other levels, and if so for which? What exactly makes retraining ("reciclagem") necessary: expiry only, or also elapsed time or hours? How many days before expiry should alerts start?
+**Q2 — PPE qualifications and retraining.** Does each level (A, B, C) have a fixed validity period, and how long is it? Does a qualification at one level also count for other levels, and if so for which? What exactly makes retraining ("reciclagem") necessary: expiry only, or also elapsed time or hours? How many days before expiry should alerts start?
 - Answered by: the committee.
 - Confirms: A02, A03, A04 and P01 (90 days).
-- Until answered: levels are counted independently, valid-until dates are entered per certificate, retraining means expired or expiring, and the warning window is 90 days.
+- Until answered: levels are counted independently, valid-until dates are entered per qualification, retraining means expired or expiring, and the warning window is 90 days.
+- Also open: whether to record respirator fit tests (model, size, date; 12-month validity per OSHA 29 CFR 1910.134(f)(2) / the PPR of Portaria MTP 672/2021) and the medical clearance for respirator use; recording them would be new tasks.
 
 **Q3 — Training and degrees.** Which kinds of training ("capacitação") should be recorded — that is, what goes on the course list? Should degrees in progress be recorded alongside completed ones?
 - Answered by: the committee.
@@ -2337,10 +2339,10 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Confirms: P04. A composite score would be deferred item X4.
 - Until answered: no composite score is computed. The "reading" is the full set of indicator values in a snapshot. Snapshots are taken monthly and with every report.
 
-**Q10 — Reports.** What should the internal report (for the committee, DIRSA and the Air Force Command) contain, and the aggregated, anonymised report for the OPCW Technical Secretariat? In which languages? Below which count should personnel figures be suppressed in the anonymised report? Are PDF and CSV enough, or is XLSX needed? What disclosure rule does the recipient apply to successive anonymised reports, given that the difference between two reports can reveal a suppressed count? Is the handling notice of the internal report needed, and what does it say (set locally, never in the repository)?
+**Q10 — Reports.** What should the internal report (for the committee, DIRSA and the Air Force Command) contain, and the aggregated, anonymised report (thesis L69 names the OPCW Technical Secretariat as a possible recipient)? In which languages? Below which count should personnel figures be suppressed in the anonymised report? Are PDF and CSV enough, or is XLSX needed? What disclosure rule does the recipient apply to successive anonymised reports, given that the difference between two reports can reveal a suppressed count? Is the handling notice of the internal report needed, and what does it say (set locally, never in the repository)?
 - Answered by: the committee.
 - Confirms: A11 (threshold 5) and the report sections. XLSX would be deferred item X3.
-- Until answered: the two PDF variants of T8.5 and T8.6 are produced in the chosen UI language, personnel-derived counts below 5 (zeros included) are suppressed with secondary suppression, and differencing is a documented residual risk.
+- Until answered: the two PDF variants of T8.5 and T8.6 are produced in the chosen UI language, personnel-derived counts below 5 (zeros included) are suppressed with secondary suppression, and differencing is a documented residual risk. The anonymised report is for internal use; the app never sends anything, and any external release is decided by the chain of command.
 - Also recorded as residual (QA findings P8-01, P8-16): the anonymised variant prints the operator-entered codes as they are (funding-source, asset-type and edition codes), and the built-in source `DIRSA` by its code, as a proper name (the built-in source `COMAER` is printed by its translated name); and the undeclared relation `active_staff - valid:<level>` can reveal a hidden expired count (T8.5).
 
 **Q11 — Information security (L91).** Which institutional rules apply to this data? In particular: is encryption of the database file itself required, in addition to full-disk encryption of the workstation? Where may backups be stored? Is there a passphrase policy? Is Argon2id required instead of scrypt for the backup key? After how many days should the reminder for an old encrypted backup appear (P09)? Gates the entry of real data, together with Q19, Q4 and Q13.

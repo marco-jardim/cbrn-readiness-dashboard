@@ -98,10 +98,6 @@
         <translation>Staff</translation>
     </message>
     <message>
-        <source>PPE certificates</source>
-        <translation>PPE certificates</translation>
-    </message>
-    <message>
         <source>Training records</source>
         <translation>Training records</translation>
     </message>
@@ -313,6 +309,10 @@
     <message>
         <source>This placeholder is not known.</source>
         <translation>This placeholder is not known.</translation>
+    </message>
+    <message>
+        <source>PPE qualifications</source>
+        <translation>PPE qualifications</translation>
     </message>
     <message>
         <source>The chosen location is on a network drive.</source>

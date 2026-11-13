@@ -446,7 +446,7 @@ def test_the_dialog_stores_a_target_and_the_table_and_badge_follow(
     assert (stored.warning_value, stored.critical_value, stored.enabled) == (10.0, 5.0, True)
     assert _log_rows(app_context) > rows
     assert _cells(section, 0) == [
-        "Staff with a valid certificate",
+        "Staff with a valid PPE qualification",
         "Level: A",
         "Count",
         "10",
@@ -626,7 +626,7 @@ def test_a_target_can_be_switched_off_and_on_and_deleted(
     section.delete_action.trigger()
     (call,) = fake_prompts.calls_of("confirm")
     assert call.title == "Delete target"
-    assert call.text == "Delete the target of Staff with a valid certificate (Level: A)?"
+    assert call.text == "Delete the target of Staff with a valid PPE qualification (Level: A)?"
     assert len(_indicators(app_context).list_targets()) == 1
     fake_prompts.script("confirm", True)
     section.delete_action.trigger()
@@ -1175,5 +1175,5 @@ def test_settings_and_dashboard_name_every_indicator_alike(app_context: AppConte
     for code in INDICATOR_CODES:
         assert indicator_label(code) == dashboard_labels.indicator_name(code), code
     assert indicator_label("PERS_TRAINING_12M") == "Training records in the last 12 months"
-    assert indicator_label("PERS_CERT_VALID") == "Staff with a valid certificate"
+    assert indicator_label("PERS_CERT_VALID") == "Staff with a valid PPE qualification"
     assert indicator_label("INFRA_AVAILABLE") == "Available units"

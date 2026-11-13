@@ -98,10 +98,6 @@
         <translation type="unfinished">Personal</translation>
     </message>
     <message>
-        <source>PPE certificates</source>
-        <translation type="unfinished">Certificados de EPP</translation>
-    </message>
-    <message>
         <source>Training records</source>
         <translation type="unfinished">Registros de formación</translation>
     </message>
@@ -313,6 +309,10 @@
     <message>
         <source>This placeholder is not known.</source>
         <translation type="unfinished">Este valor provisional no se conoce.</translation>
+    </message>
+    <message>
+        <source>PPE qualifications</source>
+        <translation type="unfinished">Habilitaciones de EPP</translation>
     </message>
     <message>
         <source>The chosen location is on a network drive.</source>

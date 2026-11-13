@@ -48,7 +48,7 @@ CERT_STATUS_KEYS: Final[dict[str, MessageKey]] = {
     "EXPIRING": ("Personnel", "Expiring"),
     "EXPIRED": ("Personnel", "Expired"),
     "NO_RENEWAL": ("Personnel", "No renewal"),
-    "NONE": ("Personnel", "No certificate"),
+    "NONE": ("Personnel", "No qualification"),
 }
 
 #: ``DegreeLevel`` values.

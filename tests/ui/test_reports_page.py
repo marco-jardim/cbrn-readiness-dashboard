@@ -1084,7 +1084,7 @@ def test_a_csv_export_then_import_round_trips_through_the_ui(
     second_context.data_changed.connect(lambda: changed.append(1))
     for entity, label, count in (
         ("staff_member", "Staff", 2),
-        ("ppe_certification", "PPE certificates", 3),
+        ("ppe_certification", "PPE qualifications", 3),
     ):
         dialog = _import_dialog(second_context, anchor, flow, qtbot, entity)
         fake_prompts.script("open_file", folder / f"{entity}.csv")

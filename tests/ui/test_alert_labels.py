@@ -40,12 +40,12 @@ LANGUAGES = ("pt_BR", "en_US", "es_ES")
 PLURALS: dict[str, dict[AlertKind, tuple[str, str]]] = {
     "en_US": {
         AlertKind.CERT_EXPIRED: (
-            "The level A certificate of DEMO-P001 expired 1 day ago.",
-            "The level A certificate of DEMO-P001 expired 2 days ago.",
+            "The level A PPE qualification of DEMO-P001 expired 1 day ago.",
+            "The level A PPE qualification of DEMO-P001 expired 2 days ago.",
         ),
         AlertKind.CERT_EXPIRING: (
-            "The level B certificate of DEMO-P002 expires in 1 day.",
-            "The level B certificate of DEMO-P002 expires in 2 days.",
+            "The level B PPE qualification of DEMO-P002 expires in 1 day.",
+            "The level B PPE qualification of DEMO-P002 expires in 2 days.",
         ),
         AlertKind.MAINT_OVERDUE: (
             "Maintenance of asset DEMO-A001 is overdue by 1 day.",
@@ -58,12 +58,12 @@ PLURALS: dict[str, dict[AlertKind, tuple[str, str]]] = {
     },
     "pt_BR": {
         AlertKind.CERT_EXPIRED: (
-            "O certificado de nível A de DEMO-P001 venceu há 1 dia.",
-            "O certificado de nível A de DEMO-P001 venceu há 2 dias.",
+            "A habilitação de EPI de nível A de DEMO-P001 venceu há 1 dia.",
+            "A habilitação de EPI de nível A de DEMO-P001 venceu há 2 dias.",
         ),
         AlertKind.CERT_EXPIRING: (
-            "O certificado de nível B de DEMO-P002 vence em 1 dia.",
-            "O certificado de nível B de DEMO-P002 vence em 2 dias.",
+            "A habilitação de EPI de nível B de DEMO-P002 vence em 1 dia.",
+            "A habilitação de EPI de nível B de DEMO-P002 vence em 2 dias.",
         ),
         AlertKind.MAINT_OVERDUE: (
             "A manutenção do ativo DEMO-A001 está atrasada em 1 dia.",
@@ -76,12 +76,12 @@ PLURALS: dict[str, dict[AlertKind, tuple[str, str]]] = {
     },
     "es_ES": {
         AlertKind.CERT_EXPIRED: (
-            "El certificado de nivel A de DEMO-P001 caducó hace 1 día.",
-            "El certificado de nivel A de DEMO-P001 caducó hace 2 días.",
+            "La habilitación de EPP de nivel A de DEMO-P001 caducó hace 1 día.",
+            "La habilitación de EPP de nivel A de DEMO-P001 caducó hace 2 días.",
         ),
         AlertKind.CERT_EXPIRING: (
-            "El certificado de nivel B de DEMO-P002 caduca en 1 día.",
-            "El certificado de nivel B de DEMO-P002 caduca en 2 días.",
+            "La habilitación de EPP de nivel B de DEMO-P002 caduca en 1 día.",
+            "La habilitación de EPP de nivel B de DEMO-P002 caduca en 2 días.",
         ),
         AlertKind.MAINT_OVERDUE: (
             "El mantenimiento del activo DEMO-A001 está vencido desde hace 1 día.",
@@ -159,7 +159,7 @@ def test_plural_forms_are_correct_for_1_and_for_2_days(
 def test_an_indicator_without_values_shows_a_dash(app_context: AppContext) -> None:
     alert = replace(INDICATOR_WARNING, value=None, threshold=None)
     assert alert_message(alert, "en_US") == (
-        "Indicator Staff with a valid certificate (Level A) is at - (warning threshold: -)."
+        "Indicator Staff with a valid PPE qualification (Level A) is at - (warning threshold: -)."
     )
 
 

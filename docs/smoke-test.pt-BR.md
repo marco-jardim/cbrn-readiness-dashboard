@@ -99,12 +99,12 @@ dúvida, o texto em inglês do código-fonte é a referência (por exemplo, "Bac
    **do dia em que o banco de demonstração foi criado**; como o banco foi criado agora, são as de
    hoje. Confira:
    - Pessoal: 24 pessoas fictícias, com identificadores que começam com `DEMO`; `DEMO-P003` tem um
-     certificado de nível A vencido.
+     habilitação de EPI de nível A vencida.
    - Infraestrutura: 20 ativos; `DEMO-A001` com manutenção em atraso.
    - Exercícios: nove edições, `DEMO-EX-01` a `DEMO-EX-09`.
    - Orçamento: entradas com identificação `DEMO`.
-   - Alertas: alertas críticos, de aviso e informativos (por exemplo, certificado vencido de
-     `DEMO-P003`, certificado a vencer de `DEMO-P002`, manutenção em atraso de `DEMO-A001`).
+   - Alertas: alertas críticos, de aviso e informativos (por exemplo, habilitação de EPI vencida de
+     `DEMO-P003`, habilitação de EPI a vencer de `DEMO-P002`, manutenção em atraso de `DEMO-A001`).
    - Painel: indicadores em todos os estados (OK, Aviso, Crítico) e outros como "Sem meta". As metas
      existem apenas neste banco de demonstração e são ilustrativas. Exceção conhecida: se o banco
      foi criado antes de 13 de fevereiro, `BUD_EXEC_RATE` para BRL e DIRSA aparece como OK em vez
@@ -126,9 +126,9 @@ Inicie `cbrn-dashboard.exe` (sem `--demo`). Use apenas dados fictícios. Se a te
 anote a mensagem exata; ela deve explicar o problema e não alterar nada.
 
 1. **Pessoal.** Abra a página Pessoal e use "Adicionar pessoa". Informe o código `TESTE-001` (um código
-   local, sem nomes) e salve. Selecione a pessoa e use "Adicionar certificado": nível A, uma data de
+   local, sem nomes) e salve. Selecione a pessoa e use "Adicionar habilitação": nível A, uma data de
    emissão passada e uma validade futura.
-   - Resultado esperado: a pessoa aparece ativa na lista e o certificado aparece no detalhe, como
+   - Resultado esperado: a pessoa aparece ativa na lista e a habilitação aparece no detalhe, como
      válido.
 2. **Infraestrutura.** Na página Infraestrutura, use "Adicionar ativo": um leito com código
    `TESTE-L01`, em serviço desde uma data passada.

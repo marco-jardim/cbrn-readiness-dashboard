@@ -100,12 +100,12 @@
         <translation type="unfinished">O número é grande demais.</translation>
     </message>
     <message>
-        <source>Staff with a valid certificate</source>
-        <translation type="unfinished">Pessoal com certificado válido</translation>
+        <source>Staff with a valid PPE qualification</source>
+        <translation type="unfinished">Pessoal com habilitação de EPI válida</translation>
     </message>
     <message>
-        <source>Certificates expiring soon</source>
-        <translation type="unfinished">Certificados a vencer em breve</translation>
+        <source>PPE qualifications expiring soon</source>
+        <translation type="unfinished">Habilitações de EPI a vencer em breve</translation>
     </message>
     <message>
         <source>Staff needing retraining</source>
@@ -320,8 +320,8 @@
         <translation type="unfinished">Salvar</translation>
     </message>
     <message>
-        <source>Warn about certificates expiring within (days)</source>
-        <translation type="unfinished">Avisar sobre certificados que vencem em até (dias)</translation>
+        <source>Warn about PPE qualifications expiring within (days)</source>
+        <translation type="unfinished">Avisar sobre habilitações de EPI que vencem em até (dias)</translation>
     </message>
     <message>
         <source>Warn about maintenance due within (days)</source>

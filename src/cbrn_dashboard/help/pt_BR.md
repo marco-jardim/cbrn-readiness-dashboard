@@ -18,7 +18,7 @@ Todos os números das páginas são calculados para a data de referência mostra
 
 Escolha outra data no campo de data (ele tem um calendário) para ver a situação naquele dia, por exemplo para consultar o passado. O botão Hoje volta à data atual.
 
-Os indicadores, os alertas, a situação dos certificados e dos ativos e a execução orçamentária seguem a data de referência. Alterar a data de referência nunca altera os dados armazenados.
+Os indicadores, os alertas, a situação das habilitações de EPI e dos ativos e a execução orçamentária seguem a data de referência. Alterar a data de referência nunca altera os dados armazenados.
 
 ## Painel
 <!-- topic: dashboard -->
@@ -32,11 +32,11 @@ A página também mostra o número de alertas por gravidade e alguns gráficos. 
 ## Pessoal
 <!-- topic: personnel -->
 
-A página Pessoal lista o pessoal com filtros, mostra a situação de cada pessoa por nível de certificado de EPI na data de referência e conta as pessoas por nível. Selecione uma pessoa para ver os certificados, os registros de treinamento e os títulos acadêmicos.
+A página Pessoal lista o pessoal com filtros, mostra a situação de cada pessoa por nível de habilitação de EPI na data de referência e conta as pessoas por nível. A habilitação de EPI é a habilitação prática em EPI para vestir e retirar o conjunto de proteção de um nível, com data de validade. Selecione uma pessoa para ver as habilitações de EPI, os registros de treinamento e os títulos acadêmicos.
 
 As pessoas são identificadas por um código interno e um rótulo curto opcional. Não digite números de documentos de identidade nem outros dados pessoais: o programa recusa um identificador que se pareça com um número de documento de identidade.
 
-É possível adicionar, editar, desativar e excluir pessoas, e adicionar, editar e excluir certificados, registros de treinamento e títulos. "Definir sem renovação" marca que não se espera renovação de um certificado, e "Remover sem renovação" desfaz a marca. "Pseudonimizar pessoa" troca o identificador e o texto livre por códigos aleatórios e não pode ser desfeito. Excluir uma pessoa também exclui seus certificados, registros de treinamento e títulos. Excluir e pseudonimizar pedem confirmação antes.
+É possível adicionar, editar, desativar e excluir pessoas, e adicionar, editar e excluir habilitações de EPI, registros de treinamento e títulos. "Definir sem renovação" marca que não se espera renovação de uma habilitação, e "Remover sem renovação" desfaz a marca. "Pseudonimizar pessoa" troca o identificador e o texto livre por códigos aleatórios e não pode ser desfeito. Excluir uma pessoa também exclui suas habilitações de EPI, registros de treinamento e títulos. Excluir e pseudonimizar pedem confirmação antes.
 
 A lista de cursos de treinamento fica em Configurações.
 
@@ -76,7 +76,7 @@ Dê um clique duplo em um alerta, pressione Enter sobre ele ou use "Abrir regist
 
 Os alertas nunca são armazenados; eles são calculados a cada vez a partir dos dados e da data de referência. A página apenas lê dados, por isso também funciona no modo somente leitura.
 
-A barra de status mostra as contagens de alertas. Ao iniciar, um aviso pode resumir os alertas de aviso e críticos, com um botão que abre esta página. Quantos dias antes do vencimento de um certificado ou de uma manutenção um alerta é gerado é definido em Configurações.
+A barra de status mostra as contagens de alertas. Ao iniciar, um aviso pode resumir os alertas de aviso e críticos, com um botão que abre esta página. Quantos dias antes do vencimento de uma habilitação de EPI ou de uma manutenção um alerta é gerado é definido em Configurações.
 
 ## Relatórios
 <!-- topic: reports -->
@@ -98,7 +98,7 @@ Os arquivos que você exporta são arquivos comuns. Eles contêm dados internos 
 
 "Importar arquivo CSV..." na página Relatórios lê um arquivo CSV de um tipo de dado, por exemplo para registrar dados do passado. "Gravar modelos..." grava arquivos vazios, apenas com a linha de cabeçalho, em uma pasta que você escolhe; preencha-os ou edite uma exportação.
 
-O arquivo deve ser UTF-8, e o separador é ponto e vírgula ou vírgula. Importe um tipo de dado por vez e importe primeiro as listas a que os outros registros se referem: as listas (cursos, tipos de ativo, métricas e fontes de recursos), depois o pessoal, os certificados, registros de treinamento e títulos, os ativos, seus eventos de situação e de manutenção, as edições de exercícios com seus países e resultados, as entradas de orçamento e, por fim, as execuções orçamentárias.
+O arquivo deve ser UTF-8, e o separador é ponto e vírgula ou vírgula. Importe um tipo de dado por vez e importe primeiro as listas a que os outros registros se referem: as listas (cursos, tipos de ativo, métricas e fontes de recursos), depois o pessoal, as habilitações de EPI, registros de treinamento e títulos, os ativos, seus eventos de situação e de manutenção, as edições de exercícios com seus países e resultados, as entradas de orçamento e, por fim, as execuções orçamentárias.
 
 Um arquivo é importado por inteiro ou não é importado. Se alguma linha tiver problema, nada é gravado e os problemas são informados. A janela de importação permite verificar um arquivo antes. A importação apenas adiciona registros: um registro existente nunca é alterado nem mesclado. A importação fica desativada no modo somente leitura.
 

@@ -111,10 +111,10 @@ ALL_ERROR_CODES: tuple[str, ...] = tuple(dict.fromkeys((*_ERROR_LABELS, *CONFIG_
 _INDICATOR_LABELS: dict[str, Callable[[], str]] = {
     # The same wording as the dashboard (ui/dashboard/labels.py), which follows PLAN.md 5.4.
     "PERS_CERT_VALID": lambda: QCoreApplication.translate(
-        "Settings", "Staff with a valid certificate"
+        "Settings", "Staff with a valid PPE qualification"
     ),
     "PERS_CERT_EXPIRING": lambda: QCoreApplication.translate(
-        "Settings", "Certificates expiring soon"
+        "Settings", "PPE qualifications expiring soon"
     ),
     "PERS_RETRAINING_NEEDED": lambda: QCoreApplication.translate(
         "Settings", "Staff needing retraining"

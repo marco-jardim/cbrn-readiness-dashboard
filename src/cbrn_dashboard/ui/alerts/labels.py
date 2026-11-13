@@ -181,14 +181,14 @@ def indicator_text(alert: Alert, lang: str) -> str:
 
 def _cert_expired(alert: Alert, lang: str) -> str:
     text = QCoreApplication.translate(
-        "Alerts", "The level %1 certificate of %2 expired %n day(s) ago.", None, _days(alert)
+        "Alerts", "The level %1 PPE qualification of %2 expired %n day(s) ago.", None, _days(alert)
     )
     return _fill(text, _level(alert), alert.subject_ref)
 
 
 def _cert_expiring(alert: Alert, lang: str) -> str:
     text = QCoreApplication.translate(
-        "Alerts", "The level %1 certificate of %2 expires in %n day(s).", None, _days(alert)
+        "Alerts", "The level %1 PPE qualification of %2 expires in %n day(s).", None, _days(alert)
     )
     return _fill(text, _level(alert), alert.subject_ref)
 

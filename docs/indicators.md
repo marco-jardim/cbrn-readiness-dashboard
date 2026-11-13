@@ -69,13 +69,15 @@ target.
 - Appendix line: L74
 - Proposal: none
 - Default target: none (P03)
-- Definition: the number of active staff whose counting certificate at the PPE level is valid on
+- Definition: the number of active staff whose counting PPE qualification at the level is valid on
   the as-of date (`valid_until` on or after the date). The dimension `level` is `A`, `B` or `C`.
   A person counts once per level.
 
-The *counting certificate* (assumption A03) is, for a person, a level and a date, the certificate
-with the latest `valid_until` among those that count for the level and were issued on or before the
-date (ties: later `issued_on`, then higher id). A certificate issued after the date never hides the
+The *counting qualification* (assumption A03) is, for a person, a level and a date, the PPE
+qualification with the latest `valid_until` among those that count for the level and were issued on
+or before the date (ties: later `issued_on`, then higher id). A PPE qualification is a practical
+qualification in donning and doffing the protective ensemble of a level, with a valid-until date;
+the levels classify ensembles, not people. A qualification issued after the date never hides the
 one that was valid on it. Levels are counted independently unless the hierarchy switch (A02) is on.
 *Active* means the person's single active interval contains the date, both ends inclusive.
 
@@ -89,7 +91,7 @@ one that was valid on it. Levels are counted independently unless the hierarchy 
 - Appendix line: L74, L82
 - Proposal: none
 - Default target: none (P03)
-- Definition: the number of active staff whose counting certificate at the level is valid on the
+- Definition: the number of active staff whose counting qualification at the level is valid on the
   date, expires within the warning window (P01, 90 days by default, inclusive) and is not marked
   "no renewal" on the date. Dimension `level`: `A`, `B`, `C`.
 
@@ -103,9 +105,9 @@ one that was valid on it. Levels are counted independently unless the hierarchy 
 - Appendix line: L74, L95
 - Proposal: none
 - Default target: none (P03)
-- Definition: the number of active staff whose counting certificate at the level has expired or
+- Definition: the number of active staff whose counting qualification at the level has expired or
   expires within the warning window (P01), and is not marked "no renewal" on the date. A person
-  with no certificate at the level is not counted: there is nothing to renew. Dimension `level`:
+  with no qualification at the level is not counted: there is nothing to renew. Dimension `level`:
   `A`, `B`, `C`.
 
 ### `PERS_DEGREE`
@@ -246,8 +248,8 @@ The alert kinds are codes; the interface builds the text.
 
 | Kind | Severity | Trigger |
 |---|---|---|
-| `CERT_EXPIRED` | `CRITICAL` | an active person's counting certificate at a level has expired and is not marked "no renewal" |
-| `CERT_EXPIRING` | `WARNING` | that certificate is valid and expires within the warning window (P01) |
+| `CERT_EXPIRED` | `CRITICAL` | an active person's counting qualification at a level has expired and is not marked "no renewal" |
+| `CERT_EXPIRING` | `WARNING` | that qualification is valid and expires within the warning window (P01) |
 | `MAINT_OVERDUE` | `CRITICAL` | an in-service asset's maintenance due date is before the date |
 | `MAINT_DUE_SOON` | `WARNING` | its due date falls within the warning window (P02) |
 | `MAINT_SCHEDULE_UNKNOWN` | `INFO` | an in-service asset has neither an interval nor a recorded next-due date (an interval of 0 means "no scheduled maintenance" and raises nothing) |
@@ -297,7 +299,7 @@ column "Code flag" says `set` while the flag in the code is set.
 The configuration also holds `operator_label` (D05), which is not a placeholder.
 
 The assumptions without a setting carry no flag: A01 (available means in service and working, not
-free), A03 (the counting certificate), A12 (one operator, or people taking turns on one machine),
+free), A03 (the counting qualification), A12 (one operator, or people taking turns on one machine),
 A13 (the exercise kinds CBRAMED, EXBRAMED and other) and A14 (a person or an asset has one active
 interval; someone who returns is a new record).
 
@@ -309,7 +311,7 @@ each one that a placeholder waits for is:
 | Question | Subject |
 |---|---|
 | Q1 | indicators and targets |
-| Q2 | PPE certificates and retraining |
+| Q2 | PPE qualifications and retraining |
 | Q3 | training and degrees |
 | Q5 | beds and bays |
 | Q6 | equipment and maintenance |

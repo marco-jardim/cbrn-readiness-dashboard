@@ -18,7 +18,7 @@ Todas las cifras de las páginas se calculan para la fecha de referencia que mue
 
 Elija otra fecha en el campo de fecha (tiene un calendario) para ver la situación de ese día, por ejemplo para consultar el pasado. El botón Hoy vuelve a la fecha actual.
 
-Los indicadores, las alertas, el estado de los certificados y de los activos y la ejecución presupuestaria siguen la fecha de referencia. Cambiar la fecha de referencia nunca modifica los datos almacenados.
+Los indicadores, las alertas, el estado de las habilitaciones de EPP y de los activos y la ejecución presupuestaria siguen la fecha de referencia. Cambiar la fecha de referencia nunca modifica los datos almacenados.
 
 ## Panel
 <!-- topic: dashboard -->
@@ -32,11 +32,11 @@ La página también muestra el número de alertas por gravedad y algunos gráfic
 ## Personal
 <!-- topic: personnel -->
 
-La página Personal enumera al personal con filtros, muestra el estado de cada persona por nivel de certificado de EPI en la fecha de referencia y cuenta las personas por nivel. Seleccione una persona para ver los certificados, los registros de formación y los títulos académicos.
+La página Personal enumera al personal con filtros, muestra el estado de cada persona por nivel de habilitación de EPP en la fecha de referencia y cuenta las personas por nivel. La habilitación de EPP es la habilitación práctica en EPP para ponerse y quitarse el equipo de protección de un nivel, con fecha de validez. Seleccione una persona para ver las habilitaciones de EPP, los registros de formación y los títulos académicos.
 
 Las personas se identifican con un código interno y una etiqueta corta opcional. No escriba números de documentos de identidad ni otros datos personales: el programa rechaza un identificador que parezca un número de documento de identidad.
 
-Se pueden añadir, editar, desactivar y eliminar personas, y añadir, editar y eliminar certificados, registros de formación y títulos. "Definir sin renovación" marca que no se espera la renovación de un certificado, y "Quitar sin renovación" deshace la marca. "Seudonimizar persona" sustituye el identificador y el texto libre por códigos aleatorios y no se puede deshacer. Eliminar a una persona también elimina sus certificados, registros de formación y títulos. Eliminar y seudonimizar piden confirmación antes.
+Se pueden añadir, editar, desactivar y eliminar personas, y añadir, editar y eliminar habilitaciones de EPP, registros de formación y títulos. "Definir sin renovación" marca que no se espera la renovación de una habilitación, y "Quitar sin renovación" deshace la marca. "Seudonimizar persona" sustituye el identificador y el texto libre por códigos aleatorios y no se puede deshacer. Eliminar a una persona también elimina sus habilitaciones de EPP, registros de formación y títulos. Eliminar y seudonimizar piden confirmación antes.
 
 La lista de cursos de formación se mantiene en Ajustes.
 
@@ -76,7 +76,7 @@ Haga doble clic en una alerta, pulse Intro sobre ella o use "Abrir registro" par
 
 Las alertas nunca se almacenan; se calculan cada vez a partir de los datos y de la fecha de referencia. La página solo lee datos, por lo que también funciona en el modo de solo lectura.
 
-La barra de estado muestra los recuentos de alertas. Al iniciar, un aviso puede resumir las alertas de advertencia y críticas, con un botón que abre esta página. Cuántos días antes del vencimiento de un certificado o de un mantenimiento se genera una alerta se define en Ajustes.
+La barra de estado muestra los recuentos de alertas. Al iniciar, un aviso puede resumir las alertas de advertencia y críticas, con un botón que abre esta página. Cuántos días antes del vencimiento de una habilitación de EPP o de un mantenimiento se genera una alerta se define en Ajustes.
 
 ## Informes
 <!-- topic: reports -->
@@ -98,7 +98,7 @@ Los archivos que usted exporta son archivos normales. Contienen datos internos y
 
 "Importar archivo CSV..." en la página Informes lee un archivo CSV de un tipo de datos, por ejemplo para introducir registros del pasado. "Escribir plantillas..." escribe archivos vacíos, solo con la fila de encabezado, en una carpeta que usted elige; rellénelos o edite una exportación.
 
-El archivo debe ser UTF-8 y el separador es un punto y coma o una coma. Importe un tipo de datos cada vez e importe primero las listas a las que se refieren los demás registros: las listas (cursos, tipos de activo, métricas y fuentes de financiación), después el personal, los certificados, registros de formación y títulos, los activos, sus eventos de estado y de mantenimiento, las ediciones de ejercicios con sus países y resultados, las entradas de presupuesto y, por último, las ejecuciones presupuestarias.
+El archivo debe ser UTF-8 y el separador es un punto y coma o una coma. Importe un tipo de datos cada vez e importe primero las listas a las que se refieren los demás registros: las listas (cursos, tipos de activo, métricas y fuentes de financiación), después el personal, las habilitaciones de EPP, registros de formación y títulos, los activos, sus eventos de estado y de mantenimiento, las ediciones de ejercicios con sus países y resultados, las entradas de presupuesto y, por último, las ejecuciones presupuestarias.
 
 Un archivo se importa por completo o no se importa. Si alguna fila tiene un problema, no se escribe nada y se informa de los problemas. La ventana de importación permite comprobar un archivo antes. La importación solo añade registros: un registro existente nunca se modifica ni se fusiona. La importación queda desactivada en el modo de solo lectura.
 

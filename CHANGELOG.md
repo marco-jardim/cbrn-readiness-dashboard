@@ -25,8 +25,8 @@ must be given a date when that happens.
 The first preliminary version, the MVP of the plan (phases 0 to 7, readiness snapshots, the licence
 bundle, the release pipeline, the first-run notes and this release task):
 
-- The five modules of the requirements: personnel (people with an internal code, certificates per
-  PPE level, training courses, degrees), infrastructure (beds, bays, negative-pressure and
+- The five modules of the requirements: personnel (people with an internal code, PPE qualifications
+  per level, training courses, degrees), infrastructure (beds, bays, negative-pressure and
   filtration equipment, decontamination tents and user-defined types, with status history and
   maintenance), exercises (editions, countries, results per user-defined metric), budget (allocated
   amount and dated execution per funding source and currency) and the change log. Records can be
@@ -34,7 +34,7 @@ bundle, the release pipeline, the first-run notes and this release task):
 - The indicators of `docs/indicators.md`, evaluated for any as-of date from the records as known
   today and with the current configuration. Indicator targets are entered in Settings; none exist
   by default, so every indicator reads "No target" until the committee enters them.
-- The alerts (certificate expiry, maintenance, indicators outside their targets), the dashboard
+- The alerts (PPE qualification expiry, maintenance, indicators outside their targets), the dashboard
   with tiles, charts and table views, and the start-up summary.
 - Readiness snapshots (manual, monthly and retroactive), which are the only record of what was
   known and configured at the time. They are withdrawn, never deleted.
@@ -65,7 +65,7 @@ value on that installation; that per-installation state does not change the flag
 Generic defaults (the flag may be cleared in code only when the project owner judges the value not
 sensitive):
 
-- `P01` - warning window before a certificate expires
+- `P01` - warning window before a PPE qualification expires
 - `P02` - warning window before maintenance is due
 - `P04` - automatic snapshots
 - `P05` - minimum backup passphrase length
@@ -74,7 +74,7 @@ sensitive):
 - `P08` - pro-rating of the budget execution target
 - `P09` - backup reminder period
 - `A02` - PPE levels counted independently
-- `A04` - certificate validity period per level
+- `A04` - PPE qualification validity period per level
 - `A05` - degraded assets count as unavailable
 - `A06` - maintenance intervals
 - `A07` - evaluation metrics
@@ -123,7 +123,7 @@ records no answer to any of them.
 - Q15: open
 - Q16: open
 - Q17: open
-- Q18: open
+- Q18: answered and applied locally
 - Q19: open
 
 Q19 (formal classification), Q4, Q11 and Q13 gate the entry of real data. Until they are answered,

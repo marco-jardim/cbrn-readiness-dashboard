@@ -249,7 +249,7 @@ _ENTITY_LABELS: dict[str, Callable[[], str]] = {
     "evaluation_metric": lambda: QCoreApplication.translate("ReportsUi", "Evaluation metrics"),
     "funding_source": lambda: QCoreApplication.translate("ReportsUi", "Funding sources"),
     "staff_member": lambda: QCoreApplication.translate("ReportsUi", "Staff"),
-    "ppe_certification": lambda: QCoreApplication.translate("ReportsUi", "PPE certificates"),
+    "ppe_certification": lambda: QCoreApplication.translate("ReportsUi", "PPE qualifications"),
     "training_record": lambda: QCoreApplication.translate("ReportsUi", "Training records"),
     "academic_degree": lambda: QCoreApplication.translate("ReportsUi", "Academic degrees"),
     "asset": lambda: QCoreApplication.translate("ReportsUi", "Assets"),

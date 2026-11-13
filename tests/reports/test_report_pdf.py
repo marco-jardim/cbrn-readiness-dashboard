@@ -311,15 +311,15 @@ def test_suppressed_cells_show_the_marker_and_never_a_number(
     layout = _layout(anonymised, "en_US", qm_dir)
 
     assert layout.suppression_marker == "< 5"
-    assert _row(layout, "Valid certificates, level B").endswith("| < 5")
-    assert _row(layout, "Valid certificates, level C").endswith("| < 5")  # a zero too
+    assert _row(layout, "Valid qualifications, level B").endswith("| < 5")
+    assert _row(layout, "Valid qualifications, level C").endswith("| < 5")  # a zero too
     assert _row(layout, "Completed degrees, Doctorate").endswith("| < 5")
     assert _row(layout, "Completed degrees, total").endswith("| < 5")  # secondary suppression
     assert _row(layout, "Critical").endswith("| < 5")  # the alert count
-    suppressed_indicator = _row(layout, "Valid certificates | Level: B")
+    suppressed_indicator = _row(layout, "Valid qualifications | Level: B")
     assert "< 5" in suppressed_indicator
     assert suppressed_indicator.endswith("No data")  # status and targets are gone with the value
-    assert _row(layout, "Valid certificates, level A").endswith("| 2,000")
+    assert _row(layout, "Valid qualifications, level A").endswith("| 2,000")
     assert _row(layout, "Information").endswith("| 50")
     assert _row(layout, "Assets with overdue maintenance |").endswith("| 2")  # not personnel
 
@@ -342,8 +342,8 @@ def test_the_threshold_is_read_from_the_document(anonymised: ReportDocument, qm_
 def test_internal_variant_shows_the_small_numbers(internal: ReportDocument, qm_dir: Path) -> None:
     layout = _layout(internal, "en_US", qm_dir)
 
-    assert _row(layout, "Valid certificates, level B").endswith("| 3")
-    assert _row(layout, "Valid certificates, level C").endswith("| 0")
+    assert _row(layout, "Valid qualifications, level B").endswith("| 3")
+    assert _row(layout, "Valid qualifications, level C").endswith("| 0")
     assert "< 5" not in layout.text
 
 

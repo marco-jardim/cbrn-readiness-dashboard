@@ -100,12 +100,12 @@
         <translation>The number is too large.</translation>
     </message>
     <message>
-        <source>Staff with a valid certificate</source>
-        <translation>Staff with a valid certificate</translation>
+        <source>Staff with a valid PPE qualification</source>
+        <translation>Staff with a valid PPE qualification</translation>
     </message>
     <message>
-        <source>Certificates expiring soon</source>
-        <translation>Certificates expiring soon</translation>
+        <source>PPE qualifications expiring soon</source>
+        <translation>PPE qualifications expiring soon</translation>
     </message>
     <message>
         <source>Staff needing retraining</source>
@@ -320,8 +320,8 @@
         <translation>Save</translation>
     </message>
     <message>
-        <source>Warn about certificates expiring within (days)</source>
-        <translation>Warn about certificates expiring within (days)</translation>
+        <source>Warn about PPE qualifications expiring within (days)</source>
+        <translation>Warn about PPE qualifications expiring within (days)</translation>
     </message>
     <message>
         <source>Warn about maintenance due within (days)</source>

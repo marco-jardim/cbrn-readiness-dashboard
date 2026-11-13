@@ -162,15 +162,15 @@ class PersonnelPage(QWidget):
             self.pseudonymise_staff,
         )
         self.add_cert_action = self._action(
-            lambda: QCoreApplication.translate("Personnel", "Add certificate"),
+            lambda: QCoreApplication.translate("Personnel", "Add qualification"),
             self.add_certificate,
         )
         self.edit_cert_action = self._action(
-            lambda: QCoreApplication.translate("Personnel", "Edit certificate"),
+            lambda: QCoreApplication.translate("Personnel", "Edit qualification"),
             self.edit_certificate,
         )
         self.delete_cert_action = self._action(
-            lambda: QCoreApplication.translate("Personnel", "Delete certificate"),
+            lambda: QCoreApplication.translate("Personnel", "Delete qualification"),
             self.delete_certificate,
         )
         self.set_no_renewal_action = self._action(
@@ -291,18 +291,20 @@ class PersonnelPage(QWidget):
         self.level_caption.setText(QCoreApplication.translate("Personnel", "Level"))
         self.level_combo.setItemText(0, QCoreApplication.translate("Personnel", "All levels"))
         self.summary_caption.setText(
-            QCoreApplication.translate("Personnel", "Certificates per level on the as-of date")
+            QCoreApplication.translate(
+                "Personnel", "PPE qualifications per level on the as-of date"
+            )
         )
         self.detail_caption.setText(
             QCoreApplication.translate("Personnel", "Details of the selected person")
         )
-        self.tabs.setTabText(0, QCoreApplication.translate("Personnel", "Certificates"))
+        self.tabs.setTabText(0, QCoreApplication.translate("Personnel", "PPE qualifications"))
         self.tabs.setTabText(1, QCoreApplication.translate("Personnel", "Training"))
         self.tabs.setTabText(2, QCoreApplication.translate("Personnel", "Degrees"))
         # The tables without a caption of their own are named like their tab.
         self.staff_view.setAccessibleName(QCoreApplication.translate("Personnel", "Staff"))
         self.certificates_view.setAccessibleName(
-            QCoreApplication.translate("Personnel", "Certificates")
+            QCoreApplication.translate("Personnel", "PPE qualifications")
         )
         self.training_view.setAccessibleName(QCoreApplication.translate("Personnel", "Training"))
         self.degrees_view.setAccessibleName(QCoreApplication.translate("Personnel", "Degrees"))
@@ -459,7 +461,8 @@ class PersonnelPage(QWidget):
         question = fill_placeholders(
             QCoreApplication.translate(
                 "Personnel",
-                "Delete person %1 together with the certificates, training records and degrees?",
+                "Delete person %1 together with the PPE qualifications, training records and "
+                "degrees?",
             ),
             person.identifier,
         )
@@ -516,9 +519,9 @@ class PersonnelPage(QWidget):
         service = self.context.services.personnel
         if certificate is None or service is None:
             return
-        title = QCoreApplication.translate("Personnel", "Delete certificate")
+        title = QCoreApplication.translate("Personnel", "Delete qualification")
         template = QCoreApplication.translate(
-            "Personnel", "Delete the level %1 certificate issued on %2?"
+            "Personnel", "Delete the level %1 qualification issued on %2?"
         )
         question = fill_placeholders(
             template,
@@ -748,19 +751,19 @@ class PersonnelSettingsSection(QWidget):
 
     def retranslate(self) -> None:
         self.mapping_box.setTitle(
-            QCoreApplication.translate("Personnel", "Certificates that count for other levels")
+            QCoreApplication.translate("Personnel", "Qualifications that count for other levels")
         )
         self.hierarchy_check.setText(
-            QCoreApplication.translate("Personnel", "A certificate also counts for other levels")
+            QCoreApplication.translate("Personnel", "A qualification also counts for other levels")
         )
         for level, caption in self.mapping_labels.items():
             caption.setText(
                 QCoreApplication.translate(
-                    "Personnel", "A level %1 certificate counts for:"
+                    "Personnel", "A level %1 qualification counts for:"
                 ).replace("%1", ppe_level_label(level))
             )
         self.validity_box.setTitle(
-            QCoreApplication.translate("Personnel", "Validity of a certificate in months")
+            QCoreApplication.translate("Personnel", "Validity of a qualification in months")
         )
         for level, caption in self.months_labels.items():
             caption.setText(

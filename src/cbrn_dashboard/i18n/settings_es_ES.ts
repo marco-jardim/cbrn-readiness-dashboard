@@ -100,12 +100,12 @@
         <translation type="unfinished">El número es demasiado grande.</translation>
     </message>
     <message>
-        <source>Staff with a valid certificate</source>
-        <translation type="unfinished">Personal con certificado válido</translation>
+        <source>Staff with a valid PPE qualification</source>
+        <translation type="unfinished">Personal con habilitación de EPP válida</translation>
     </message>
     <message>
-        <source>Certificates expiring soon</source>
-        <translation type="unfinished">Certificados próximos a vencer</translation>
+        <source>PPE qualifications expiring soon</source>
+        <translation type="unfinished">Habilitaciones de EPP próximas a caducar</translation>
     </message>
     <message>
         <source>Staff needing retraining</source>
@@ -320,8 +320,8 @@
         <translation type="unfinished">Guardar</translation>
     </message>
     <message>
-        <source>Warn about certificates expiring within (days)</source>
-        <translation type="unfinished">Avisar de los certificados que vencen en un máximo de (días)</translation>
+        <source>Warn about PPE qualifications expiring within (days)</source>
+        <translation type="unfinished">Avisar de las habilitaciones de EPP que caducan en un plazo de (días)</translation>
     </message>
     <message>
         <source>Warn about maintenance due within (days)</source>

@@ -97,30 +97,32 @@ ALERTS: list[Alert] = [
 MESSAGES: dict[str, list[str]] = {
     "en_US": [
         "Maintenance of asset DEMO-A001 is overdue by 360 days.",
-        "The level A certificate of DEMO-P001 expired 54 days ago.",
+        "The level A PPE qualification of DEMO-P001 expired 54 days ago.",
         "Indicator Units with overdue maintenance (Type Bed) is at 3 (critical threshold: 0).",
         "Maintenance of asset DEMO-A002 is due in 20 days.",
-        "The level B certificate of DEMO-P002 expires in 27 days.",
-        "Indicator Staff with a valid certificate (Level A) is at 0.75 (warning threshold: 0.8).",
+        "The level B PPE qualification of DEMO-P002 expires in 27 days.",
+        "Indicator Staff with a valid PPE qualification (Level A) is at 0.75 "
+        "(warning threshold: 0.8).",
         "The maintenance schedule of asset DEMO-A003 is unknown.",
     ],
     "pt_BR": [
         "A manutenção do ativo DEMO-A001 está atrasada em 360 dias.",
-        "O certificado de nível A de DEMO-P001 venceu há 54 dias.",
+        "A habilitação de EPI de nível A de DEMO-P001 venceu há 54 dias.",
         "O indicador Unidades com manutenção atrasada (Tipo Leito) está em 3 (limite crítico: 0).",
         "A manutenção do ativo DEMO-A002 vence em 20 dias.",
-        "O certificado de nível B de DEMO-P002 vence em 27 dias.",
-        "O indicador Pessoal com certificado válido (Nível A) está em 0,75 (limite de aviso: 0,8).",
+        "A habilitação de EPI de nível B de DEMO-P002 vence em 27 dias.",
+        "O indicador Pessoal com habilitação de EPI válida (Nível A) está em 0,75 "
+        "(limite de aviso: 0,8).",
         "O prazo de manutenção do ativo DEMO-A003 é desconhecido.",
     ],
     "es_ES": [
         "El mantenimiento del activo DEMO-A001 está vencido desde hace 360 días.",
-        "El certificado de nivel A de DEMO-P001 caducó hace 54 días.",
+        "La habilitación de EPP de nivel A de DEMO-P001 caducó hace 54 días.",
         "El indicador Unidades con mantenimiento vencido (Tipo Cama) está en 3 "
         "(umbral crítico: 0).",
         "El mantenimiento del activo DEMO-A002 vence en 20 días.",
-        "El certificado de nivel B de DEMO-P002 caduca en 27 días.",
-        "El indicador Personal con certificado válido (Nivel A) está en 0,75 "
+        "La habilitación de EPP de nivel B de DEMO-P002 caduca en 27 días.",
+        "El indicador Personal con habilitación de EPP válida (Nivel A) está en 0,75 "
         "(umbral de advertencia: 0,8).",
         "El plazo de mantenimiento del activo DEMO-A003 es desconocido.",
     ],

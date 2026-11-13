@@ -138,7 +138,7 @@ People, identified by a local code, never by a national ID or a service number.
 
 ### `ppe_certification`
 
-PPE certificates of a person.
+PPE qualifications of a person.
 
 | Column | Kind | Key | Required | Meaning |
 |---|---|---|---|---|
@@ -374,7 +374,7 @@ Two entities need a note:
   database they are refused with `READ_ONLY`.
 * Each imported row is recorded in the change log with the action `import`, with the operator and
   the time of the import. The log row names the table and the row, never the contents: staff
-  identifiers, labels, certificate references and degree fields do not reach the log.
+  identifiers, labels, PPE qualification references and degree fields do not reach the log.
 
 ### Error codes
 

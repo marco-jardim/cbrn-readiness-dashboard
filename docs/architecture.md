@@ -23,7 +23,7 @@ code. The licence is GPL-3.0-or-later. The only runtime dependencies are PySide6
 ```text
 ui/        PySide6 widgets, table models, dialogs, label maps (Qt)
   | calls
-services/  use cases: add a certificate, evaluate indicators, back up ...   (no Qt)
+services/  use cases: add a PPE qualification, evaluate indicators, back up ...   (no Qt)
   | uses                              | uses
 domain/    pure rules (no Qt, no I/O)    storage/   sqlite3, migrations, backups, CSV   (no Qt)
 reports/   model.py and anonymise.py (no Qt)  ->  pdf.py (Qt rendering only)

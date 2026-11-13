@@ -33,17 +33,17 @@
         <translation type="unfinished">Orçamento</translation>
     </message>
     <message numerus="yes">
-        <source>The level %1 certificate of %2 expired %n day(s) ago.</source>
+        <source>The level %1 PPE qualification of %2 expired %n day(s) ago.</source>
         <translation type="unfinished">
-            <numerusform>O certificado de nível %1 de %2 venceu há %n dia.</numerusform>
-            <numerusform>O certificado de nível %1 de %2 venceu há %n dias.</numerusform>
+            <numerusform>A habilitação de EPI de nível %1 de %2 venceu há %n dia.</numerusform>
+            <numerusform>A habilitação de EPI de nível %1 de %2 venceu há %n dias.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
-        <source>The level %1 certificate of %2 expires in %n day(s).</source>
+        <source>The level %1 PPE qualification of %2 expires in %n day(s).</source>
         <translation type="unfinished">
-            <numerusform>O certificado de nível %1 de %2 vence em %n dia.</numerusform>
-            <numerusform>O certificado de nível %1 de %2 vence em %n dias.</numerusform>
+            <numerusform>A habilitação de EPI de nível %1 de %2 vence em %n dia.</numerusform>
+            <numerusform>A habilitação de EPI de nível %1 de %2 vence em %n dias.</numerusform>
         </translation>
     </message>
     <message numerus="yes">
