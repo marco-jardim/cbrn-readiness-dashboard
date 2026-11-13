@@ -14,7 +14,9 @@ and no timestamps are written.
 """
 
 import contextlib
+import gc
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -75,6 +77,12 @@ def _require(condition: bool, what: str) -> None:
         raise SelfTestError(what)
 
 
+def _version_prefix(version: str) -> str | None:
+    """The leading ``major.minor.patch`` of a version string, else ``None``."""
+    match = re.match(r"\d+\.\d+\.\d+", version)
+    return match.group(0) if match else None
+
+
 # --------------------------------------------------------------------------- the checks
 
 
@@ -86,9 +94,15 @@ def _check_python(context: SelfTestContext) -> None:
 @register("qt")
 def _check_qt(context: SelfTestContext) -> None:
     import PySide6
+    from PySide6.QtCore import qVersion
+    from PySide6.QtWidgets import QApplication
 
-    _require(bool(PySide6.__version__), "PySide6 has no version")
-    _require(ensure_application() is not None, "no QApplication")
+    binding = _version_prefix(PySide6.__version__)
+    _require(binding is not None, "PySide6 has no usable version")
+    ensure_application()
+    _require(isinstance(QApplication.instance(), QApplication), "no QApplication")
+    # A mismatched or half-collected Qt runtime in a frozen bundle fails here.
+    _require(_version_prefix(qVersion()) == binding, "the Qt runtime and PySide6 versions differ")
 
 
 @register("paths")
@@ -171,6 +185,23 @@ def _run_checks(context: SelfTestContext) -> list[dict[str, object]]:
     return results
 
 
+def _remove_workdir(path: Path) -> str | None:
+    """Remove the throwaway folder, retrying once after ``gc.collect()``.
+
+    Returns ``None`` when the folder is gone, else the exception type name (never the message).
+    """
+    error: str | None = None
+    for _attempt in range(2):
+        try:
+            shutil.rmtree(path)
+        except OSError as exc:
+            error = type(exc).__name__
+            gc.collect()  # release handles left open by a check, then retry once
+        else:
+            return None
+    return error if path.exists() else None
+
+
 def run(location: DataLocation, *, qm_dir: Path | None = None) -> int:
     """Run every registered check; write ``selftest.json``; return 0 if all passed, else 1.
 
@@ -191,15 +222,18 @@ def run(location: DataLocation, *, qm_dir: Path | None = None) -> int:
         created_workdir = Path(tempfile.mkdtemp(prefix=WORK_DIR_PREFIX, dir=tmp_root))
         workdir = created_workdir
 
+    cleanup_error: str | None = None
     try:
         results = _run_checks(SelfTestContext(location, workdir, qm_dir))
     finally:
         if created_workdir is not None:
-            shutil.rmtree(created_workdir, ignore_errors=True)
+            cleanup_error = _remove_workdir(created_workdir)
         if created_tmp_root:
             with contextlib.suppress(OSError):
                 tmp_root.rmdir()  # only succeeds when empty
 
+    if cleanup_error is not None:
+        results.append({"name": "cleanup", "passed": False, "error": cleanup_error})
     passed = all(result["passed"] for result in results)
     document = {"version": __version__, "passed": passed, "checks": results}
     try:

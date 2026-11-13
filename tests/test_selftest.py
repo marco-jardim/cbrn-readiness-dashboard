@@ -125,6 +125,73 @@ def test_a_failing_check_gives_exit_one_and_hides_the_message(
     assert list(data.glob("tmp/selftest-*")) == []
 
 
+def _checks_by_name(data: Path) -> dict[str, dict[str, object]]:
+    checks = _result(data)["checks"]
+    assert isinstance(checks, list)
+    return {c["name"]: c for c in checks}
+
+
+def test_failed_cleanup_gives_exit_one_and_names_only_the_exception_type(
+    qapp: QApplication, qm_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data = tmp_path / "data"
+    calls: list[Path] = []
+
+    def locked(path: Path, *args: object, **kwargs: object) -> None:
+        calls.append(path)
+        raise PermissionError("DEMO-SECRET")
+
+    monkeypatch.setattr(selftest.shutil, "rmtree", locked)
+
+    assert _run(data, qm_dir) == 1
+
+    assert len(calls) == 2  # one retry, no more
+    text = (data / "selftest.json").read_text(encoding="utf-8")
+    assert "DEMO-SECRET" not in text
+    result = _result(data)
+    assert result["passed"] is False
+    by_name = _checks_by_name(data)
+    assert by_name["cleanup"] == {"name": "cleanup", "passed": False, "error": "PermissionError"}
+    assert all(c["passed"] for name, c in by_name.items() if name != "cleanup")
+
+
+def test_cleanup_that_succeeds_on_the_retry_passes(
+    qapp: QApplication, qm_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data = tmp_path / "data"
+    real_rmtree = selftest.shutil.rmtree
+    calls: list[Path] = []
+
+    def flaky(path: Path, *args: object, **kwargs: object) -> None:
+        calls.append(path)
+        if len(calls) == 1:
+            raise PermissionError("DEMO-SECRET")
+        real_rmtree(path)
+
+    monkeypatch.setattr(selftest.shutil, "rmtree", flaky)
+
+    assert _run(data, qm_dir) == 0
+
+    assert len(calls) == 2
+    assert "cleanup" not in _checks_by_name(data)
+    assert _result(data)["passed"] is True
+    assert [entry.name for entry in data.iterdir()] == ["selftest.json"]
+
+
+def test_qt_check_passes_with_matching_runtime(qapp: QApplication) -> None:
+    location = DataLocation(path=Path("unused"), source=LocationSource.CLI, writable=True)
+    dict(selftest.CHECKS)["qt"](selftest.SelfTestContext(location, Path("unused"), None))
+
+
+def test_qt_check_fails_when_the_runtime_version_differs(
+    qapp: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("PySide6.QtCore.qVersion", lambda: "0.0.0")
+    location = DataLocation(path=Path("unused"), source=LocationSource.CLI, writable=True)
+    with pytest.raises(selftest.SelfTestError):
+        dict(selftest.CHECKS)["qt"](selftest.SelfTestContext(location, Path("unused"), None))
+
+
 def test_an_existing_tmp_folder_is_kept(qapp: QApplication, qm_dir: Path, tmp_path: Path) -> None:
     data = tmp_path / "data"
     (data / "tmp").mkdir(parents=True)

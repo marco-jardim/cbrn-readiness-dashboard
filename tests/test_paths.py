@@ -213,6 +213,147 @@ def test_pointer_that_is_a_directory_falls_through_with_warning(
     assert result.warnings == (LocationWarning.POINTER_INVALID,)
 
 
+@pytest.mark.parametrize(
+    "value",
+    ["C:\\x\u0000y", "/x\u0000y", "C:\\x\u0001y", "C:\\x\ty", "C:\\x\ny"],
+)
+def test_pointer_with_control_character_falls_through_with_warning(
+    env: dict[str, str], exe: Path, local_appdata: Path, default_dir: Path, value: str
+) -> None:
+    write_pointer(local_appdata, json.dumps({"data_dir": value}))
+    result = resolve(env, exe)
+    assert result.path == default_dir
+    assert result.source is LocationSource.DEFAULT
+    assert result.warnings == (LocationWarning.POINTER_INVALID,)
+
+
+def test_deeply_nested_pointer_falls_through_with_warning(
+    env: dict[str, str], exe: Path, local_appdata: Path, default_dir: Path
+) -> None:
+    write_pointer(local_appdata, "[" * 100_000)
+    result = resolve(env, exe)
+    assert result.path == default_dir
+    assert result.source is LocationSource.DEFAULT
+    assert result.warnings == (LocationWarning.POINTER_INVALID,)
+
+
+def test_nul_in_cli_value_is_non_writable_without_raising(
+    env: dict[str, str], exe: Path, tmp_path: Path
+) -> None:
+    result = resolve(env, exe, cli=str(tmp_path / "x\u0000y"))
+    assert result.source is LocationSource.CLI
+    assert result.writable is False
+
+
+def test_nul_in_env_value_is_non_writable_without_raising(
+    env: dict[str, str], exe: Path, tmp_path: Path
+) -> None:
+    env[ENV_VAR] = str(tmp_path / "x\u0000y")
+    result = resolve(env, exe)
+    assert result.source is LocationSource.ENV
+    assert result.writable is False
+
+
+def test_nul_values_with_system_probes_and_onedrive_prefix_do_not_raise(
+    env: dict[str, str], exe: Path, tmp_path: Path
+) -> None:
+    env["OneDrive"] = str(tmp_path)
+    target = str(tmp_path / "x\u0000y")
+    from_cli = resolve_data_location(cli_data_dir=target, environ=env, executable=exe, frozen=False)
+    assert from_cli.writable is False
+    env[ENV_VAR] = target
+    from_env = resolve_data_location(environ=env, executable=exe, frozen=False)
+    assert from_env.writable is False
+
+
+def test_real_probes_reject_nul_paths_without_raising(tmp_path: Path) -> None:
+    bad = tmp_path / "x\u0000y"
+    assert create_directory(bad) is False
+    assert probe_directory_writable(bad) is False
+
+
+def _tree(root: Path) -> list[str]:
+    return sorted(str(entry.relative_to(root)) for entry in root.rglob("*"))
+
+
+def test_environment_without_profile_variables_is_unusable_and_creates_nothing(
+    exe: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+    # The real environment must not leak in, and Path.home() must never be asked.
+    for name in ("LOCALAPPDATA", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", ENV_VAR):
+        monkeypatch.delenv(name, raising=False)
+
+    def no_home() -> Path:
+        raise AssertionError("Path.home() must not be called")
+
+    monkeypatch.setattr(Path, "home", staticmethod(no_home))
+    before = _tree(tmp_path)
+
+    result = resolve_data_location(environ={}, executable=exe, frozen=False, probes=QUIET)
+
+    assert result.source is LocationSource.DEFAULT
+    assert result.writable is False
+    assert result.warnings == (LocationWarning.NO_PROFILE_DIR,)
+    assert result.path == Path(APP_DIR_NAME)
+    assert _tree(tmp_path) == before
+    assert list(cwd.iterdir()) == []
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_profile_variables_count_as_unset(exe: Path, blank: str) -> None:
+    environ = {"LOCALAPPDATA": blank, "USERPROFILE": blank, "HOMEDRIVE": blank, "HOMEPATH": blank}
+    result = resolve_data_location(environ=environ, executable=exe, frozen=False, probes=QUIET)
+    assert result.warnings == (LocationWarning.NO_PROFILE_DIR,)
+    assert result.writable is False
+
+
+def test_homedrive_without_homepath_is_not_a_profile(exe: Path, tmp_path: Path) -> None:
+    environ = {"HOMEDRIVE": str(tmp_path)}
+    result = resolve_data_location(environ=environ, executable=exe, frozen=False, probes=QUIET)
+    assert result.warnings == (LocationWarning.NO_PROFILE_DIR,)
+    assert _tree(tmp_path) == [exe.parent.name]
+
+
+def test_userprofile_only_environment_resolves_below_it(exe: Path, tmp_path: Path) -> None:
+    environ = {"USERPROFILE": str(tmp_path / "profile")}
+    result = resolve_data_location(environ=environ, executable=exe, frozen=False, probes=QUIET)
+    expected = tmp_path / "profile" / "AppData" / "Local" / APP_DIR_NAME
+    assert result.path == expected
+    assert result.source is LocationSource.DEFAULT
+    assert result.writable is True
+    assert result.warnings == ()
+    assert expected.is_dir()
+
+
+def test_homedrive_and_homepath_only_environment_resolves_below_them(
+    exe: Path, tmp_path: Path
+) -> None:
+    home = tmp_path / "homedir"
+    environ = {"HOMEDRIVE": str(home.parent), "HOMEPATH": "/" + home.name}
+    result = resolve_data_location(environ=environ, executable=exe, frozen=False, probes=QUIET)
+    expected = home / "AppData" / "Local" / APP_DIR_NAME
+    assert result.path == expected
+    assert result.writable is True
+    assert result.warnings == ()
+    assert expected.is_dir()
+
+
+def test_userprofile_only_environment_still_honours_its_pointer(exe: Path, tmp_path: Path) -> None:
+    profile_app = tmp_path / "profile" / "AppData" / "Local" / APP_DIR_NAME
+    profile_app.mkdir(parents=True)
+    target = tmp_path / "chosen"
+    (profile_app / POINTER_FILE_NAME).write_text(
+        json.dumps({"data_dir": str(target)}), encoding="utf-8"
+    )
+    environ = {"USERPROFILE": str(tmp_path / "profile")}
+    result = resolve_data_location(environ=environ, executable=exe, frozen=False, probes=QUIET)
+    assert result.path == target
+    assert result.source is LocationSource.POINTER
+
+
 @pytest.mark.parametrize("blank", ["", "   ", "\t"])
 def test_blank_cli_and_env_are_absent(
     env: dict[str, str], exe: Path, default_dir: Path, blank: str
@@ -598,7 +739,7 @@ def test_database_path_and_existence(env: dict[str, str], exe: Path, tmp_path: P
 def test_data_location_is_frozen(tmp_path: Path) -> None:
     location = DataLocation(tmp_path, LocationSource.CLI, True)
     with pytest.raises(AttributeError):
-        location.writable = False  # type: ignore[misc]
+        location.writable = False
 
 
 # ---------------------------------------------------------------- is_file_writable

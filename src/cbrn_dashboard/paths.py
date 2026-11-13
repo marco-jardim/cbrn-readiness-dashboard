@@ -79,6 +79,8 @@ class LocationWarning(StrEnum):
     NETWORK_PATH = "network_path"
     ONEDRIVE = "onedrive"
     POINTER_INVALID = "pointer_invalid"
+    #: The injected environment names no profile folder, so no default location exists.
+    NO_PROFILE_DIR = "no_profile_dir"
 
 
 @dataclass(frozen=True)
@@ -103,10 +105,14 @@ class DataLocation:
 
 
 def create_directory(path: Path) -> bool:
-    """Create ``path`` (and parents) if missing; ``False`` when that is impossible."""
+    """Create ``path`` (and parents) if missing; ``False`` when that is impossible.
+
+    A path the operating system rejects outright (for example an embedded NUL, which raises
+    ``ValueError``) counts as impossible too.
+    """
     try:
         path.mkdir(parents=True, exist_ok=True)
-    except OSError:
+    except (OSError, ValueError):
         return False
     return path.is_dir()
 
@@ -118,7 +124,7 @@ def probe_directory_writable(folder: Path) -> bool:
         with probe.open("xb") as handle:
             handle.write(b"0")
         probe.unlink()
-    except OSError:
+    except (OSError, ValueError):  # ValueError: e.g. an embedded NUL in the folder name
         return False
     return True
 
@@ -178,7 +184,7 @@ def is_network_drive(path: Path) -> bool:
         return False
     try:
         resolved_root = Path(drive + "\\").resolve()
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
         return _has_network_mapping(drive[0])
     return is_unc_path(resolved_root) or _has_network_mapping(drive[0])
 
@@ -237,7 +243,7 @@ def read_file_attributes(path: Path) -> int:
         return 0
     try:
         return path.stat().st_file_attributes
-    except OSError:
+    except (OSError, ValueError):
         return 0
 
 
@@ -277,20 +283,36 @@ def _non_blank(value: str | None) -> str | None:
     return stripped or None
 
 
-def _profile_dir(environ: Mapping[str, str]) -> Path:
-    """``%LOCALAPPDATA%\\cbrn-readiness-dashboard`` (standard profile path if unset)."""
+def _profile_dir(environ: Mapping[str, str]) -> Path | None:
+    """``%LOCALAPPDATA%\\cbrn-readiness-dashboard`` from the injected ``environ`` only.
+
+    ``LOCALAPPDATA``, else ``USERPROFILE\\AppData\\Local``, else
+    ``HOMEDRIVE`` + ``HOMEPATH`` + ``\\AppData\\Local``. ``None`` when none of them is set: the
+    real environment and ``Path.home()`` are never consulted.
+    """
     local = _non_blank(environ.get("LOCALAPPDATA"))
     if local is not None:
-        base = Path(local)
-    else:
-        home = _non_blank(environ.get("USERPROFILE"))
-        base = (Path(home) if home is not None else Path.home()) / "AppData" / "Local"
-    return base.absolute() / APP_DIR_NAME
+        return Path(local).absolute() / APP_DIR_NAME
+    home = _non_blank(environ.get("USERPROFILE"))
+    if home is None:
+        drive = _non_blank(environ.get("HOMEDRIVE"))
+        home_path = _non_blank(environ.get("HOMEPATH"))
+        if drive is None or home_path is None:
+            return None
+        home = drive + home_path
+    return (Path(home) / "AppData" / "Local").absolute() / APP_DIR_NAME
+
+
+def _has_control_character(text: str) -> bool:
+    return any(ord(char) < 0x20 for char in text)
 
 
 def _read_pointer(environ: Mapping[str, str]) -> _Pointer:
     """Read the pointer file. Missing: no pointer; unreadable or malformed: ``invalid``."""
-    pointer_file = _profile_dir(environ) / POINTER_FILE_NAME
+    profile = _profile_dir(environ)
+    if profile is None:
+        return _Pointer(None, False)
+    pointer_file = profile / POINTER_FILE_NAME
     try:
         text = pointer_file.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -299,12 +321,14 @@ def _read_pointer(environ: Mapping[str, str]) -> _Pointer:
         return _Pointer(None, True)
     try:
         data: object = json.loads(text)
-    except ValueError:
+    except (ValueError, RecursionError):  # RecursionError: absurdly nested JSON
         return _Pointer(None, True)
     if not isinstance(data, dict):
         return _Pointer(None, True)
     value: object = data.get(POINTER_KEY)
     if not isinstance(value, str) or _non_blank(value) is None:
+        return _Pointer(None, True)
+    if _has_control_character(value.strip()):  # NUL and other control characters
         return _Pointer(None, True)
     candidate = Path(value.strip())
     if not candidate.is_absolute():
@@ -319,7 +343,7 @@ def _normalise(path: Path) -> Path:
         return absolute
     try:
         return absolute.resolve()
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
         return absolute
 
 
@@ -380,7 +404,18 @@ def resolve_data_location(
     ``environ`` defaults to ``os.environ``, ``executable`` to ``sys.executable``, ``frozen`` to
     ``getattr(sys, "frozen", False)`` and ``probes`` to ``Probes.system()``. The folder is created
     if missing; if that or the writability probe fails the location is returned with
-    ``writable=False`` (same path, never replaced, nothing raised).
+    ``writable=False`` (same path, never replaced).
+
+    Only the injected ``environ`` is read; ``Path.home()`` is never used. If it names no profile
+    folder (no ``LOCALAPPDATA``, ``USERPROFILE`` or ``HOMEDRIVE``+``HOMEPATH``) and nothing
+    higher in the order applies, the result is the unusable placeholder ``Path(APP_DIR_NAME)``
+    (relative, deterministic, never created) with ``source=DEFAULT``, ``writable=False`` and the
+    ``NO_PROFILE_DIR`` warning; no other location is substituted.
+
+    Never raises for bad *values*: a NUL or other control character in ``--data-dir``, the
+    environment variable or the pointer file, a corrupt or deeply nested pointer file, or an
+    unreadable folder yield ``writable=False`` or ``POINTER_INVALID`` instead. Injected probes
+    are trusted and their exceptions propagate; ``MemoryError`` and the like are not handled.
     """
     env: Mapping[str, str] = os.environ if environ is None else environ
     active = Probes.system() if probes is None else probes
@@ -421,5 +456,12 @@ def resolve_data_location(
 
     # 5. default
     default = _profile_dir(env)
+    if default is None:
+        return DataLocation(
+            path=Path(APP_DIR_NAME),
+            source=LocationSource.DEFAULT,
+            writable=False,
+            warnings=(LocationWarning.NO_PROFILE_DIR,),
+        )
     extra = (LocationWarning.POINTER_INVALID,) if pointer.invalid else ()
     return _build(default, LocationSource.DEFAULT, _prepare(default, active), env, active, extra)
