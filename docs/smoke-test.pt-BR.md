@@ -1,4 +1,4 @@
-# Roteiro de teste manual (smoke test) - versão 0.1.0
+# Roteiro de teste manual (smoke test) - versão 1.0.0
 
 **Status da execução: NÃO EXECUTADO.** Este roteiro foi escrito a partir do que o código e os guias
 descrevem. Nenhuma pessoa o executou ainda, nem em um computador Windows limpo, nem em outro. Nenhum
@@ -7,8 +7,8 @@ código e a documentação, e é isso que o teste deve confirmar ou desmentir.
 
 **Versão preliminar - indicadores não validados institucionalmente.**
 
-A versão 0.1.0 está preparada no repositório, mas não foi marcada com tag nem publicada. O fluxo de
-publicação (`.github/workflows/release.yml`) cria um *rascunho* de pré-lançamento; **uma pessoa
+A versão 1.0.0 está preparada no repositório, mas não foi marcada com tag nem publicada. O fluxo de
+publicação (`.github/workflows/release.yml`) cria um *rascunho* de lançamento; **uma pessoa
 executa este roteiro sobre o zip desse rascunho, antes de publicá-lo**. Se algum passo falhar, o
 rascunho não deve ser publicado até a causa ser entendida.
 
@@ -35,7 +35,7 @@ dúvida, o texto em inglês do código-fonte é a referência (por exemplo, "Bac
 ## 1. Verificar o download
 
 1. Abra o PowerShell na pasta do zip e execute
-   `Get-FileHash .\cbrn-readiness-dashboard-0.1.0-win-x64.zip -Algorithm SHA256`.
+   `Get-FileHash .\cbrn-readiness-dashboard-1.0.0-win-x64.zip -Algorithm SHA256`.
    - Resultado esperado: o valor de `Hash` é igual ao da linha do zip em `SHA256SUMS.txt`, e igual ao
      valor mostrado no corpo do rascunho do lançamento.
 2. Opcional (precisa de rede e do GitHub CLI): `gh attestation verify` com o zip, como em
@@ -241,11 +241,9 @@ publicado, apenas como status.
 
 ## 12. O que este roteiro não cobre
 
-- O modo somente leitura e uma pasta de dados em um caminho de rede (UNC): nunca foram testados em um
-  compartilhamento real.
-- Os relatórios em PDF, a exportação e a importação de CSV e a exportação de validação: estão no
-  código, mas o plano os atribui à versão 1.0 e este roteiro não os exercita.
-- A janela "Sobre" e a ajuda dentro do programa: não fazem parte desta versão.
+- Uma pasta de dados em um caminho de rede (UNC): nunca foi testada em um compartilhamento real.
+- Os relatórios em PDF, a exportação e a importação de CSV, a exportação de validação, a janela
+  "Sobre", a ajuda e o modo somente leitura: este roteiro rápido não os exercita; eles estão em
+  [manual-test-script.pt-BR.md](manual-test-script.pt-BR.md).
 - Computadores com AppLocker, WDAC ou Smart App Control em modo restritivo: só o que for observado no
   computador de teste.
-- O roteiro completo da versão 1.0 (`docs/manual-test-script.pt-BR.md`) ainda não existe.

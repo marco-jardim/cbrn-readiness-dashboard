@@ -10,7 +10,7 @@ reales: vea [data-protection.md](data-protection.md) (en inglés).
 
 ## 1. Estado de esta guía
 
-La versión del árbol de código es `0.1.0`. Está **preparada** en el repositorio (con registro de
+La versión del árbol de código es `1.0.0`. Está **preparada** en el repositorio (con registro de
 cambios y guion de prueba manual), pero no se ha marcado ninguna etiqueta (tag); por tanto,
 **todavía no se ha publicado ninguna versión y hoy no hay ningún archivo que descargar**. El flujo
 de publicación (`.github/workflows/release.yml`) solo se ejecuta cuando se envía una etiqueta

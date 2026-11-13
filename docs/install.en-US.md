@@ -10,7 +10,7 @@ zip's first-run notes (`README-first-run.*.txt`) is shorter and says the same.
 
 ## 1. Status of this guide
 
-The version in the source tree is `0.1.0`. It is **prepared** in the repository (changelog and
+The version in the source tree is `1.0.0`. It is **prepared** in the repository (changelog and
 manual smoke-test script included), but nothing is tagged, so **no release has been published
 yet and there is no file to download today**. The release workflow
 (`.github/workflows/release.yml`) runs only when a tag `vX.Y.Z` is pushed, builds the bundle, and

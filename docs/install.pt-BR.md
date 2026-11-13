@@ -10,7 +10,7 @@ veja [data-protection.md](data-protection.md) (em inglês).
 
 ## 1. Situação deste guia
 
-A versão na árvore de código é `0.1.0`. Ela está **preparada** no repositório (com registro de
+A versão na árvore de código é `1.0.0`. Ela está **preparada** no repositório (com registro de
 alterações e roteiro de teste manual), mas nada foi marcado com tag; portanto **nenhuma versão foi
 publicada e hoje não há arquivo para baixar**. O fluxo de publicação (`.github/workflows/release.yml`)
 só roda quando uma tag `vX.Y.Z` é enviada, monta o pacote e cria uma versão em *rascunho* (marcada

@@ -11,13 +11,17 @@ The checks read plain files; nothing here tags, builds or publishes anything. Th
 * the release machinery (workflow, release-body template) and the manual smoke-test script exist;
 * the documents do not claim that a release was published, tested on real machines or signed.
 
-T10.5 extends this module for version 1.0.
+T10.5 extends this module for version 1.0: the 1.0.0 entry lists the placeholders still flagged,
+the local-only values stay flagged with an empty default, the number of unfinished translation
+messages stated equals the number found, every question Q1 to Q24 has one of the three status
+phrases, and the manual test script for the committee names every registered page.
 """
 
 from __future__ import annotations
 
 import re
 import tomllib
+import xml.etree.ElementTree as ET
 from importlib import metadata
 from pathlib import Path
 
@@ -27,17 +31,43 @@ from cbrn_dashboard import __version__
 from cbrn_dashboard.domain.config import (
     PLACEHOLDERS,
     PlaceholderKind,
+    ReadinessConfig,
     flagged_placeholder_ids,
+    placeholder,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
 INIT = ROOT / "src" / "cbrn_dashboard" / "__init__.py"
 CHANGELOG = ROOT / "CHANGELOG.md"
+PLAN = ROOT / "PLAN.md"
 SMOKE_TEST = DOCS / "smoke-test.pt-BR.md"
+MANUAL_SCRIPT = DOCS / "manual-test-script.pt-BR.md"
+REGISTRY = ROOT / "src" / "cbrn_dashboard" / "ui" / "shell" / "registry.py"
+I18N = ROOT / "src" / "cbrn_dashboard" / "i18n"
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 TEMPLATE = ROOT / ".github" / "release-body.template.md"
 LANGUAGES = ("pt-BR", "en-US", "es-ES")
+
+#: The questions of PLAN.md section 12 that the changelog lists: Q1 to Q24.
+QUESTION_NUMBERS = range(1, 25)
+
+#: The local-only placeholders (PLAN.md 3.5): flagged in code, never given a code default.
+LOCAL_ONLY_IDS = ("P03", "P10", "D18")
+
+#: Every registered page (registry key) and its Brazilian Portuguese navigation title. The manual
+#: test script must name each title; a new page makes the registry test below fail until it is
+#: added here and to the script.
+PAGE_TITLES = {
+    "dashboard": "Painel",
+    "personnel": "Pessoal",
+    "infrastructure": "Infraestrutura",
+    "exercises": "Exerc\u00edcios",
+    "budget": "Or\u00e7amento",
+    "alerts": "Alertas",
+    "reports": "Relat\u00f3rios",
+    "settings": "Configura\u00e7\u00f5es",
+}
 
 #: The A-items without a setting (PLAN.md 3.5): assumptions, listed in the changelog as open
 #: questions only.
@@ -148,6 +178,13 @@ def test_the_readme_states_the_version_and_links_the_release_material() -> None:
     assert "https://github.com/marco-jardim/cbrn-readiness-dashboard/releases" in text
 
 
+def test_the_readme_states_version_1_0_0() -> None:
+    assert __version__ == "1.0.0"
+    text = _read(ROOT / "README.md")
+    assert f"Version {__version__} is prepared" in text
+    assert "(docs/manual-test-script.pt-BR.md)" in text
+
+
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_install_guides_state_the_version_as_prepared_and_not_published(language: str) -> None:
     text = _read(DOCS / f"install.{language}.md")
@@ -202,6 +239,23 @@ def test_the_changelog_marks_the_local_only_values() -> None:
     assert marked == local_only
 
 
+def test_the_local_only_values_are_flagged_and_have_no_code_default() -> None:
+    flagged = set(flagged_placeholder_ids())
+    defaults = ReadinessConfig()
+    for placeholder_id in LOCAL_ONLY_IDS:
+        item = placeholder(placeholder_id)
+        assert item.kind is PlaceholderKind.LOCAL_ONLY, placeholder_id
+        assert placeholder_id in flagged, f"{placeholder_id} lost its flag"
+        for name in item.fields:
+            assert getattr(defaults, name) in ("", None), f"{name} has a code default"
+    # The indicator targets (P03) live in their own table and have no config field at all.
+    assert placeholder("P03").fields == ()
+    # Nothing else is local-only: the list above is the whole of it.
+    assert {item.id for item in PLACEHOLDERS if item.kind is PlaceholderKind.LOCAL_ONLY} == set(
+        LOCAL_ONLY_IDS
+    )
+
+
 def test_the_changelog_lists_the_assumptions_without_a_setting_as_questions_only() -> None:
     lines = _section(_entry(__version__), "Assumptions without a setting")
     items = {
@@ -224,7 +278,18 @@ def test_every_open_question_is_listed_by_its_status_only() -> None:
         assert match is not None, f"not of the form '- Qn: <status>': {line!r}"
         assert match.group(1) not in found, f"{match.group(1)} is listed twice"
         found[match.group(1)] = match.group(2)
-    assert set(found) == {f"Q{number}" for number in range(1, 20)}
+    assert set(found) == {f"Q{number}" for number in QUESTION_NUMBERS}
+
+
+def test_the_changelog_lists_the_questions_of_the_plan() -> None:
+    # Section 12 of the plan opens every question with "**Qn" and an em dash.
+    in_plan = {
+        f"Q{number}" for number in re.findall(r"^\*\*Q(\d+) \u2014", _read(PLAN), re.MULTILINE)
+    }
+    assert in_plan == {f"Q{number}" for number in QUESTION_NUMBERS}
+    lines = _section(_entry(__version__), "Open questions")
+    listed = {match.group(1) for line in lines if (match := STATUS_FORM.match(line)) is not None}
+    assert listed == in_plan
 
 
 def test_the_changelog_states_the_review_status_of_the_translations() -> None:
@@ -233,6 +298,39 @@ def test_the_changelog_states_the_review_status_of_the_translations() -> None:
     assert "pending" in text
     assert "unfinished" in text
     assert "drafts" in text
+
+
+def _unfinished_counts() -> tuple[int, int]:
+    """``(occurrences of type="unfinished", messages whose translation is unfinished)``."""
+    files = sorted(I18N.glob("*.ts"))
+    assert files
+    occurrences = 0
+    messages = 0
+    for path in files:
+        occurrences += _read(path).count('type="unfinished"')
+        for message in ET.parse(path).getroot().iter("message"):
+            translation = message.find("translation")
+            if translation is not None and translation.get("type") == "unfinished":
+                messages += 1
+    return occurrences, messages
+
+
+def test_the_unfinished_count_stated_equals_the_count_found() -> None:
+    occurrences, messages = _unfinished_counts()
+    # One marker per message: a marker anywhere else would make the count ambiguous.
+    assert occurrences == messages
+    lines = _section(_entry(__version__), "Translations")
+    stated = [
+        int(match.group(1))
+        for line in lines
+        if (match := re.match(r"^- Messages still marked unfinished: (\d+)\b", line)) is not None
+    ]
+    if messages == 0:
+        text = _one_line("\n".join(lines))
+        assert stated in ([], [0])
+        assert "none remain" in text or stated == [0]
+    else:
+        assert stated == [messages]
 
 
 @pytest.mark.parametrize(
@@ -319,6 +417,79 @@ def test_the_smoke_test_is_not_a_place_for_real_data() -> None:
     assert "não insira dados reais" in text
 
 
+# --- the manual test script for the committee (T10.5) ----------------------------------------
+
+
+def _registered_page_keys() -> list[str]:
+    """The keys of ``PAGES`` in ``ui/shell/registry.py``, read from the source (no Qt needed)."""
+    return re.findall(r'^    PageSpec\("(\w+)",', _read(REGISTRY), re.MULTILINE)
+
+
+def test_every_registered_page_has_a_title_in_this_module() -> None:
+    assert sorted(_registered_page_keys()) == sorted(PAGE_TITLES)
+
+
+def test_the_page_titles_are_the_portuguese_titles_of_the_catalogues() -> None:
+    text = "\n".join(_read(path) for path in sorted(I18N.glob("*_pt_BR.ts")))
+    for title in PAGE_TITLES.values():
+        assert f">{title}</translation>" in text, title
+
+
+def test_the_manual_test_script_names_every_registered_page() -> None:
+    assert MANUAL_SCRIPT.is_file()
+    text = _read(MANUAL_SCRIPT)
+    for key, title in PAGE_TITLES.items():
+        assert f"**{title}**" in text, f"the manual test script does not name the page {key}"
+
+
+def test_the_manual_test_script_says_that_it_was_not_executed() -> None:
+    text = _read(MANUAL_SCRIPT)
+    assert "NÃO EXECUTADO" in text
+    assert __version__ in text
+    assert "não insira dados reais" in text.lower()
+
+
+def test_the_manual_test_script_covers_what_the_plan_asks_for() -> None:
+    text = _read(MANUAL_SCRIPT).lower()
+    for needle in (
+        "alertas",
+        "idioma",
+        "ctrl+shift+1",
+        "ctrl+shift+2",
+        "ctrl+shift+3",
+        "mídia removível",
+        "fazer backup...",
+        "ctrl+b",
+        "restaurar...",
+        "ctrl+shift+r",
+        "12 caracteres",
+        "relatório interno",
+        "relatório anonimizado",
+        "uso interno",
+        "exportar arquivos csv",
+        "exportação de validação",
+        "importar arquivo csv",
+        "gravar modelos",
+        "somente leitura",
+        "--data-dir",
+        "attrib +r",
+        "dirsa",
+        "comando da aeronáutica",
+        "habilitação de epi",
+        "demo-walkthrough.md",
+    ):
+        assert needle in text, needle
+    assert "certificado" not in text
+
+
+def test_the_manual_test_script_links_resolve() -> None:
+    for target in re.findall(r"\]\(([^)\s]+)\)", _read(MANUAL_SCRIPT)):
+        link = str(target)
+        if link.startswith(("http://", "https://", "#")):
+            continue
+        assert (DOCS / link.split("#", 1)[0]).resolve().exists(), link
+
+
 # --- nothing claims an event that did not happen ---------------------------------------------
 
 
@@ -327,6 +498,7 @@ def test_no_release_document_claims_a_publication_or_a_signature() -> None:
         ROOT / "README.md",
         CHANGELOG,
         SMOKE_TEST,
+        MANUAL_SCRIPT,
         *(DOCS / f"install.{language}.md" for language in LANGUAGES),
     ]
     for path in documents:
