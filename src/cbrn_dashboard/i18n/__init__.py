@@ -25,8 +25,9 @@ AREAS: dict[str, tuple[str, ...]] = {
 }
 """Translation areas -> source folders/files, relative to :data:`SOURCE_ROOT`.
 
-Each later task adds one line for its area. Entries that do not exist yet are skipped by the
-tooling (see :func:`source_paths`).
+Each later task adds one line for its area. Every entry is required to exist:
+:func:`missing_source_paths` lists the ones that do not, a test asserts there are none and
+``scripts/i18n.py update`` refuses to run while one is missing.
 """
 
 
@@ -72,3 +73,10 @@ def source_paths(area: str) -> list[Path]:
         raise KeyError(f"Unknown translation area: {area!r}")
     candidates = (SOURCE_ROOT / entry for entry in AREAS[area])
     return [path for path in candidates if path.exists()]
+
+
+def missing_source_paths(area: str) -> tuple[str, ...]:
+    """Return the entries of ``area`` in :data:`AREAS` that do not exist (empty when all do)."""
+    if area not in AREAS:
+        raise KeyError(f"Unknown translation area: {area!r}")
+    return tuple(entry for entry in AREAS[area] if not (SOURCE_ROOT / entry).exists())

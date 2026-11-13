@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Guard: translation contexts are string literals and ``self.tr()`` is never used.
+"""Guard: translation contexts and source texts are string literals; ``self.tr()`` is never used.
 
 ``pyside6-lupdate`` extracts only ``QCoreApplication.translate("<literal>", "<literal>")``
-calls, so a constant or variable context would silently drop the message from the catalogues.
+calls, so a constant or variable context or source text would silently drop the message from the
+catalogues. A ``translate`` reference that is not called on the spot (``partial(...)``, a
+``lambda``, an attribute) hides its arguments from the guard and is flagged as well.
 """
 
 import ast
@@ -12,16 +14,19 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QCoreApplication, QObject, QTranslator
 
-from tests.i18n._ts import SRC_ROOT, load_script
+from tests.i18n._ts import (
+    SRC_ROOT,
+    is_translate_call,
+    load_script,
+    receiver_names,
+    translate_aliases,
+)
 
-QT_APPLICATION_CLASSES = frozenset({"QCoreApplication", "QGuiApplication", "QApplication"})
-
-# Observed behaviour of ``self.tr()`` in an inherited method with PySide6 6.12 (PLAN.md section 6
-# pitfall). True: the context is the class name of the *instance*, so a catalogue that holds only
-# the base class's context loses the translation for subclass instances. False: PySide6 falls back
-# along the MRO, so the base class's context is still found.
-# NOTE: set from an educated guess because the experiment could not be run when this file was
-# written; flip the constant if ``test_tr_inheritance_experiment`` fails.
+# Recorded observation of ``self.tr()`` in an inherited method (PLAN.md section 6 pitfall),
+# measured by ``test_tr_inheritance_experiment`` on PySide6 6.12.0. The probe catalogue holds only
+# the base class's context; True would mean that a subclass instance gets the untranslated source
+# text from the inherited method (the context is the instance's class name), False means that it
+# still gets the translation (the base class's context is found). Observed: False.
 TR_USES_SUBCLASS_CONTEXT = False
 
 
@@ -29,40 +34,39 @@ def _is_literal_string(node: ast.expr) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
-def _receiver_names(node: ast.expr) -> set[str]:
-    """Names along an attribute chain: ``QtCore.QCoreApplication`` -> both names."""
-    names: set[str] = set()
-    while isinstance(node, ast.Attribute):
-        names.add(node.attr)
-        node = node.value
-    if isinstance(node, ast.Name):
-        names.add(node.id)
-    return names
+def _argument(call: ast.Call, position: int, keyword: str) -> ast.expr | None:
+    """Return the positional argument ``position`` or the keyword ``keyword``, if present."""
+    if len(call.args) > position:
+        return call.args[position]
+    return next((kw.value for kw in call.keywords if kw.arg == keyword), None)
 
 
 def find_violations(source: str, filename: str = "<snippet>") -> list[str]:
-    """Return one message per ``translate()`` with a non-literal context and per ``.tr()`` call."""
+    """Return one message per bad ``translate()``/``.tr()`` call or non-call ``translate`` use."""
     tree = ast.parse(source, filename=filename)
-
-    class_names = set(QT_APPLICATION_CLASSES)
-    function_names = {"translate"}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if alias.name in QT_APPLICATION_CLASSES:
-                    class_names.add(alias.asname or alias.name)
-                elif alias.name == "translate":
-                    function_names.add(alias.asname or alias.name)
-        elif (
-            isinstance(node, ast.Assign)
-            and isinstance(node.value, ast.Attribute)
-            and node.value.attr == "translate"
-            and _receiver_names(node.value.value) & class_names
-        ):
-            # ``_translate = QCoreApplication.translate``
-            function_names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+    class_names, function_names = translate_aliases(tree)
 
     problems: list[str] = []
+
+    # A ``QCoreApplication.translate`` that is neither called nor a plain alias assignment.
+    allowed: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            allowed.add(id(node.func))
+        elif isinstance(node, ast.Assign) and all(isinstance(t, ast.Name) for t in node.targets):
+            allowed.add(id(node.value))
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr == "translate"
+            and id(node) not in allowed
+            and receiver_names(node.value) & class_names
+        ):
+            problems.append(
+                f"{filename}:{node.lineno}: translate referenced without a direct call "
+                "(partial/lambda/attribute); call QCoreApplication.translate with literals"
+            )
+
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -71,18 +75,14 @@ def find_violations(source: str, filename: str = "<snippet>") -> list[str]:
         if isinstance(func, ast.Attribute) and func.attr == "tr":
             problems.append(f"{where}: .tr() is forbidden; use QCoreApplication.translate")
             continue
-        is_translate = (
-            isinstance(func, ast.Attribute)
-            and func.attr == "translate"
-            and (bool(_receiver_names(func.value) & class_names) or len(node.args) >= 2)
-        ) or (isinstance(func, ast.Name) and func.id in function_names)
-        if not is_translate:
+        if not is_translate_call(node, class_names, function_names):
             continue
-        context: ast.expr | None = node.args[0] if node.args else None
-        if context is None:
-            context = next((kw.value for kw in node.keywords if kw.arg == "context"), None)
+        context = _argument(node, 0, "context")
         if context is None or not _is_literal_string(context):
             problems.append(f"{where}: translate() context must be a string literal")
+        source_text = _argument(node, 1, "sourceText")
+        if source_text is None or not _is_literal_string(source_text):
+            problems.append(f"{where}: translate() source text must be a string literal")
     return problems
 
 
@@ -108,6 +108,10 @@ def test_src_translate_contexts_are_literals() -> None:
         'QtCore.QCoreApplication.translate("Shell", "Hello")',
         '_translate = QCoreApplication.translate\n_translate("Shell", "Hello")',
         'from PySide6.QtCore import QCoreApplication as QCA\nQCA.translate("Shell", "Hello")',
+        'QCoreApplication.translate("Shell", "Hel" "lo")',
+        'QCoreApplication.translate("Shell", sourceText="Hello")',
+        'QCoreApplication.translate("Shell", "Hello", "disambiguation")',
+        'f = _translate = QCoreApplication.translate\nf("Shell", "Hello")',
         "text.translate(table)",
         'title = labels.get("x")',
     ],
@@ -132,6 +136,23 @@ def test_guard_accepts_literal_contexts(snippet: str) -> None:
         'app.translate(ctx, "Hello")',
         'self.tr("Hello")',
         'QObject.tr("Hello")',
+        # non-literal source text
+        'QCoreApplication.translate("Shell", text)',
+        'QCoreApplication.translate("Shell", f"Hello {name}")',
+        'QCoreApplication.translate("Shell", "Hel" + "lo")',
+        'QCoreApplication.translate("Shell", sourceText=text)',
+        'QCoreApplication.translate("Shell", b"Hello")',
+        'QCoreApplication.translate("Shell")',
+        'def t(s):\n    return QCoreApplication.translate("Shell", s)',
+        '_translate = QCoreApplication.translate\n_translate("Shell", text)',
+        'from PySide6.QtCore import QCoreApplication as QCA\nQCA.translate("Shell", text)',
+        # translate referenced without a direct call
+        'partial(QCoreApplication.translate, "Shell")',
+        'functools.partial(QtCore.QCoreApplication.translate, "Shell")',
+        "tr = lambda: QCoreApplication.translate",
+        "self.t = QCoreApplication.translate",
+        "translate_fn: object = QApplication.translate",
+        "handlers = [QGuiApplication.translate]",
     ],
 )
 def test_guard_catches_violations(snippet: str) -> None:

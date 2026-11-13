@@ -25,6 +25,12 @@ from tests.i18n._ts import (
 CATALOGUES = catalogue_files()
 CATALOGUE_IDS = [f"{area}_{lang}" for area, lang, _ in CATALOGUES]
 
+REVIEWED_LANGUAGES = frozenset({"pt_BR", "es_ES"})
+"""Languages whose translations await the committee's review (plan section 10.1)."""
+
+IDENTICAL_ALLOWED: frozenset[str] = frozenset()
+"""Source texts whose pt_BR/es_ES translation may equal the English text (none so far)."""
+
 APP_NAME = {
     "pt_BR": "Painel de Prontidão QBRN",
     "en_US": "CBRN Readiness Dashboard",
@@ -107,6 +113,24 @@ def test_translations_are_complete(area: str, lang: str, path: Path) -> None:
             )
         else:
             assert len(message.translations) == 1
+
+
+@pytest.mark.parametrize(
+    ("area", "lang", "path"),
+    [entry for entry in CATALOGUES if entry[1] in REVIEWED_LANGUAGES],
+    ids=[f"{area}_{lang}" for area, lang, _ in CATALOGUES if lang in REVIEWED_LANGUAGES],
+)
+def test_committee_languages_stay_unfinished_and_translated(
+    area: str, lang: str, path: Path
+) -> None:
+    """Plan section 6 check 2 / section 10.1: pt_BR and es_ES stay unfinished until reviewed."""
+    for message in parse_ts(path).messages:
+        where = f"{area}_{lang}: {message.context}/{message.source!r}"
+        assert message.status == "unfinished", f"{where}: marked {message.status or 'finished'}"
+        if message.source in IDENTICAL_ALLOWED:
+            continue
+        for text in message.translations:
+            assert text != message.source, f"{where}: translation copied from the English source"
 
 
 @pytest.mark.parametrize("area", list(i18n.AREAS))

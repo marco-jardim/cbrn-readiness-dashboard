@@ -122,6 +122,8 @@ def app_display_name() -> str:
     return QCoreApplication.translate("Shell", "CBRN Readiness Dashboard")
 
 
+# Production code used only by tests: it keeps a plural message in the catalogues from day one.
+# The first real plural UI message (alerts, T6.3) makes this function removable.
 def languages_available_text(n: int) -> str:
     """Return the plural-aware "n languages available" text."""
     return QCoreApplication.translate("Shell", "%n language(s) available", None, n)

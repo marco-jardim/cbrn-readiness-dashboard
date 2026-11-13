@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
@@ -95,26 +96,45 @@ def update_catalogues(
 ) -> list[Path]:
     """Run ``lupdate`` for each area and language; return the ``.ts`` files written.
 
-    ``ts_dir`` defaults to the ``i18n`` package folder; the tests pass a temporary copy. Areas
-    without any existing source path are skipped. Raises :class:`ToolError` on failure.
+    ``ts_dir`` defaults to the ``i18n`` package folder; the tests pass a temporary copy.
+    ``lupdate`` runs on a temporary copy of each catalogue, which replaces the original only when
+    the tool exits with 0 and reports at least one source text, so a failed or empty extraction
+    never damages a catalogue. Raises :class:`ToolError` on failure, and before running anything
+    when a source path listed in :data:`cbrn_dashboard.i18n.AREAS` does not exist.
     """
     folder = i18n.PACKAGE_DIR if ts_dir is None else ts_dir
+    selected_areas = list(i18n.AREAS if areas is None else areas)
+    selected_languages = list(i18n.LANGUAGES if languages is None else languages)
+    for area in selected_areas:
+        missing = i18n.missing_source_paths(area)
+        if missing:
+            raise ToolError(
+                f"Area {area!r} lists source paths that do not exist: {', '.join(missing)}"
+            )
     written: list[Path] = []
-    for area in i18n.AREAS if areas is None else areas:
-        for lang in i18n.LANGUAGES if languages is None else languages:
+    for area in selected_areas:
+        for lang in selected_languages:
             ts_path = folder / f"{area}_{i18n.to_catalogue_code(lang)}.ts"
-            command = lupdate_command(area, lang, ts_path)
-            if not command:
-                continue
-            result = _run(command)
-            if result.returncode != 0:
+            with tempfile.TemporaryDirectory() as scratch:
+                work_path = Path(scratch) / ts_path.name
+                if ts_path.is_file():
+                    shutil.copyfile(ts_path, work_path)
+                command = lupdate_command(area, lang, work_path)
+                if not command:
+                    continue
+                result = _run(command)
                 output = result.stdout + result.stderr
-                raise ToolError(f"lupdate failed for {ts_path.name}:\n{output}")
-            found = _FOUND_RE.search(result.stdout + result.stderr)
-            if found is not None and int(found.group(1)) == 0:
-                # An area with sources always has strings; zero means a tooling error and
-                # -no-obsolete has just emptied the catalogue.
-                raise ToolError(f"lupdate extracted no strings for {ts_path.name}")
+                if result.returncode != 0:
+                    raise ToolError(f"lupdate failed for {ts_path.name}:\n{output}")
+                found = _FOUND_RE.search(output)
+                if found is None:
+                    raise ToolError(f"lupdate printed no 'Found N source text(s)' line:\n{output}")
+                if int(found.group(1)) == 0:
+                    # An area with sources always has strings; zero means a tooling error.
+                    raise ToolError(f"lupdate extracted no strings for {ts_path.name}")
+                if not work_path.is_file():
+                    raise ToolError(f"lupdate did not write {ts_path.name}")
+                shutil.copyfile(work_path, ts_path)
             written.append(ts_path)
     return written
 

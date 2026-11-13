@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QTranslator
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QMenu, QStackedWidget
 from pytestqt.qtbot import QtBot
@@ -115,6 +116,33 @@ def test_choosing_a_language_retitles_the_window_live(make_app: MakeApp, qtbot: 
         assert [c for c, a in window.language_actions.items() if a.isChecked()] == [code]
         folder_label = _find(handle, QLabel, "data_folder_label")
         assert folder_label.text().startswith(FOLDER_TEXT[code])
+
+
+def test_window_retranslates_on_a_qt_language_change_event(
+    make_app: MakeApp, qapp: QApplication, qm_dir: Path, qtbot: QtBot
+) -> None:
+    """A translator installed behind the manager's back still retitles the window.
+
+    This is the ``LanguageChange`` mechanism later pages rely on (plan section 6); it fails if
+    ``MainWindow.changeEvent`` stops calling ``retranslate``.
+    """
+    handle = make_app("en-US")
+    window = handle.window
+    file_menu = _find(handle, QMenu, "menu_file")
+    assert window.windowTitle() == TITLES["en_US"]
+
+    translator = QTranslator()
+    assert translator.load(str(qm_dir / i18n.qm_name("shell", "es_ES")))
+    qapp.installTranslator(translator)
+    try:
+        qapp.processEvents()
+        qtbot.waitUntil(lambda: window.windowTitle() == TITLES["es_ES"], timeout=2000)
+        assert file_menu.title() == FILE_MENU["es_ES"]
+        assert handle.translator_manager.current_language == "en_US"
+    finally:
+        qapp.removeTranslator(translator)
+    qtbot.waitUntil(lambda: window.windowTitle() == TITLES["en_US"], timeout=2000)
+    assert file_menu.title() == FILE_MENU["en_US"]
 
 
 def test_language_entries_are_named_in_the_current_language(make_app: MakeApp) -> None:

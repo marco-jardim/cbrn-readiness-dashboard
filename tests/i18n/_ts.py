@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Helpers shared by the translation tests: ``.ts`` parsing and the ``scripts/i18n.py`` loader."""
 
+import ast
 import importlib.util
 import re
 import sys
@@ -22,6 +23,65 @@ PLACEHOLDER_RE = re.compile(r"%(?:L?[1-9]|n)")
 EXPECTED_NUMERUS_FORMS: dict[str, int] = {"pt_BR": 2, "en_US": 2, "es_ES": 2}
 
 MessageKey = tuple[str, str, bool]
+
+QT_APPLICATION_CLASSES = frozenset({"QCoreApplication", "QGuiApplication", "QApplication"})
+
+
+def receiver_names(node: ast.expr) -> set[str]:
+    """Names along an attribute chain: ``QtCore.QCoreApplication`` -> both names."""
+    names: set[str] = set()
+    while isinstance(node, ast.Attribute):
+        names.add(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        names.add(node.id)
+    return names
+
+
+def translate_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Return ``(class names, function names)`` that stand for ``QCoreApplication``/``translate``.
+
+    Understands ``from ... import QCoreApplication as QCA``, ``from ... import translate as t`` and
+    the plain alias ``_translate = QCoreApplication.translate``.
+    """
+    class_names = set(QT_APPLICATION_CLASSES)
+    function_names = {"translate"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name in QT_APPLICATION_CLASSES:
+                    class_names.add(alias.asname or alias.name)
+                elif alias.name == "translate":
+                    function_names.add(alias.asname or alias.name)
+        elif (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "translate"
+            and receiver_names(node.value.value) & class_names
+        ):
+            function_names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+    return class_names, function_names
+
+
+def is_translate_call(call: ast.Call, class_names: set[str], function_names: set[str]) -> bool:
+    """Whether ``call`` is ``X.translate(...)`` (>= 2 args or a Qt class receiver) or bare."""
+    func = call.func
+    if isinstance(func, ast.Attribute):
+        return func.attr == "translate" and (
+            bool(receiver_names(func.value) & class_names) or len(call.args) >= 2
+        )
+    return isinstance(func, ast.Name) and func.id in function_names
+
+
+def find_translate_calls(source: str, filename: str = "<snippet>") -> list[ast.Call]:
+    """Return every ``translate(...)`` call found in ``source``."""
+    tree = ast.parse(source, filename=filename)
+    class_names, function_names = translate_aliases(tree)
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and is_translate_call(node, class_names, function_names)
+    ]
 
 
 @dataclass(frozen=True)
