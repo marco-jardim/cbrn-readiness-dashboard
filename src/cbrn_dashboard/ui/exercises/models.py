@@ -13,7 +13,7 @@ from PySide6.QtCore import QCoreApplication
 
 from cbrn_dashboard.services.exercises import EditionView, MetricView, ResultView, metric_label
 from cbrn_dashboard.ui.exercises.labels import kind_label
-from cbrn_dashboard.ui.shell.formatting import format_date, format_number
+from cbrn_dashboard.ui.shell.formatting import FormatError, format_date, format_number
 from cbrn_dashboard.ui.shell.widgets import Column, ModuleTableModel
 
 __all__ = [
@@ -30,9 +30,15 @@ NOT_RECORDED = "-"
 
 
 def format_value(value: float, lang: str) -> str:
-    """A metric value or scale bound: whole numbers without decimals, locale separators."""
+    """A metric value or scale bound: whole numbers without decimals, locale separators.
+
+    A number the formatter refuses (too large to be shown) is shown as plain Python text.
+    """
     number: float | int = int(value) if float(value).is_integer() else value
-    return format_number(number, lang)
+    try:
+        return format_number(number, lang)
+    except FormatError:
+        return str(value)
 
 
 def _count(value: int | None, lang: str) -> str:

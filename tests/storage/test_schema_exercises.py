@@ -130,6 +130,49 @@ def test_end_equal_to_start_is_accepted(migrated_db: DatabaseConnection) -> None
     assert count(migrated_db, "exercise_edition") == 1
 
 
+BAD_DATE_SHAPES = [
+    "2026-3-02",  # not zero-padded: sorts after "2026-03-02" as text
+    "2026-03-2",
+    "26-03-02",
+    "2026/03/02",
+    "20260302",
+    "2026-03-02T00:00:00Z",
+    "2026-03-02 ",
+    " 2026-03-02",
+    "2026-03-0a",
+    "",
+]
+
+
+@pytest.mark.parametrize("bad", BAD_DATE_SHAPES)
+def test_start_on_that_is_not_an_iso_date_shape_is_rejected(
+    migrated_db: DatabaseConnection, bad: str
+) -> None:
+    with pytest.raises(sqlite3.IntegrityError):
+        add_edition(migrated_db, start_on=bad, end_on="9999-12-31")
+    assert count(migrated_db, "exercise_edition") == 0
+
+
+@pytest.mark.parametrize("bad", BAD_DATE_SHAPES)
+def test_end_on_that_is_not_an_iso_date_shape_is_rejected(
+    migrated_db: DatabaseConnection, bad: str
+) -> None:
+    with pytest.raises(sqlite3.IntegrityError):
+        add_edition(migrated_db, start_on="0001-01-01", end_on=bad)
+    assert count(migrated_db, "exercise_edition") == 0
+
+
+@pytest.mark.parametrize(
+    ("start_on", "end_on"),
+    [("0001-01-01", "0001-01-01"), ("2026-03-02", "2026-03-06"), ("9999-12-31", "9999-12-31")],
+)
+def test_iso_dates_at_the_extremes_are_accepted(
+    migrated_db: DatabaseConnection, start_on: str, end_on: str
+) -> None:
+    add_edition(migrated_db, start_on=start_on, end_on=end_on)
+    assert count(migrated_db, "exercise_edition") == 1
+
+
 def test_negative_participants_is_rejected(migrated_db: DatabaseConnection) -> None:
     with pytest.raises(sqlite3.IntegrityError):
         add_edition(migrated_db, participants=-1)

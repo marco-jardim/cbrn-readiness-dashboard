@@ -21,6 +21,7 @@ from cbrn_dashboard.services.errors import (
     REQUIRED,
 )
 from cbrn_dashboard.services.exercises import (
+    DIRECTION_IMMUTABLE,
     DUPLICATE_CODE,
     END_BEFORE_START,
     INVALID_KIND,
@@ -30,7 +31,9 @@ from cbrn_dashboard.services.exercises import (
     NEGATIVE_PARTICIPANTS,
     NEGATIVE_RESPONDENTS,
     ORPHAN_RESULT,
+    SCALE_EXCLUDES_RESULTS,
     SCALE_MAX_BELOW_MIN,
+    UNIT_IMMUTABLE,
     UNKNOWN_COUNTRY,
     VALUE_OUT_OF_SCALE,
 )
@@ -75,6 +78,15 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
         "Exercises", "The metric is inactive and cannot receive new results."
     ),
     INVALID_NUMBER: lambda: QCoreApplication.translate("Exercises", "The number is not valid."),
+    SCALE_EXCLUDES_RESULTS: lambda: QCoreApplication.translate(
+        "Exercises", "The scale would exclude results that already exist."
+    ),
+    DIRECTION_IMMUTABLE: lambda: QCoreApplication.translate(
+        "Exercises", "The direction cannot be changed because results already use the metric."
+    ),
+    UNIT_IMMUTABLE: lambda: QCoreApplication.translate(
+        "Exercises", "The unit cannot be changed because results already use the metric."
+    ),
     ORPHAN_RESULT: lambda: QCoreApplication.translate(
         "Exercises", "A result refers to an edition or metric that does not exist."
     ),

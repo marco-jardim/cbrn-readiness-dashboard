@@ -55,6 +55,7 @@ from cbrn_dashboard.storage.exercises_repo import EditionRow, MetricRow, ResultR
 from cbrn_dashboard.storage.repository import ForeignKeyError, RowNotFoundError, WriteContext
 
 __all__ = [
+    "DIRECTION_IMMUTABLE",
     "DUPLICATE_CODE",
     "END_BEFORE_START",
     "INVALID_KIND",
@@ -64,7 +65,9 @@ __all__ = [
     "NEGATIVE_PARTICIPANTS",
     "NEGATIVE_RESPONDENTS",
     "ORPHAN_RESULT",
+    "SCALE_EXCLUDES_RESULTS",
     "SCALE_MAX_BELOW_MIN",
+    "UNIT_IMMUTABLE",
     "UNKNOWN_COUNTRY",
     "VALUE_OUT_OF_SCALE",
     "DataQualityIssue",
@@ -89,8 +92,18 @@ SCALE_MAX_BELOW_MIN = "SCALE_MAX_BELOW_MIN"
 NEGATIVE_RESPONDENTS = "NEGATIVE_RESPONDENTS"
 METRIC_IN_USE = "METRIC_IN_USE"
 METRIC_INACTIVE = "METRIC_INACTIVE"
-#: A number is NaN or infinite.
+#: A number is NaN, infinite or too large to be shown (10**18 or more in magnitude).
 INVALID_NUMBER = "INVALID_NUMBER"
+#: A metric that has results: the new scale would exclude a stored result.
+SCALE_EXCLUDES_RESULTS = "SCALE_EXCLUDES_RESULTS"
+#: A metric that has results: its direction (higher is better) cannot be flipped.
+DIRECTION_IMMUTABLE = "DIRECTION_IMMUTABLE"
+#: A metric that has results: its unit cannot be changed.
+UNIT_IMMUTABLE = "UNIT_IMMUTABLE"
+
+#: Largest accepted magnitude of a value or a scale bound; the same bound as the number parser of
+#: the UI, and below the limit of the number formatter, so every stored number can be shown.
+_MAX_MAGNITUDE = 10**18
 
 #: Data-quality code: a result whose edition or metric does not exist.
 ORPHAN_RESULT = "ORPHAN_RESULT"
@@ -284,7 +297,7 @@ def _finite(value: float | None, field: str) -> float | None:
     if value is None:
         return None
     number = float(value)
-    require(math.isfinite(number), INVALID_NUMBER, field)
+    require(math.isfinite(number) and abs(number) < _MAX_MAGNITUDE, INVALID_NUMBER, field)
     return number
 
 
@@ -483,10 +496,26 @@ class ExercisesService:
             SCALE_MAX_BELOW_MIN,
             "scale_max",
         )
+        unit = _clean(data.unit)
         if metric_id is not None:
             current = self._metric_row(metric_id)
-            if code != current.code:
-                require(not repo.metric_in_use(self._conn, metric_id), CODE_IMMUTABLE, "code")
+            if repo.metric_in_use(self._conn, metric_id):
+                require(code == current.code, CODE_IMMUTABLE, "code")
+                require(
+                    data.higher_is_better == current.higher_is_better,
+                    DIRECTION_IMMUTABLE,
+                    "higher_is_better",
+                )
+                require(unit == _clean(current.unit), UNIT_IMMUTABLE, "unit")
+                values = [
+                    result.value
+                    for result in repo.list_results(self._conn)
+                    if result.metric_id == metric_id
+                ]
+                below = scale_min is not None and any(value < scale_min for value in values)
+                above = scale_max is not None and any(value > scale_max for value in values)
+                require(not below, SCALE_EXCLUDES_RESULTS, "scale_min")
+                require(not above, SCALE_EXCLUDES_RESULTS, "scale_max")
         existing = repo.get_metric_by_code(self._conn, code)
         require(existing is None or existing.id == metric_id, DUPLICATE_CODE, "code")
         return _MetricFields(
@@ -494,7 +523,7 @@ class ExercisesService:
             label_pt_br=label_pt_br,
             label_en_us=_clean(data.label_en_us),
             label_es_es=_clean(data.label_es_es),
-            unit=_clean(data.unit),
+            unit=unit,
             scale_min=scale_min,
             scale_max=scale_max,
             higher_is_better=data.higher_is_better,
@@ -520,7 +549,11 @@ class ExercisesService:
             )
 
     def update_metric(self, metric_id: int, data: MetricInput) -> None:
-        """Change a metric; its code is frozen once a result uses it (``CODE_IMMUTABLE``)."""
+        """Change a metric; code, unit and direction are frozen once a result uses it.
+
+        The refusals are ``CODE_IMMUTABLE``, ``UNIT_IMMUTABLE`` and ``DIRECTION_IMMUTABLE``; the
+        new scale must also still contain every stored result (``SCALE_EXCLUDES_RESULTS``).
+        """
         self._require_writable()
         with _translated(), transaction(self._conn):
             self._metric_row(metric_id)

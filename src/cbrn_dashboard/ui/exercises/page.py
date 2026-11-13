@@ -180,6 +180,7 @@ class ExercisesPage(QWidget):
     def refresh(self) -> None:
         """Read the editions (and the results of the selected one) again."""
         service = self.context.services.exercises
+        kept = self.selected_result()
         if service is None:
             self.editions_model.set_rows([])
         else:
@@ -190,16 +191,24 @@ class ExercisesPage(QWidget):
                 for row, edition in enumerate(editions):
                     if edition.id == previous.id:
                         self.editions_view.selectRow(row)
-        self._refresh_results()
+        self._refresh_results(kept)
 
-    def _refresh_results(self) -> None:
+    def _refresh_results(self, kept: ResultView | None = None) -> None:
+        """Read the results of the selected edition; ``kept`` stays selected if it is there."""
         service = self.context.services.exercises
         edition = self.selected_edition()
+        previous = kept if kept is not None else self.selected_result()
         if service is None or edition is None:
             self.results_model.set_results([], {})
         else:
             metrics = {m.id: m for m in service.list_metrics(include_inactive=True)}
-            self.results_model.set_results(service.list_results(edition.id), metrics)
+            results = service.list_results(edition.id)
+            self.results_model.set_results(results, metrics)
+            if previous is not None:
+                key = (previous.edition_id, previous.metric_id)
+                for row, result in enumerate(results):
+                    if (result.edition_id, result.metric_id) == key:
+                        self.results_view.selectRow(row)
         self._update_actions()
 
     def _edition_selected(self, *_args: object) -> None:

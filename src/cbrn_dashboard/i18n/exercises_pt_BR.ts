@@ -184,6 +184,18 @@
         <translation type="unfinished">O número não é válido.</translation>
     </message>
     <message>
+        <source>The scale would exclude results that already exist.</source>
+        <translation type="unfinished">A escala excluiria resultados que já existem.</translation>
+    </message>
+    <message>
+        <source>The direction cannot be changed because results already use the metric.</source>
+        <translation type="unfinished">A direção não pode ser alterada porque já há resultados que usam a métrica.</translation>
+    </message>
+    <message>
+        <source>The unit cannot be changed because results already use the metric.</source>
+        <translation type="unfinished">A unidade não pode ser alterada porque já há resultados que usam a métrica.</translation>
+    </message>
+    <message>
         <source>A result refers to an edition or metric that does not exist.</source>
         <translation type="unfinished">Um resultado se refere a uma edição ou métrica que não existe.</translation>
     </message>

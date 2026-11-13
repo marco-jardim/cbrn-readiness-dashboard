@@ -98,6 +98,21 @@ def _number_error(error: FormatError, field: str) -> ServiceError:
     return ServiceError(INVALID_NUMBER, field)
 
 
+def _reformat_number(edit: QLineEdit, old_lang: str, new_lang: str) -> None:
+    """Show the number typed in ``old_lang`` again in the format of ``new_lang``.
+
+    A text that does not parse in ``old_lang`` is cleared: read in ``new_lang`` it could mean
+    something else (``1,5`` is refused in en-US but is 1.5 in pt-BR), so it is never re-parsed.
+    """
+    text = edit.text().strip()
+    if not text:
+        return
+    try:
+        edit.setText(format_value(float(parse_number(text, old_lang)), new_lang))
+    except FormatError:
+        edit.clear()
+
+
 # --------------------------------------------------------------------------- country picker
 
 
@@ -335,11 +350,21 @@ class ResultDialog(FormDialog):
         self.setObjectName("result_dialog")
         self._edition_id = edition_id
         self._result = result
+        self._number_lang = self.language
         service = context.services.exercises
         wanted = None if result is None else result.metric_id
         metrics = [] if service is None else service.list_metrics(include_inactive=True)
+        # Adding must never silently replace a value: leave out the metrics that already have one.
+        taken: set[int] = set()
+        if service is not None and result is None:
+            try:
+                taken = {stored.metric_id for stored in service.list_results(edition_id)}
+            except ServiceError:
+                taken = set()
         self._metrics: dict[int, MetricView] = {
-            metric.id: metric for metric in metrics if metric.active or metric.id == wanted
+            metric.id: metric
+            for metric in metrics
+            if (metric.active or metric.id == wanted) and metric.id not in taken
         }
         self.metric_combo = QComboBox(self)
         mark_data(self.metric_combo)
@@ -377,6 +402,9 @@ class ResultDialog(FormDialog):
             metric = self._metrics.get(int(self.metric_combo.itemData(index)))
             if metric is not None:
                 self.metric_combo.setItemText(index, metric_label(metric, self.language))
+        if self.language != self._number_lang:
+            _reformat_number(self.value_edit, self._number_lang, self.language)
+            self._number_lang = self.language
         apply_locale(self.respondents_edit, self.language)
         self.respondents_edit.setSpecialValueText(
             QCoreApplication.translate("Exercises", "Not recorded")
@@ -421,6 +449,7 @@ class MetricDialog(FormDialog):
         super().__init__(context, parent)
         self.setObjectName("metric_dialog")
         self._metric = metric
+        self._number_lang = self.language
         self.code_edit = QLineEdit(self)
         self.label_pt_edit = QLineEdit(self)
         self.label_en_edit = QLineEdit(self)
@@ -479,6 +508,10 @@ class MetricDialog(FormDialog):
             self.setWindowTitle(QCoreApplication.translate("Exercises", "Add metric"))
         else:
             self.setWindowTitle(QCoreApplication.translate("Exercises", "Edit metric"))
+        if self.language != self._number_lang:
+            for edit in (self.scale_min_edit, self.scale_max_edit):
+                _reformat_number(edit, self._number_lang, self.language)
+            self._number_lang = self.language
         optional = QCoreApplication.translate("Exercises", "Optional")
         self.scale_min_edit.setPlaceholderText(optional)
         self.scale_max_edit.setPlaceholderText(optional)

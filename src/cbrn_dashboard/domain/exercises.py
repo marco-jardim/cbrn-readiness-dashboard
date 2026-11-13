@@ -236,6 +236,7 @@ def indicator_definitions() -> tuple[IndicatorDefinition, ...]:
             direction=Direction.LOWER_IS_BETTER,
             dimension_keys=(_DIMENSION_KEY,),
             source="R05",
+            proposal="Q1",
         ),
     )
 
@@ -245,6 +246,8 @@ def indicator_values(editions: Iterable[Edition], as_of: date) -> list[Indicator
 
     Order: ``EX_LAST_PARTICIPANTS``, ``EX_LAST_COUNTRIES``, ``EX_DAYS_SINCE_LAST``; within each,
     CBRAMED, EXBRAMED, OTHER. A value is ``None`` (No data) when it cannot be computed.
+    An edition saved with no countries gives ``None`` for ``EX_LAST_COUNTRIES`` ("not entered" is
+    not "zero countries"), like an edition saved without participants.
     """
     pending = list(editions)
     latest = {kind: latest_edition(pending, kind, as_of) for kind in ExerciseKind}
@@ -268,7 +271,11 @@ def indicator_values(editions: Iterable[Edition], as_of: date) -> list[Indicator
         values.append(
             IndicatorValue(
                 code="EX_LAST_COUNTRIES",
-                value=None if edition is None else float(country_count(edition)),
+                value=(
+                    None
+                    if edition is None or country_count(edition) == 0
+                    else float(country_count(edition))
+                ),
                 dimension=dimension(kind),
             )
         )

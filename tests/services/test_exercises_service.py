@@ -34,14 +34,18 @@ from cbrn_dashboard.services.errors import (
     translate_storage_error,
 )
 from cbrn_dashboard.services.exercises import (
+    DIRECTION_IMMUTABLE,
     DUPLICATE_CODE,
     END_BEFORE_START,
     INVALID_KIND,
+    INVALID_NUMBER,
     METRIC_IN_USE,
     METRIC_INACTIVE,
     NEGATIVE_PARTICIPANTS,
     NEGATIVE_RESPONDENTS,
+    SCALE_EXCLUDES_RESULTS,
     SCALE_MAX_BELOW_MIN,
+    UNIT_IMMUTABLE,
     UNKNOWN_COUNTRY,
     VALUE_OUT_OF_SCALE,
     EditionInput,
@@ -513,6 +517,111 @@ def test_metric_code_is_immutable_once_a_result_uses_it(service: ExercisesServic
     assert (error.code, error.field) == (CODE_IMMUTABLE, "code")
     service.update_metric(metric_id, replace(_BASE_METRIC, code="DEMO-M1B", label_pt_br="Novo"))
     assert service.list_metrics()[0].label_pt_br == "Novo"
+
+
+def _metric_with_results(service: ExercisesService) -> int:
+    """A metric with the scale 0 to 10 and the results 5 and 8 in two editions."""
+    first = service.create_edition(_BASE_EDITION)
+    second = service.create_edition(replace(_BASE_EDITION, code="DEMO-EX-02"))
+    metric_id = service.create_metric(_BASE_METRIC)
+    service.set_result(first, ResultInput(metric_id, 5.0))
+    service.set_result(second, ResultInput(metric_id, 8.0))
+    return metric_id
+
+
+@pytest.mark.parametrize(
+    ("changes", "field"),
+    [
+        ({"scale_max": 7.0}, "scale_max"),  # 8 is above
+        ({"scale_min": 6.0}, "scale_min"),  # 5 is below
+        ({"scale_min": 6.0, "scale_max": 7.0}, "scale_min"),
+    ],
+)
+def test_scale_cannot_exclude_a_stored_result(
+    service: ExercisesService,
+    db: DatabaseConnection,
+    change_log_rows: ChangeLogRows,
+    changes: dict[str, object],
+    field: str,
+) -> None:
+    metric_id = _metric_with_results(service)
+    before = change_log_rows(db)
+    error = _error(lambda: service.update_metric(metric_id, replace(_BASE_METRIC, **changes)))
+    assert (error.code, error.field) == (SCALE_EXCLUDES_RESULTS, field)
+    assert change_log_rows(db) == before
+    [view] = service.list_metrics()
+    assert (view.scale_min, view.scale_max) == (0.0, 10.0)
+
+
+@pytest.mark.parametrize(
+    ("scale_min", "scale_max"),
+    [(5.0, 8.0), (None, None), (None, 8.0), (5.0, None), (-100.0, 1000.0)],
+)
+def test_scale_may_change_while_it_still_holds_every_stored_result(
+    service: ExercisesService, scale_min: float | None, scale_max: float | None
+) -> None:
+    metric_id = _metric_with_results(service)
+    service.update_metric(
+        metric_id, replace(_BASE_METRIC, scale_min=scale_min, scale_max=scale_max)
+    )
+    [view] = service.list_metrics()
+    assert (view.scale_min, view.scale_max) == (scale_min, scale_max)
+
+
+def test_direction_is_frozen_once_a_result_uses_the_metric(
+    service: ExercisesService, db: DatabaseConnection, change_log_rows: ChangeLogRows
+) -> None:
+    unused = service.create_metric(replace(_BASE_METRIC, code="DEMO-M2"))
+    service.update_metric(unused, replace(_BASE_METRIC, code="DEMO-M2", higher_is_better=False))
+    metric_id = _metric_with_results(service)
+    before = change_log_rows(db)
+    error = _error(
+        lambda: service.update_metric(metric_id, replace(_BASE_METRIC, higher_is_better=False))
+    )
+    assert (error.code, error.field) == (DIRECTION_IMMUTABLE, "higher_is_better")
+    assert change_log_rows(db) == before
+    assert next(m for m in service.list_metrics() if m.id == metric_id).higher_is_better is True
+
+
+@pytest.mark.parametrize("unit", ["%", None, ""])
+def test_unit_is_frozen_once_a_result_uses_the_metric(
+    service: ExercisesService, unit: str | None
+) -> None:
+    unused = service.create_metric(replace(_BASE_METRIC, code="DEMO-M2"))
+    service.update_metric(unused, replace(_BASE_METRIC, code="DEMO-M2", unit=unit))
+    metric_id = _metric_with_results(service)
+    error = _error(lambda: service.update_metric(metric_id, replace(_BASE_METRIC, unit=unit)))
+    assert (error.code, error.field) == (UNIT_IMMUTABLE, "unit")
+    assert next(m for m in service.list_metrics() if m.id == metric_id).unit == "pts"
+
+
+def test_labels_and_activity_of_a_metric_in_use_can_still_change(service: ExercisesService) -> None:
+    metric_id = _metric_with_results(service)
+    service.update_metric(
+        metric_id, replace(_BASE_METRIC, label_pt_br="Novo", label_es_es="Nuevo", active=False)
+    )
+    [view] = service.list_metrics(include_inactive=True)
+    assert (view.label_pt_br, view.label_es_es, view.active) == ("Novo", "Nuevo", False)
+    assert (view.unit, view.higher_is_better, view.scale_max) == ("pts", True, 10.0)
+
+
+def test_numbers_of_too_large_a_magnitude_are_refused(
+    service: ExercisesService, db: DatabaseConnection
+) -> None:
+    edition_id = service.create_edition(_BASE_EDITION)
+    open_metric = service.create_metric(MetricInput(code="DEMO-OPEN", label_pt_br="Aberta"))
+    for value in (1e18, -1e18, 1e30):
+        error = _error(lambda v=value: service.set_result(edition_id, ResultInput(open_metric, v)))
+        assert (error.code, error.field) == (INVALID_NUMBER, "value")
+    assert _count(db, "evaluation_result") == 0
+    for field in ("scale_min", "scale_max"):
+        bounds: dict[str, object] = {"scale_min": None, "scale_max": None, field: 1e18}
+        data = replace(_BASE_METRIC, **bounds)
+        error = _error(lambda d=data: service.create_metric(d))
+        assert (error.code, error.field) == (INVALID_NUMBER, field)
+    service.set_result(edition_id, ResultInput(open_metric, 1e17))
+    service.set_result(edition_id, ResultInput(open_metric, -1e17))
+    assert service.list_results(edition_id)[0].value == -1e17
 
 
 def test_delete_metric_refused_while_results_use_it(

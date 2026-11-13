@@ -19,7 +19,9 @@ from cbrn_dashboard.services.exercises import (
     EditionInput,
     ExercisesService,
     MetricInput,
+    MetricView,
     ResultInput,
+    ResultView,
 )
 from cbrn_dashboard.ui.exercises.dialogs import (
     CountryPicker,
@@ -28,6 +30,7 @@ from cbrn_dashboard.ui.exercises.dialogs import (
     ResultDialog,
 )
 from cbrn_dashboard.ui.exercises.labels import ALL_ERROR_CODES, error_label, kind_label
+from cbrn_dashboard.ui.exercises.models import ResultsModel, format_value
 from cbrn_dashboard.ui.exercises.page import (
     ExercisesPage,
     MetricsSettingsSection,
@@ -42,7 +45,7 @@ from cbrn_dashboard.ui.exercises.page import (
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from tests.ui._fakes import FakePrompts
-from tests.ui._walk import assert_fully_translated
+from tests.ui._walk import TextItem, assert_fully_translated
 
 pytestmark = pytest.mark.ui
 
@@ -603,6 +606,298 @@ def test_the_metric_editor_deletes_an_unused_metric(
     section.delete_action.trigger()
     assert _service(app_context).list_metrics(include_inactive=True) == []
     assert section.model.rowCount() == 0
+
+
+# --------------------------------------------------------------------------- metric in use
+
+
+def _dialog_of_a_metric_in_use(app_context: AppContext, qtbot: QtBot) -> MetricDialog:
+    """The edit dialog of a metric (scale 0 to 5, no unit, higher is better) with a result 4.5."""
+    service = _service(app_context)
+    service.set_result(_add_edition(app_context), ResultInput(_add_metric(app_context), 4.5))
+    dialog = MetricDialog(app_context, None, service.list_metrics()[0])
+    qtbot.addWidget(dialog)
+    dialog.show()
+    return dialog
+
+
+def test_a_scale_that_excludes_a_stored_result_is_refused_and_the_dialog_stays_open(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    dialog = _dialog_of_a_metric_in_use(app_context, qtbot)
+    dialog.scale_max_edit.setText("3")
+    dialog.accept()
+    assert _warnings(fake_prompts) == ["The scale would exclude results that already exist."]
+    assert dialog.isVisible()
+    (metric,) = _service(app_context).list_metrics()
+    assert (metric.scale_min, metric.scale_max) == (0.0, 5.0)
+
+
+def test_a_flipped_direction_is_refused_and_the_dialog_stays_open(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    dialog = _dialog_of_a_metric_in_use(app_context, qtbot)
+    dialog.direction_combo.setCurrentIndex(1)
+    dialog.accept()
+    assert _warnings(fake_prompts) == [
+        "The direction cannot be changed because results already use the metric."
+    ]
+    assert dialog.isVisible()
+    assert _service(app_context).list_metrics()[0].higher_is_better is True
+
+
+def test_a_changed_unit_is_refused_and_the_dialog_stays_open(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    dialog = _dialog_of_a_metric_in_use(app_context, qtbot)
+    dialog.unit_edit.setText("points")
+    dialog.accept()
+    assert _warnings(fake_prompts) == [
+        "The unit cannot be changed because results already use the metric."
+    ]
+    assert dialog.isVisible()
+    assert _service(app_context).list_metrics()[0].unit is None
+
+
+def test_the_metric_in_use_errors_are_shown_in_the_current_language(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    app_context.translator_manager.set_language("pt_BR")
+    dialog = _dialog_of_a_metric_in_use(app_context, qtbot)
+    dialog.scale_max_edit.setText("3")
+    dialog.accept()
+    (text,) = _warnings(fake_prompts)
+    assert text == error_label("SCALE_EXCLUDES_RESULTS")
+    assert text == "A escala excluiria resultados que já existem."
+
+
+def test_a_metric_in_use_can_still_get_a_wider_scale_and_a_new_label(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    dialog = _dialog_of_a_metric_in_use(app_context, qtbot)
+    dialog.scale_max_edit.setText("10")
+    dialog.label_en_edit.setText("Changed")
+    dialog.accept()
+    assert not dialog.isVisible()
+    (metric,) = _service(app_context).list_metrics()
+    assert (metric.scale_max, metric.label_en_us) == (10.0, "Changed")
+
+
+# --------------------------------------------------------------------------- adding a result
+
+
+def _combo_metric_ids(dialog: ResultDialog) -> list[object]:
+    return [dialog.metric_combo.itemData(i) for i in range(dialog.metric_combo.count())]
+
+
+def test_adding_a_result_offers_only_metrics_without_a_result(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    edition_id = _add_edition(app_context)
+    other_edition = _add_edition(app_context, "EX-2026", "EXBRAMED")
+    taken = _add_metric(app_context, "SAT")
+    free = _add_metric(app_context, "ABC")
+    service.set_result(edition_id, ResultInput(taken, 4.0))
+
+    adding = ResultDialog(app_context, None, edition_id)
+    qtbot.addWidget(adding)
+    assert _combo_metric_ids(adding) == [free]
+
+    # another edition has no result yet: both metrics are offered
+    elsewhere = ResultDialog(app_context, None, other_edition)
+    qtbot.addWidget(elsewhere)
+    assert sorted(_combo_metric_ids(elsewhere), key=str) == sorted([taken, free], key=str)
+
+    # editing keeps showing the metric of the result, fixed
+    editing = ResultDialog(app_context, None, edition_id, service.list_results(edition_id)[0])
+    qtbot.addWidget(editing)
+    assert editing.metric_combo.currentData() == taken
+    assert not editing.metric_combo.isEnabled()
+    assert taken in _combo_metric_ids(editing)
+
+
+def test_adding_a_result_cannot_replace_an_existing_value(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    edition_id = _add_edition(app_context)
+    metric_id = _add_metric(app_context)
+    service.set_result(edition_id, ResultInput(metric_id, 4.0))
+    dialog = ResultDialog(app_context, None, edition_id)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert dialog.metric_combo.count() == 0
+    dialog.value_edit.setText("1")
+    dialog.accept()
+    assert _warnings(fake_prompts) == ["A required field is empty."]
+    assert dialog.isVisible()
+    assert service.list_results(edition_id)[0].value == 4.0
+
+
+# --------------------------------------------------------------------------- typed numbers
+
+
+def test_a_typed_value_is_reformatted_when_the_language_changes(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    app_context.translator_manager.set_language("en_US")
+    dialog = ResultDialog(app_context, None, _add_edition(app_context))
+    qtbot.addWidget(dialog)
+    dialog.value_edit.setText("1,000")
+    app_context.translator_manager.set_language("pt_BR")
+    qtbot.waitUntil(lambda: dialog.value_edit.text() == "1.000")
+    dialog.value_edit.setText("1,5")
+    app_context.translator_manager.set_language("en_US")
+    qtbot.waitUntil(lambda: dialog.value_edit.text() == "1.5")
+
+
+def test_a_value_that_does_not_parse_is_cleared_not_read_in_the_new_language(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    app_context.translator_manager.set_language("en_US")
+    dialog = ResultDialog(app_context, None, _add_edition(app_context))
+    qtbot.addWidget(dialog)
+    dialog.value_edit.setText("1,5")  # refused in en-US; it would be 1.5 in pt-BR
+    app_context.translator_manager.set_language("pt_BR")
+    qtbot.waitUntil(lambda: dialog.value_edit.text() == "")
+    dialog.value_edit.setText("not a number")
+    app_context.translator_manager.set_language("es_ES")
+    qtbot.waitUntil(lambda: dialog.value_edit.text() == "")
+
+
+def test_a_stored_value_is_shown_again_in_the_new_language(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    edition_id = _add_edition(app_context)
+    metric_id = service.create_metric(MetricInput(code="BIG", label_pt_br="Grande"))
+    service.set_result(edition_id, ResultInput(metric_id, 1234.5))
+    app_context.translator_manager.set_language("en_US")
+    dialog = ResultDialog(app_context, None, edition_id, service.list_results(edition_id)[0])
+    qtbot.addWidget(dialog)
+    assert dialog.value_edit.text() == "1,234.5"
+    app_context.translator_manager.set_language("pt_BR")
+    qtbot.waitUntil(lambda: dialog.value_edit.text() == "1.234,5")
+
+
+def test_the_scale_of_the_metric_dialog_is_reformatted_when_the_language_changes(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    app_context.translator_manager.set_language("en_US")
+    dialog = MetricDialog(app_context)
+    qtbot.addWidget(dialog)
+    dialog.scale_min_edit.setText("1,000")
+    dialog.scale_max_edit.setText("2,500.5")
+    app_context.translator_manager.set_language("pt_BR")
+    qtbot.waitUntil(lambda: dialog.scale_min_edit.text() == "1.000")
+    assert dialog.scale_max_edit.text() == "2.500,5"
+    dialog.scale_min_edit.setText("1.5")  # refused in pt-BR; it would be 1.5 in en-US
+    app_context.translator_manager.set_language("en_US")
+    qtbot.waitUntil(lambda: dialog.scale_max_edit.text() == "2,500.5")
+    assert dialog.scale_min_edit.text() == ""
+
+
+# --------------------------------------------------------------------------- numbers too large
+
+
+@pytest.mark.parametrize("value", [1e19, -1e19, 1e30])
+def test_format_value_survives_a_number_too_large_to_format(value: float) -> None:
+    for lang in LANGUAGES:
+        assert format_value(value, lang) == str(value)
+
+
+def test_the_results_model_survives_a_value_too_large_to_format() -> None:
+    metric = MetricView(
+        id=1,
+        code="BIG",
+        label_pt_br="Grande",
+        label_en_us=None,
+        label_es_es=None,
+        unit=None,
+        scale_min=None,
+        scale_max=1e30,
+        higher_is_better=True,
+        active=True,
+    )
+    result = ResultView(
+        edition_id=1, metric_id=1, metric_code="BIG", value=1e30, respondents=None, note=None
+    )
+    model = ResultsModel()
+    model.set_results([result], {1: metric})
+    assert model.index(0, 1).data() == "1e+30"
+    assert model.index(0, 3).data() == "<= 1e+30"
+
+
+# --------------------------------------------------------------------------- selection
+
+
+def test_the_selected_result_survives_editing_it(app_context: AppContext, qtbot: QtBot) -> None:
+    service = _service(app_context)
+    edition_id = _add_edition(app_context)
+    service.set_result(edition_id, ResultInput(_add_metric(app_context, "SAT"), 4.0))
+    service.set_result(edition_id, ResultInput(_add_metric(app_context, "ABC"), 2.0))
+    page = ExercisesPage(app_context)
+    qtbot.addWidget(page)
+    page.editions_view.selectRow(0)
+    codes = [row.result.metric_code for row in page.results_model.rows()]
+    assert codes == ["ABC", "SAT"]
+    page.results_view.selectRow(1)
+    selected = page.selected_result()
+    assert selected is not None
+    assert selected.metric_code == "SAT"
+
+    dialog = ResultDialog(app_context, None, edition_id, selected)
+    qtbot.addWidget(dialog)
+    dialog.value_edit.setText("3")
+    dialog.accept()
+
+    after = page.selected_result()
+    assert after is not None
+    assert (after.metric_code, after.value) == ("SAT", 3.0)
+    assert page.edit_result_action.isEnabled()
+    assert page.delete_result_action.isEnabled()
+    assert page.selected_edition() is not None
+
+
+def test_the_selected_result_is_not_kept_for_another_edition(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    first = _add_edition(app_context, "CB-2026")
+    second = _add_edition(app_context, "EX-2026", "EXBRAMED")
+    metric_id = _add_metric(app_context)
+    service.set_result(first, ResultInput(metric_id, 4.0))
+    service.set_result(second, ResultInput(metric_id, 3.0))
+    page = ExercisesPage(app_context)
+    qtbot.addWidget(page)
+    page.editions_view.selectRow(0)
+    page.results_view.selectRow(0)
+    page.editions_view.selectRow(1)
+    assert page.selected_result() is None
+    assert not page.edit_result_action.isEnabled()
+
+
+# --------------------------------------------------------------------------- the kind combos
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_kind_combos_translate_all_kinds_and_other_but_not_the_acronyms(
+    pseudo_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    """The combos are data for the walk, so their translated items are checked here."""
+    pseudo_context.translator_manager.set_language(lang)
+    page = ExercisesPage(pseudo_context)
+    qtbot.addWidget(page)
+    dialog = EditionDialog(pseudo_context)
+    qtbot.addWidget(dialog)
+    for combo in (page.kind_combo, dialog.kind_combo):
+        other = combo.itemText(combo.findData("OTHER"))
+        assert TextItem("kind combo", "combo item", other).translated_in(lang), other
+        assert combo.itemText(combo.findData("CBRAMED")) == "CBRAMED"
+        assert combo.itemText(combo.findData("EXBRAMED")) == "EXBRAMED"
+    all_kinds = page.kind_combo.itemText(0)
+    assert TextItem("kind combo", "combo item", all_kinds).translated_in(lang), all_kinds
 
 
 # --------------------------------------------------------------------------- pseudo-locale walk

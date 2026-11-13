@@ -10,8 +10,11 @@ CREATE TABLE exercise_edition (
     code         TEXT NOT NULL UNIQUE,
     kind         TEXT NOT NULL CHECK (kind IN ('CBRAMED', 'EXBRAMED', 'OTHER')),  -- L78, A13
     title        TEXT,
-    start_on     TEXT NOT NULL,
-    end_on       TEXT NOT NULL CHECK (end_on >= start_on),
+    start_on     TEXT NOT NULL
+                 CHECK (start_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    end_on       TEXT NOT NULL
+                 CHECK (end_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+                        AND end_on >= start_on),    -- same shape, so text order = date order
     participants INTEGER CHECK (participants >= 0),                 -- L78, D20: NULL = not known
     notes        TEXT
 ) STRICT;

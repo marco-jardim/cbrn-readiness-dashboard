@@ -187,6 +187,9 @@ class IndicatorDefinition:
     direction: Direction
     dimension_keys: tuple[str, ...] = ()
     source: str = ""
+    #: Id of the plan question that must be answered before this indicator is confirmed
+    #: (for example ``"Q1"``); empty when the indicator is stated in the appendix.
+    proposal: str = ""
 
     def __post_init__(self) -> None:
         if not isinstance(self.code, str) or _CODE_PATTERN.fullmatch(self.code) is None:

@@ -230,6 +230,14 @@ def test_empty_participants_is_no_data_while_countries_still_has_a_value() -> No
     assert values[(COUNTRIES, dim(EXB))] == 2.0
 
 
+def test_an_edition_saved_with_no_countries_is_no_data_not_zero() -> None:
+    bare = edition("DEMO-EX-07", OTH, date(2025, 1, 1), date(2025, 1, 2), 5)
+    values = by_key(indicator_values([bare], date(2025, 1, 2)))
+    assert values[(COUNTRIES, dim(OTH))] is None
+    assert values[(PARTICIPANTS, dim(OTH))] == 5.0
+    assert values[(DAYS, dim(OTH))] == 0.0
+
+
 def test_zero_participants_is_a_value_not_no_data() -> None:
     zero = edition("DEMO-EX-06", OTH, date(2025, 1, 1), date(2025, 1, 2), 0, ("AA",))
     values = by_key(indicator_values([zero], date(2025, 1, 2)))
@@ -456,6 +464,13 @@ def test_provider_lists_exactly_the_three_definitions_in_order() -> None:
     registry = build_registry()
     exercises_codes = [d.code for d in registry.by_module(Module.EXERCISES)]
     assert exercises_codes == [PARTICIPANTS, COUNTRIES, DAYS]
+
+
+def test_days_since_last_is_flagged_as_a_proposal_pending_q1_in_the_registry() -> None:
+    registry = build_registry()
+    assert registry.get(DAYS).proposal == "Q1"
+    assert registry.get(PARTICIPANTS).proposal == ""
+    assert registry.get(COUNTRIES).proposal == ""
 
 
 def test_days_since_last_is_labelled_as_a_design_proposal_pending_q1() -> None:
