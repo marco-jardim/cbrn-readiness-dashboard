@@ -90,8 +90,8 @@ Top-level modules of `src/cbrn_dashboard/`:
 Folders outside the package: `tests/` (subfolders `tests/domain/`, `tests/storage/`,
 `tests/services/`, `tests/reports/`, `tests/ui/`, `tests/i18n/`, `tests/demo/`, `tests/scripts/`,
 `tests/packaging/`, `tests/meta/`, plus `tests/fixtures/` with fictitious data only), `scripts/`
-(`build_exe.py`, `collect_licenses.py`, `make_release_zip.py`, `i18n.py`, `gen_countries.py`,
-`gen_icon.py`), `packaging/` (first-run notes, `portable.ini.example`, third-party licence texts),
+(`build_exe.py`, `collect_licenses.py`, `make_release_zip.py`, `i18n.py`,
+`terminology_sheet.py`, `gen_countries.py`, `gen_icon.py`), `packaging/` (first-run notes, `portable.ini.example`, third-party licence texts),
 `docs/` and `.github/` (workflows, templates).
 
 ## 4. Data flow
@@ -381,6 +381,22 @@ English and Spanish (Spain), written `pt_BR`, `en_US` and `es_ES` in file names 
 - **Draft status.** The pt-BR and es-ES translations are drafts and keep Qt Linguist's
   `type="unfinished"` until the committee reviews the terminology (Q14). `lrelease` ships
   unfinished messages.
+- **Terminology review sheet.** `python scripts/terminology_sheet.py export --out sheet.csv`
+  writes one CSV (UTF-8 with a byte order mark, separator `;`) with a row per message of the
+  pt-BR and es-ES catalogues: a stable `id` (`m` plus the first 12 hex digits of the SHA-256 of
+  `area|context|source|comment`), `area`, `context`, `english`, `comment`, `note` (the
+  translator note), `estado` (`pendente` while a translation is unfinished), the current
+  translations (`pt_BR_atual`, `es_ES_atual`; the two forms of a plural message are joined with
+  ` | `), the empty columns `pt_BR_revisado` and `es_ES_revisado` that the committee fills in, and
+  `observacoes`. `python scripts/terminology_sheet.py import --csv sheet.csv [--mark-finished]`
+  writes every non-empty `*_revisado` cell back into the matching `<translation>` element,
+  in place (the rest of the `.ts` file stays byte-identical). A cell is skipped, and reported with
+  its row id, when its placeholders (`%1`, `%L1`, `%n`) differ from the English source, when a
+  plural message does not have exactly two forms, or when the `id` is unknown or the `area`,
+  `context` or `english` column was edited. `--mark-finished` also removes `type="unfinished"`
+  from the translations that were reviewed. Run `python scripts/i18n.py update` afterwards. The
+  instructions for the committee are in
+  [revisao-terminologia.pt-BR.md](revisao-terminologia.pt-BR.md).
 - **Tests** are in `tests/i18n/` (`test_catalogues.py`, `test_catalogues_in_sync.py`,
   `test_translate_contexts.py`) and in `tests/ui/test_no_hardcoded_strings.py` (the pseudo-locale
   walk). PLAN.md section 6 lists what the checks are meant to cover.
