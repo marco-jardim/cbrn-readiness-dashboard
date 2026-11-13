@@ -379,6 +379,7 @@ def test_a_hardcoded_page_or_section_title_is_reported(
         ("navigation item", "Hard-coded"),
         ("page title", "Hard-coded"),
         ("section title", "Hard-coded section"),
+        ("group box", "Hard-coded section"),  # the Settings page shows the title on its box
     }
 
 

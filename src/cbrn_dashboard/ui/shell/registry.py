@@ -18,10 +18,13 @@ from typing import Protocol
 from PySide6.QtWidgets import QDialog, QWidget
 
 from cbrn_dashboard.ui.alerts import page as alerts_page
+from cbrn_dashboard.ui.backup import page as backup_page
 from cbrn_dashboard.ui.budget import page as budget_page
+from cbrn_dashboard.ui.dashboard import page as dashboard_page
 from cbrn_dashboard.ui.exercises import page as exercises_page
 from cbrn_dashboard.ui.infrastructure import page as infrastructure_page
 from cbrn_dashboard.ui.personnel import page as personnel_page
+from cbrn_dashboard.ui.settings import page as settings_page
 from cbrn_dashboard.ui.shell.context import AppContext
 
 __all__ = [
@@ -103,15 +106,35 @@ SETTINGS_GROUPS: tuple[str, ...] = (
 # Pages, one line per module: T2.4 (personnel), T3.4 (infrastructure), T4.5 (exercises),
 # T5.4 (budget), T6.2 (dashboard), T6.3 (alerts), T6.1 (settings), T7.4 / T8.x where they add one.
 PAGES: tuple[PageSpec, ...] = (
+    PageSpec("dashboard", 5, dashboard_page.page_title, dashboard_page.create_page),
     PageSpec("personnel", 10, personnel_page.page_title, personnel_page.create_page),
     PageSpec("infrastructure", 20, infrastructure_page.page_title, infrastructure_page.create_page),
     PageSpec("exercises", 30, exercises_page.page_title, exercises_page.create_page),
     PageSpec("budget", 40, budget_page.page_title, budget_page.create_page),
     PageSpec("alerts", 50, alerts_page.page_title, alerts_page.create_page),
+    PageSpec("settings", 90, settings_page.page_title, settings_page.create_page),
 )
 
 # Settings sections, one line per section: T2.4, T3.4, T4.5, T5.4, T7.4, T8.7 (T6.1 only renders).
 SETTINGS_SECTIONS: tuple[SettingsSectionSpec, ...] = (
+    SettingsSectionSpec(
+        "settings.general",
+        "general",
+        settings_page.general_section_title,
+        settings_page.create_general_section,
+    ),
+    SettingsSectionSpec(
+        "settings.alerts",
+        "alerts",
+        settings_page.alerts_section_title,
+        settings_page.create_alerts_section,
+    ),
+    SettingsSectionSpec(
+        "settings.targets",
+        "targets",
+        settings_page.targets_section_title,
+        settings_page.create_targets_section,
+    ),
     SettingsSectionSpec(
         "personnel.rules",
         "personnel",
@@ -136,6 +159,12 @@ SETTINGS_SECTIONS: tuple[SettingsSectionSpec, ...] = (
         budget_page.settings_section_title,
         budget_page.create_settings_section,
     ),
+    SettingsSectionSpec(
+        "backup.settings",
+        "backup",
+        backup_page.settings_section_title,
+        backup_page.create_settings_section,
+    ),
 )
 
 # Dialogs, one line per dialog (each factory fills the dialog with fictitious data): T2.4, T3.4,
@@ -156,6 +185,9 @@ DIALOGS: tuple[DialogSpec, ...] = (
     DialogSpec("budget.entry", budget_page.demo_entry_dialog),
     DialogSpec("budget.execution", budget_page.demo_execution_dialog),
     DialogSpec("budget.source", budget_page.demo_source_dialog),
+    DialogSpec("settings.target", settings_page.demo_target_dialog),
+    DialogSpec("backup.passphrase_backup", backup_page.demo_backup_dialog),
+    DialogSpec("backup.passphrase_restore", backup_page.demo_restore_dialog),
 )
 
 # Temporary registrations made by tests, in registration order.

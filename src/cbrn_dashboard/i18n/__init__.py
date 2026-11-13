@@ -27,6 +27,10 @@ AREAS: dict[str, tuple[str, ...]] = {
     "exercises": ("ui/exercises",),
     "budget": ("ui/budget",),
     "alerts": ("ui/alerts",),
+    "dashboard": ("ui/dashboard",),
+    "settings": ("ui/settings",),
+    "backup": ("ui/backup",),
+    "reports": ("reports",),
 }
 """Translation areas -> source folders/files, relative to :data:`SOURCE_ROOT`.
 
