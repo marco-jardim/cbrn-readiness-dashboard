@@ -208,8 +208,8 @@
         <translation>The list of placeholders is not valid.</translation>
     </message>
     <message>
-        <source>A stored setting is damaged.</source>
-        <translation>A stored setting is damaged.</translation>
+        <source>A stored setting cannot be read.</source>
+        <translation>A stored setting cannot be read.</translation>
     </message>
     <message>
         <source>The placeholder is not known.</source>
@@ -475,6 +475,7 @@
     </message>
     <message>
         <source>Confirm</source>
+        <extracomment>The state of the rule inputs: A02 switch, mapping pairs, typed A04 months per level. The rule inputs as last loaded from the configuration (``None`` before the first load). The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation>Confirm</translation>
     </message>
     <message>

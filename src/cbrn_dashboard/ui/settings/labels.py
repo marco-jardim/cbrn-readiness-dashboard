@@ -7,6 +7,7 @@ parser have one explicit entry; an unknown code is shown as itself, never as an 
 Dimension VALUES (``A``, ``DIRSA``, ...) are data and are shown unchanged.
 """
 
+import re
 from collections.abc import Callable
 
 from PySide6.QtCore import QCoreApplication
@@ -19,6 +20,7 @@ from cbrn_dashboard.services.indicators import (
     TARGET_EMPTY,
     TARGET_NOT_FINITE,
     TARGET_ORDER,
+    TARGET_OUT_OF_RANGE,
     UNKNOWN_INDICATOR,
 )
 from cbrn_dashboard.ui.shell.formatting import AMBIGUOUS_NUMBER, EMPTY, TOO_LARGE
@@ -31,6 +33,7 @@ __all__ = [
     "dimension_text",
     "direction_label",
     "error_label",
+    "fill_placeholders",
     "group_label",
     "indicator_label",
     "unit_label",
@@ -85,6 +88,9 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     TARGET_EMPTY: lambda: QCoreApplication.translate(
         "Settings", "Enter at least one threshold or delete the target."
     ),
+    TARGET_OUT_OF_RANGE: lambda: QCoreApplication.translate(
+        "Settings", "The percentage must be between 0% and 1000%."
+    ),
     # shared service errors
     READ_ONLY: lambda: QCoreApplication.translate(
         "Settings", "The data is read-only: nothing was saved."
@@ -103,29 +109,32 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
 ALL_ERROR_CODES: tuple[str, ...] = tuple(dict.fromkeys((*_ERROR_LABELS, *CONFIG_ERROR_CODES)))
 
 _INDICATOR_LABELS: dict[str, Callable[[], str]] = {
-    "PERS_CERT_VALID": lambda: QCoreApplication.translate("Settings", "Valid certificates"),
+    # The same wording as the dashboard (ui/dashboard/labels.py), which follows PLAN.md 5.4.
+    "PERS_CERT_VALID": lambda: QCoreApplication.translate(
+        "Settings", "Staff with a valid certificate"
+    ),
     "PERS_CERT_EXPIRING": lambda: QCoreApplication.translate(
         "Settings", "Certificates expiring soon"
     ),
     "PERS_RETRAINING_NEEDED": lambda: QCoreApplication.translate(
         "Settings", "Staff needing retraining"
     ),
-    "PERS_DEGREE": lambda: QCoreApplication.translate("Settings", "Staff with degrees"),
+    "PERS_DEGREE": lambda: QCoreApplication.translate("Settings", "Staff with a degree"),
     "PERS_TRAINING_12M": lambda: QCoreApplication.translate(
-        "Settings", "Staff trained in the last 12 months"
+        "Settings", "Training records in the last 12 months"
     ),
-    "INFRA_AVAILABLE": lambda: QCoreApplication.translate("Settings", "Available assets"),
+    "INFRA_AVAILABLE": lambda: QCoreApplication.translate("Settings", "Available units"),
     "INFRA_MAINT_OVERDUE": lambda: QCoreApplication.translate(
-        "Settings", "Assets with overdue maintenance"
+        "Settings", "Units with overdue maintenance"
     ),
     "EX_LAST_PARTICIPANTS": lambda: QCoreApplication.translate(
-        "Settings", "Participants in the last exercise"
+        "Settings", "Participants in the latest exercise"
     ),
     "EX_LAST_COUNTRIES": lambda: QCoreApplication.translate(
-        "Settings", "Countries in the last exercise"
+        "Settings", "Countries in the latest exercise"
     ),
     "EX_DAYS_SINCE_LAST": lambda: QCoreApplication.translate(
-        "Settings", "Days since the last exercise"
+        "Settings", "Days since the latest exercise"
     ),
     "BUD_EXEC_RATE": lambda: QCoreApplication.translate("Settings", "Budget execution rate"),
 }
@@ -135,7 +144,7 @@ INDICATOR_CODES: tuple[str, ...] = tuple(_INDICATOR_LABELS)
 
 _UNIT_LABELS: dict[str, Callable[[], str]] = {
     "COUNT": lambda: QCoreApplication.translate("Settings", "Count"),
-    "RATIO": lambda: QCoreApplication.translate("Settings", "Ratio"),
+    "RATIO": lambda: QCoreApplication.translate("Settings", "Percent"),
     "CURRENCY": lambda: QCoreApplication.translate("Settings", "Amount of money"),
     "DAYS": lambda: QCoreApplication.translate("Settings", "Days"),
 }
@@ -196,15 +205,38 @@ def group_label(code: str) -> str:
     return label_for(_GROUP_LABELS, code)
 
 
+_PLACEHOLDER = re.compile(r"%([1-9])")
+
+
+def fill_placeholders(text: str, *values: str) -> str:
+    """Replace ``%1``..``%9`` by ``values`` in ONE pass (a translation may reorder them).
+
+    A value that itself contains ``%2`` is inserted as it is, never replaced again.
+    """
+
+    def substitute(match: re.Match[str]) -> str:
+        position = int(match.group(1)) - 1
+        return values[position] if position < len(values) else match.group(0)
+
+    return _PLACEHOLDER.sub(substitute, text)
+
+
 def dimension_text(dimension: str) -> str:
     """An encoded dimension (``key=value;key=value``) with translated keys; values unchanged."""
     if not dimension:
         return QCoreApplication.translate("Settings", "No dimension")
-    parts: list[str] = []
-    for part in dimension.split(";"):
+    text = ""
+    for position, part in enumerate(dimension.split(";")):
         key, separator, value = part.partition("=")
+        shown = part
         if separator:
-            parts.append(f"{label_for(_DIMENSION_KEY_LABELS, key)}: {value}")
+            shown = fill_placeholders(
+                QCoreApplication.translate("Settings", "%1: %2"),
+                label_for(_DIMENSION_KEY_LABELS, key),
+                value,
+            )
+        if position == 0:
+            text = shown
         else:
-            parts.append(part)
-    return "; ".join(parts)
+            text = fill_placeholders(QCoreApplication.translate("Settings", "%1; %2"), text, shown)
+    return text

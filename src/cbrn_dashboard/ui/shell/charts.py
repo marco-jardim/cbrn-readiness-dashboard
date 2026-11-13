@@ -17,13 +17,16 @@ What it offers:
   and :class:`ChartView` (the widget pages use; it shows a translated "No data" text instead of
   an empty chart).
 
-Charts are secondary: every number drawn here also appears in a tile or a table (D23). ``None``
-values are drawn as 0 but stay ``None`` in the data. Titles, categories, series names and the unit
-are already-translated or data strings supplied by the caller; the only text of this module that
-needs a translation is the "No data" message.
+Charts are secondary: every number drawn here also appears in a tile or a table (D23). A ``None``
+value (not recorded) is NOT drawn as a bar (its bar has no height) and the chart says so: the
+legend entry of the bar set names the categories that are not recorded, and :func:`read_back`
+returns ``None`` for them. Titles, categories, series names and the unit are already-translated or
+data strings supplied by the caller; the texts of this module that need a translation are the
+"No data" message and the "not recorded" note of a legend entry.
 """
 
 import math
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -35,7 +38,7 @@ from PySide6.QtCharts import (
     QChartView,
     QValueAxis,
 )
-from PySide6.QtCore import QCoreApplication, QEvent, QRectF, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QLocale, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsScene, QLabel, QVBoxLayout, QWidget
 from shiboken6 import isValid
@@ -65,6 +68,10 @@ PALETTE: tuple[str, ...] = (
 
 #: The property the pseudo-locale walker looks for: the widget's own texts are data.
 _DATA_PROPERTY = "i18nData"
+#: The property of a bar set that lists (comma separated) the positions of its missing values.
+_MISSING_PROPERTY = "missingValues"
+
+_PLACEHOLDER = re.compile(r"%([1-9])")
 
 _MAX_TICK_INTERVALS = 6
 _STEP_FACTORS: tuple[float, ...] = (0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0)
@@ -83,7 +90,7 @@ class ChartKind(StrEnum):
 
 @dataclass(frozen=True)
 class ChartSeries:
-    """One named row of values, one per category (``None``: no value, drawn as 0)."""
+    """One named row of values, one per category (``None``: not recorded, no bar is drawn)."""
 
     name: str
     values: tuple[float | None, ...]
@@ -151,11 +158,35 @@ def _nice_axis(maximum: float) -> tuple[float, int, int]:
 
 
 def _drawn(value: float | None) -> float:
+    """The height of a bar: a value that is not recorded has none."""
     return 0.0 if value is None else float(value)
 
 
-def _bar_set(label: str, values: tuple[float | None, ...], index: int) -> QBarSet:
-    bar_set = QBarSet(label)
+def _fill(text: str, *values: str) -> str:
+    """Replace ``%1``..``%9`` by ``values`` in ONE pass (a translation may reorder them)."""
+
+    def substitute(match: re.Match[str]) -> str:
+        position = int(match.group(1)) - 1
+        return values[position] if position < len(values) else match.group(0)
+
+    return _PLACEHOLDER.sub(substitute, text)
+
+
+def _legend_label(name: str, categories: tuple[str, ...], missing: list[int]) -> str:
+    """The name of a bar set; with missing values it also names the categories not recorded."""
+    if not missing:
+        return name
+    note = QCoreApplication.translate("Shell", "%1 (not recorded: %2)")
+    return _fill(note, name, ", ".join(categories[position] for position in missing))
+
+
+def _bar_set(
+    label: str, values: tuple[float | None, ...], index: int, categories: tuple[str, ...]
+) -> QBarSet:
+    missing = [position for position, value in enumerate(values) if value is None]
+    bar_set = QBarSet(_legend_label(label, categories, missing))
+    if missing:
+        bar_set.setProperty(_MISSING_PROPERTY, ",".join(str(position) for position in missing))
     bar_set.append([_drawn(value) for value in values])
     colour = QColor(PALETTE[index % len(PALETTE)])
     bar_set.setBrush(QBrush(colour))
@@ -166,16 +197,24 @@ def _bar_set(label: str, values: tuple[float | None, ...], index: int) -> QBarSe
 # --------------------------------------------------------------------------- the chart
 
 
-def build_chart(data: ChartData) -> QChart:
-    """A bar chart (one ``QBarSeries``); ``GROUPED_BAR`` gets one bar set per series."""
+def build_chart(data: ChartData, *, locale: QLocale | None = None) -> QChart:
+    """A bar chart (one ``QBarSeries``); ``GROUPED_BAR`` gets one bar set per series.
+
+    The axis numbers follow ``locale`` (the application's default locale, which the translator
+    manager sets to the active language, when not given).
+    """
     chart = QChart()
     chart.setAnimationOptions(QChart.AnimationOption.NoAnimation)
     chart.setBackgroundBrush(QBrush(QColor("#FFFFFF")))
     chart.setTitle(data.title)
+    chart.setLocale(QLocale() if locale is None else locale)
+    chart.setLocalizeNumbers(True)
 
     series = QBarSeries()
+    any_missing = False
     for index, row in enumerate(data.series):
-        series.append(_bar_set(row.name, row.values, index))
+        series.append(_bar_set(row.name, row.values, index, data.categories))
+        any_missing = any_missing or any(value is None for value in row.values)
     chart.addSeries(series)
 
     category_axis = QBarCategoryAxis()
@@ -194,17 +233,29 @@ def build_chart(data: ChartData) -> QChart:
     series.attachAxis(value_axis)
 
     legend = chart.legend()
-    legend.setVisible(data.kind is ChartKind.GROUPED_BAR)
+    # The legend also carries the "not recorded" note, so it is shown whenever a value is missing.
+    legend.setVisible(data.kind is ChartKind.GROUPED_BAR or any_missing)
     legend.setAlignment(Qt.AlignmentFlag.AlignBottom)
     return chart
 
 
+def _missing_positions(bar_set: QBarSet) -> set[int]:
+    raw = bar_set.property(_MISSING_PROPERTY)
+    if not isinstance(raw, str):
+        return set()
+    return {int(part) for part in raw.split(",") if part.isdigit()}
+
+
 def read_back(
     chart: QChart,
-) -> tuple[tuple[str, ...], tuple[tuple[str, tuple[float, ...]], ...]]:
-    """The categories and, per bar set, ``(label, values)`` as actually stored in ``chart``."""
+) -> tuple[tuple[str, ...], tuple[tuple[str, tuple[float | None, ...]], ...]]:
+    """The categories and, per bar set, ``(label, values)`` as actually stored in ``chart``.
+
+    A value that was not recorded (``None`` in the data) is ``None`` here too; its bar has no
+    height and the label names the category.
+    """
     categories: tuple[str, ...] = ()
-    bar_sets: list[tuple[str, tuple[float, ...]]] = []
+    bar_sets: list[tuple[str, tuple[float | None, ...]]] = []
     for series in chart.series():
         if not isinstance(series, QBarSeries):
             continue
@@ -212,7 +263,11 @@ def read_back(
             if isinstance(axis, QBarCategoryAxis):
                 categories = tuple(axis.categories())
         for bar_set in series.barSets():
-            values = tuple(bar_set.at(i) for i in range(bar_set.count()))
+            missing = _missing_positions(bar_set)
+            values = tuple(
+                None if position in missing else bar_set.at(position)
+                for position in range(bar_set.count())
+            )
             bar_sets.append((bar_set.label(), values))
     return categories, tuple(bar_sets)
 
@@ -221,10 +276,13 @@ def _no_data_text() -> str:
     return QCoreApplication.translate("Shell", "No data")
 
 
-def render_to_image(data: ChartData, width: int, height: int) -> QImage:
+def render_to_image(
+    data: ChartData, width: int, height: int, *, locale: QLocale | None = None
+) -> QImage:
     """Render ``data`` offscreen (no window) to a white ``width`` x ``height`` image.
 
-    Empty data renders the translated "No data" text, centred. Used for PDFs (T8.6).
+    Empty data renders the translated "No data" text, centred. The axis numbers follow ``locale``
+    (the application's default locale when not given). Used for PDFs (T8.6).
     """
     if width <= 0 or height <= 0:
         msg = "the image size must be positive"
@@ -241,7 +299,7 @@ def render_to_image(data: ChartData, width: int, height: int) -> QImage:
             painter.drawText(target, int(Qt.AlignmentFlag.AlignCenter), _no_data_text())
         else:
             scene = QGraphicsScene()
-            chart = build_chart(data)
+            chart = build_chart(data, locale=locale)
             scene.addItem(chart)  # the scene owns the chart from here on
             chart.setGeometry(target)
             scene.setSceneRect(target)
@@ -308,8 +366,11 @@ class ChartView(QWidget):
         return None if self._data.is_empty else self._chart
 
     def retranslate(self) -> None:
-        """Apply the "No data" text in the current language."""
+        """Apply the "No data" text and the number locale of the current language."""
         self._label.setText(_no_data_text())
+        if self._chart is not None and isValid(self._chart):
+            self._chart.setLocale(QLocale())
+            self._chart.setLocalizeNumbers(True)
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)

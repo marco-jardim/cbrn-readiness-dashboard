@@ -219,6 +219,9 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
         "Infrastructure", "The currency code is not valid."
     ),
     "INVALID_TEXT": lambda: QCoreApplication.translate("Infrastructure", "The text is not valid."),
+    "CORRUPT_SETTING": lambda: QCoreApplication.translate(
+        "Infrastructure", "A stored setting cannot be read."
+    ),
 }
 
 for _config_code in CONFIG_ERROR_CODES:

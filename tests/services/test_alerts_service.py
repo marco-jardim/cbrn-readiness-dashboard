@@ -19,9 +19,8 @@ from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain import alerts as rules
 from cbrn_dashboard.domain.alerts import SEVERITY_OF, Alert, AlertKind, Severity, SubjectKind
 from cbrn_dashboard.domain.config import ReadinessConfig
-from cbrn_dashboard.domain.indicators import Module
+from cbrn_dashboard.domain.indicators import IndicatorReading, Module
 from cbrn_dashboard.domain.infrastructure import AssetStatus, MaintenanceKind
-from cbrn_dashboard.domain.registry import build_registry
 from cbrn_dashboard.services.alerts import AlertService
 from cbrn_dashboard.services.budget import BudgetService
 from cbrn_dashboard.services.exercises import ExercisesService
@@ -152,17 +151,12 @@ def stack(bare: Stack) -> Stack:
 
 
 def _set_indicator_targets(stack: Stack) -> None:
-    """A WARNING on PERS_CERT_VALID (level A) and a CRITICAL on INFRA_MAINT_OVERDUE."""
-    reading = next(
-        r
-        for r in stack.indicators.evaluate(AS_OF)
-        if (r.code, r.dimension) == (CERT_VALID, LEVEL_A)
-    )
-    assert reading.value is not None
-    value = reading.value
-    stack.indicators.set_target(
-        CERT_VALID, LEVEL_A, warning_value=value + 1, critical_value=value - 1
-    )
+    """A WARNING on PERS_CERT_VALID (level A) and a CRITICAL on INFRA_MAINT_OVERDUE.
+
+    On AS_OF two people hold a valid level A certificate (DEMO-P002 and DEMO-P003; DEMO-P001's has
+    expired and DEMO-P004 is deactivated), so the targets 3 / 1 make 2 a warning.
+    """
+    stack.indicators.set_target(CERT_VALID, LEVEL_A, warning_value=3, critical_value=1)
     stack.indicators.set_target(MAINT_OVERDUE, TYPE_DIM, warning_value=0, critical_value=0)
 
 
@@ -179,25 +173,6 @@ def _refs(alerts: Iterable[Alert]) -> list[tuple[AlertKind, str]]:
 
 def _of_kind(alerts: Iterable[Alert], kind: AlertKind) -> list[Alert]:
     return [a for a in alerts if a.kind is kind]
-
-
-def _direct(stack: Stack, as_of: date) -> list[Alert]:
-    """The domain ``all_alerts`` computed on the services' inputs, without the alert service."""
-    people = stack.personnel.alert_inputs()
-    infra = stack.infrastructure.alert_inputs()
-    return rules.all_alerts(
-        staff=people.staff,
-        certs=people.certificates,
-        personnel_rules=people.rules,
-        assets=infra.assets,
-        asset_types=infra.types,
-        status_events=infra.status_events,
-        maintenance=infra.maintenance,
-        infrastructure_rules=infra.rules,
-        readings=stack.indicators.evaluate(as_of),
-        registry=build_registry(),
-        d=as_of,
-    )
 
 
 def _save_config(db: DatabaseConnection, clock: FixedClock, config: ReadinessConfig) -> None:
@@ -263,8 +238,7 @@ def test_the_alerts_carry_the_subject_dates_and_numbers(full: Stack) -> None:
         None,
         LEVEL_A,
     )
-    assert warning.value is not None
-    assert warning.threshold == warning.value + 1
+    assert (warning.value, warning.threshold) == (2.0, 3.0)
 
     [critical] = _of_kind(alerts, AlertKind.INDICATOR_CRITICAL)
     assert (critical.module, critical.subject_ref, critical.dimension) == (
@@ -290,12 +264,45 @@ def test_alerts_are_sorted_by_severity_then_due_date(full: Stack) -> None:
     assert keys == sorted(keys)
 
 
-def test_the_service_result_equals_the_domain_result(stack: Stack) -> None:
-    assert stack.alerts.alerts(AS_OF) == _direct(stack, AS_OF)
+def test_the_alert_list_is_the_hand_worked_one(stack: Stack) -> None:
+    """P6-12: written out from section 5.5, not computed again by the rule functions."""
+    assert _refs(stack.alerts.alerts(AS_OF)) == [
+        (AlertKind.MAINT_OVERDUE, "DEMO-A001"),
+        (AlertKind.CERT_EXPIRED, "DEMO-P001"),
+        (AlertKind.MAINT_DUE_SOON, "DEMO-A002"),
+        (AlertKind.CERT_EXPIRING, "DEMO-P002"),
+        (AlertKind.MAINT_SCHEDULE_UNKNOWN, "DEMO-A003"),
+    ]
     _set_indicator_targets(stack)
-    for as_of in (date(2025, 5, 1), date(2026, 1, 5), AS_OF, date(2026, 12, 15)):
-        assert stack.alerts.alerts(as_of) == _direct(stack, as_of)
-    assert len(stack.alerts.alerts(AS_OF)) == 7
+    assert _refs(stack.alerts.alerts(AS_OF)) == [
+        (AlertKind.MAINT_OVERDUE, "DEMO-A001"),
+        (AlertKind.CERT_EXPIRED, "DEMO-P001"),
+        (AlertKind.INDICATOR_CRITICAL, MAINT_OVERDUE),
+        (AlertKind.MAINT_DUE_SOON, "DEMO-A002"),
+        (AlertKind.CERT_EXPIRING, "DEMO-P002"),
+        (AlertKind.INDICATOR_WARNING, CERT_VALID),
+        (AlertKind.MAINT_SCHEDULE_UNKNOWN, "DEMO-A003"),
+    ]
+
+
+def test_the_readings_of_the_caller_are_used_instead_of_a_second_evaluation(
+    full: Stack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P6-13: the dashboard passes the readings it just evaluated; none is evaluated again."""
+    readings = full.indicators.evaluate(AS_OF)
+    calls: list[date] = []
+
+    def counting(as_of: date) -> list[IndicatorReading]:
+        calls.append(as_of)
+        return readings
+
+    monkeypatch.setattr(full.indicators, "evaluate", counting)
+
+    counts = full.alerts.counts(AS_OF, readings=readings)
+
+    assert calls == []
+    assert dict(counts) == {Severity.CRITICAL: 3, Severity.WARNING: 3, Severity.INFO: 1}
+    assert len(full.alerts.alerts(AS_OF, readings=readings)) == 7
 
 
 def test_the_alerts_agree_with_the_pages_of_the_modules(full: Stack) -> None:
@@ -455,7 +462,6 @@ def test_deactivated_staff_and_retired_assets_give_no_alerts(stack: Stack) -> No
 def test_a_past_as_of_date_gives_the_alerts_of_that_date(full: Stack) -> None:
     past = date(2026, 1, 5)
     alerts = full.alerts.alerts(past)
-    assert alerts == _direct(full, past)
     [first] = [a for a in alerts if a.subject_ref == "DEMO-P001"]
     assert first.kind is AlertKind.CERT_EXPIRING  # valid until 2026-01-10: five days left
     assert first.days_remaining == 5

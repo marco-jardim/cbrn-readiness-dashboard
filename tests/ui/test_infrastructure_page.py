@@ -572,6 +572,64 @@ def test_the_a05_placeholder_badge_and_confirm_button(
     assert not section.confirm_button.isVisibleTo(section)
 
 
+def _corrupt_setting(context: AppContext) -> None:
+    """A stored setting that no longer validates (what a restored older backup can leave)."""
+    assert context.conn is not None
+    context.conn.execute(
+        "INSERT INTO setting (key, value_json) VALUES (?, ?)",
+        ("config.cert_warning_days", "not json"),
+    )
+
+
+def _repair_setting(context: AppContext) -> None:
+    assert context.conn is not None
+    context.conn.execute("DELETE FROM setting WHERE key = ?", ("config.cert_warning_days",))
+
+
+def test_an_unreadable_setting_is_explained_and_the_switch_waits_for_the_repair(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    section = InfrastructureSettingsSection(app_context)
+    qtbot.addWidget(section)
+    assert section.config_error_label.isHidden()
+    assert section.degraded_check.isEnabled()
+
+    _corrupt_setting(app_context)
+    app_context.notify_data_changed()  # a raising slot would fail the test
+
+    assert not section.config_error_label.isHidden()
+    assert section.config_error_label.text() == "A stored setting cannot be read."
+    assert not section.degraded_check.isEnabled()
+    assert not section.confirm_action.isEnabled()
+    assert section.badge_label.isHidden()
+    assert section.confirm_button.isHidden()
+    assert fake_prompts.calls == []
+
+    app_context.translator_manager.set_language("pt_BR")
+    portuguese = "Uma configura\u00e7\u00e3o armazenada n\u00e3o pode ser lida."
+    qtbot.waitUntil(lambda: section.config_error_label.text() == portuguese)
+
+    _repair_setting(app_context)
+    app_context.notify_data_changed()
+
+    assert section.config_error_label.isHidden()
+    assert section.degraded_check.isEnabled()
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_unreadable_setting_message_is_translated_in_the_pseudo_locale(
+    pseudo_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    pseudo_context.translator_manager.set_language(lang)
+    section = InfrastructureSettingsSection(pseudo_context)
+    qtbot.addWidget(section)
+    _corrupt_setting(pseudo_context)
+    pseudo_context.notify_data_changed()
+    assert not section.config_error_label.isHidden()
+    assert section.config_error_label.text() != "A stored setting cannot be read."
+    assert_fully_translated(section, lang)
+
+
 def test_built_in_types_cannot_be_deleted(
     app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
 ) -> None:

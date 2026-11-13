@@ -319,5 +319,17 @@
         <source>Snapshot recorded for %1 (origin: %2).</source>
         <translation type="unfinished">Instantâneo registrado para %1 (origem: %2).</translation>
     </message>
+    <message>
+        <source>A stored setting cannot be read.</source>
+        <translation type="unfinished">Não foi possível ler uma configuração armazenada.</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation type="unfinished">%1: %2</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation type="unfinished">%1, %2</translation>
+    </message>
 </context>
 </TS>

@@ -8,7 +8,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from PySide6.QtCore import QCoreApplication
+from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QLabel, QWidget
 from pytestqt.qtbot import QtBot
@@ -19,8 +19,10 @@ from cbrn_dashboard.domain.registry import build_registry
 from cbrn_dashboard.services import config as config_module
 from cbrn_dashboard.services import errors as errors_module
 from cbrn_dashboard.services import indicators as indicators_module
+from cbrn_dashboard.services.budget import EntryInput
 from cbrn_dashboard.services.config import CONFIG_ERROR_CODES, ConfigService
 from cbrn_dashboard.services.indicators import IndicatorService
+from cbrn_dashboard.ui.dashboard import labels as dashboard_labels
 from cbrn_dashboard.ui.settings import page as page_module
 from cbrn_dashboard.ui.settings.dialogs import TargetDialog
 from cbrn_dashboard.ui.settings.labels import (
@@ -444,7 +446,7 @@ def test_the_dialog_stores_a_target_and_the_table_and_badge_follow(
     assert (stored.warning_value, stored.critical_value, stored.enabled) == (10.0, 5.0, True)
     assert _log_rows(app_context) > rows
     assert _cells(section, 0) == [
-        "Valid certificates",
+        "Staff with a valid certificate",
         "Level: A",
         "Count",
         "10",
@@ -563,21 +565,23 @@ def test_thresholds_are_typed_and_shown_in_the_active_language(
     qtbot.addWidget(section)
     dialog = TargetDialog(app_context)
     qtbot.addWidget(dialog)
-    _fill(dialog, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA", "0,9", "0,7")
+    # a ratio target is typed as PERCENT (90 = 90 %) and stored as a ratio
+    _fill(dialog, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA", "90", "70,5")
     dialog.accept()
     stored = _indicators(app_context).get_target("BUD_EXEC_RATE", "currency=BRL;source=DIRSA")
-    assert (stored.warning_value, stored.critical_value) == (0.9, 0.7)
+    assert (stored.warning_value, stored.critical_value) == (0.9, 0.705)
     assert _cells(section, 0) == [
         "Taxa de execução orçamentária",
         "Moeda: BRL; Fonte: DIRSA",
-        "Razão",
-        "0,9",
-        "0,7",
+        "Porcentagem",
+        "90,0%",
+        "70,5%",
         "Ativado",
     ]
     app_context.translator_manager.set_language("en_US")
-    qtbot.waitUntil(lambda: section.model.index(0, 3).data() == "0.9")
+    qtbot.waitUntil(lambda: section.model.index(0, 3).data() == "90.0%")
     assert _cells(section, 0)[0] == "Budget execution rate"
+    assert section.model.index(0, 4).data() == "70.5%"
 
 
 def test_an_indicator_without_dimension_keys_stores_the_empty_dimension(
@@ -622,7 +626,7 @@ def test_a_target_can_be_switched_off_and_on_and_deleted(
     section.delete_action.trigger()
     (call,) = fake_prompts.calls_of("confirm")
     assert call.title == "Delete target"
-    assert "Valid certificates" in call.text
+    assert call.text == "Delete the target of Staff with a valid certificate (Level: A)?"
     assert len(_indicators(app_context).list_targets()) == 1
     fake_prompts.script("confirm", True)
     section.delete_action.trigger()
@@ -920,3 +924,256 @@ def test_all_error_codes_list_the_codes_of_the_services() -> None:
     assert {"EMPTY", "INVALID_NUMBER", "AMBIGUOUS_NUMBER", "TOO_LARGE"} <= typed
     assert {"EMPTY", "INVALID_NUMBER", "AMBIGUOUS_NUMBER", "TOO_LARGE"} <= mapped
     assert len(mapped) == len(ALL_ERROR_CODES)
+    assert "TARGET_OUT_OF_RANGE" in own
+
+
+# --------------------------------------------------------------------------- review fixes P6-xx
+
+
+def _corrupt_setting(context: AppContext) -> None:
+    """A stored setting that no longer validates (what a restored older backup can leave)."""
+    assert context.conn is not None
+    context.conn.execute(
+        "INSERT INTO setting (key, value_json) VALUES (?, ?)",
+        ("config.cert_warning_days", "not json"),
+    )
+
+
+def test_an_unreadable_setting_is_explained_in_every_section(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    """P6-01: the sections only greyed out; the translated message was never shown."""
+    general = GeneralSection(app_context)
+    alerts = AlertsSection(app_context)
+    targets = TargetsSection(app_context)
+    sections = (general, alerts, targets)
+    for section in sections:
+        qtbot.addWidget(section)
+        assert section.problem.label.isHidden()
+
+    _corrupt_setting(app_context)
+    app_context.notify_data_changed()
+
+    for section in sections:
+        assert not section.problem.label.isHidden()
+        assert section.problem.label.text() == "A stored setting cannot be read."
+    assert not general.operator_edit.isEnabled()
+    assert not alerts.cert_edit.isEnabled()
+    assert fake_prompts.calls == []
+
+    app_context.translator_manager.set_language("pt_BR")
+    portuguese = "N\u00e3o foi poss\u00edvel ler uma configura\u00e7\u00e3o armazenada."
+    for section in sections:
+        qtbot.waitUntil(lambda section=section: section.problem.label.text() == portuguese)
+    app_context.translator_manager.set_language("es_ES")
+    for section in sections:
+        qtbot.waitUntil(
+            lambda section=section: (
+                section.problem.label.text() == "No se puede leer un ajuste almacenado."
+            )
+        )
+
+    assert app_context.conn is not None  # repaired: the message goes and the forms work again
+    app_context.conn.execute("DELETE FROM setting WHERE key = 'config.cert_warning_days'")
+    app_context.notify_data_changed()
+    for section in sections:
+        assert section.problem.label.isHidden()
+    assert general.operator_edit.isEnabled()
+
+
+def test_saving_one_section_keeps_the_unsaved_typing_of_the_others(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    """P6-10: every form reloaded on any data_changed, so a save wiped the typing elsewhere."""
+    general = GeneralSection(app_context)
+    alerts = AlertsSection(app_context)
+    qtbot.addWidget(general)
+    qtbot.addWidget(alerts)
+    assert not general.is_dirty()
+    general.operator_edit.setText("typed, not saved")
+    assert general.is_dirty()
+
+    alerts.cert_edit.setText("120")
+    alerts.save()  # data_changed is announced to every form
+
+    assert general.operator_edit.text() == "typed, not saved"
+    assert general.is_dirty()
+    assert alerts.cert_edit.text() == "120"
+    assert not alerts.is_dirty()  # saved: clean again
+
+    config = _config(app_context)
+    config.save(config.load().with_changes(maintenance_warning_days=45))
+    app_context.notify_data_changed()
+    assert alerts.maintenance_edit.text() == "45"  # a clean form follows the stored value
+    alerts.cert_edit.setText("77")
+    config.save(config.load().with_changes(maintenance_warning_days=50))
+    app_context.notify_data_changed()
+    assert alerts.cert_edit.text() == "77"  # a dirty form keeps what was typed
+    assert alerts.maintenance_edit.text() == "45"
+
+    general.save()
+    assert _config(app_context).load().operator_label == "typed, not saved"
+    assert not general.is_dirty()
+
+
+def test_an_untouched_form_survives_a_language_switch_as_clean(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    config = _config(app_context)
+    config.save(config.load().with_changes(cert_warning_days=1500))
+    alerts = AlertsSection(app_context)
+    qtbot.addWidget(alerts)
+    assert alerts.cert_edit.text() == "1,500"
+
+    app_context.translator_manager.set_language("pt_BR")
+    qtbot.waitUntil(lambda: alerts.cert_edit.text() == "1.500")
+
+    assert not alerts.is_dirty()  # reformatted, not edited
+
+
+def test_a_target_whose_dimension_has_no_value_is_marked_not_in_use(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    """P6-09: "level=a" has the right structure, is stored, and never matches a reading."""
+    _put_target(app_context, "PERS_CERT_VALID", "level=A", 10, 5)
+    _put_target(app_context, "PERS_CERT_VALID", "level=a", 10, 5)
+    section = TargetsSection(app_context)
+    qtbot.addWidget(section)
+
+    def uses() -> list[object]:
+        return [section.model.index(row, 6).data() for row in range(section.model.rowCount())]
+
+    assert section.model.headerData(6, Qt.Orientation.Horizontal) == "Use"
+    assert uses() == ["In use", "Not in use"]
+    app_context.translator_manager.set_language("pt_BR")
+    qtbot.waitUntil(lambda: uses() == ["Em uso", "Fora de uso"])
+    app_context.translator_manager.set_language("es_ES")
+    qtbot.waitUntil(lambda: uses() == ["En uso", "Fuera de uso"])
+
+
+def test_the_dimensions_in_use_follow_the_as_of_date(app_context: AppContext, qtbot: QtBot) -> None:
+    _put_target(app_context, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA", 0.9, 0.6)
+    section = TargetsSection(app_context)
+    qtbot.addWidget(section)
+    assert section.model.index(0, 6).data() == "Not in use"  # no budget entry in this database
+
+    budget = app_context.services.budget
+    assert budget is not None
+    source = budget.get_source_by_code("DIRSA")
+    assert source is not None
+    budget.create_entry(
+        EntryInput(
+            fiscal_year=app_context.as_of.year,
+            source_id=source.id,
+            allocated_minor=1000,
+            currency="BRL",
+        )
+    )
+    app_context.set_as_of(app_context.as_of)  # the signal of a new date is enough
+    app_context.notify_data_changed()
+
+    assert section.model.index(0, 6).data() == "In use"
+
+
+@pytest.mark.parametrize(
+    ("lang", "warning", "critical", "cells"),
+    [
+        ("en_US", "90", "60.5", ("90.0%", "60.5%")),
+        ("pt_BR", "90", "60,5", ("90,0%", "60,5%")),
+        ("es_ES", "90", "60,5", ("90,0\xa0%", "60,5\xa0%")),
+    ],
+)
+def test_a_ratio_target_is_typed_and_listed_as_percent(
+    app_context: AppContext,
+    qtbot: QtBot,
+    lang: str,
+    warning: str,
+    critical: str,
+    cells: tuple[str, str],
+) -> None:
+    """P6-02: 90 means 90 % and is stored as 0.9; the dialog shows it as typed again."""
+    app_context.translator_manager.set_language(lang)
+    dialog = TargetDialog(app_context)
+    qtbot.addWidget(dialog)
+    _fill(dialog, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA", warning, critical)
+
+    dialog.accept()
+
+    stored = _indicators(app_context).get_target("BUD_EXEC_RATE", "currency=BRL;source=DIRSA")
+    assert (stored.warning_value, stored.critical_value) == (0.9, 0.605)
+    section = TargetsSection(app_context)
+    qtbot.addWidget(section)
+    assert (section.model.index(0, 3).data(), section.model.index(0, 4).data()) == cells
+    section.view.selectRow(0)
+    section.edit_target()
+    edit = _open_dialog(section)
+    assert (edit.warning_edit.text(), edit.critical_edit.text()) == (warning, critical)
+
+
+@pytest.mark.parametrize("typed", ["9000", "-5", "1000,5"])
+def test_a_percentage_out_of_range_is_refused_and_nothing_is_written(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot, typed: str
+) -> None:
+    app_context.translator_manager.set_language("pt_BR")
+    dialog = TargetDialog(app_context)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    _fill(dialog, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA", typed, "0")
+    rows = _log_rows(app_context)
+
+    dialog.accept()
+
+    assert _warnings(fake_prompts) == ["A porcentagem deve estar entre 0% e 1000%."]
+    assert error_label("TARGET_OUT_OF_RANGE") == "A porcentagem deve estar entre 0% e 1000%."
+    assert _indicators(app_context).list_targets() == []
+    assert _log_rows(app_context) == rows
+    assert dialog.isVisible()
+
+
+def test_the_unit_of_a_ratio_indicator_is_percent(app_context: AppContext, qtbot: QtBot) -> None:
+    dialog = TargetDialog(app_context)
+    qtbot.addWidget(dialog)
+    dialog.indicator_combo.setCurrentIndex(dialog.indicator_combo.findData("BUD_EXEC_RATE"))
+    assert dialog.unit_value.text() == "Percent"
+    assert unit_label("RATIO") == "Percent"
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_new_texts_are_translated_in_the_pseudo_locale(
+    pseudo_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    """The "Not in use" mark, the percent unit and the unreadable-setting message."""
+    pseudo_context.translator_manager.set_language(lang)
+    _put_target(pseudo_context, "PERS_CERT_VALID", "level=a", 10, 5)
+    _put_target(pseudo_context, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA", 0.9, 0.7)
+    page = SettingsPage(pseudo_context)
+    qtbot.addWidget(page)
+    targets = page.section_widget("settings.targets")
+    assert isinstance(targets, TargetsSection)
+    assert targets.model.rowCount() == 2  # not vacuous: the "Use" column has two kinds of cell
+    assert_fully_translated(page, lang)
+
+    _corrupt_setting(pseudo_context)
+    pseudo_context.notify_data_changed()
+    assert not targets.problem.label.isHidden()
+    assert_fully_translated(page, lang)
+
+
+def test_joined_texts_are_filled_in_one_pass(app_context: AppContext) -> None:
+    """P6-11: a value that looks like a placeholder is never replaced again."""
+    assert dimension_text("level=%2;status=%1") == "Level: %2; Status: %1"
+    assert dashboard_labels.join_texts(["%2", "%1", "c"]) == "%2, %1, c"
+    assert dashboard_labels.join_texts([]) == ""
+    app_context.translator_manager.set_language("pt_BR")
+    assert dimension_text("level=%2;status=%1") == "N\u00edvel: %2; Situa\u00e7\u00e3o: %1"
+
+
+def test_settings_and_dashboard_name_every_indicator_alike(app_context: AppContext) -> None:
+    """P6-07: two catalogues, one wording (PLAN.md 5.4)."""
+    assert set(dashboard_labels.INDICATOR_CODES) == set(INDICATOR_CODES)
+    app_context.translator_manager.set_language("en_US")
+    for code in INDICATOR_CODES:
+        assert indicator_label(code) == dashboard_labels.indicator_name(code), code
+    assert indicator_label("PERS_TRAINING_12M") == "Training records in the last 12 months"
+    assert indicator_label("PERS_CERT_VALID") == "Staff with a valid certificate"
+    assert indicator_label("INFRA_AVAILABLE") == "Available units"

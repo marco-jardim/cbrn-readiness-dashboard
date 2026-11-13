@@ -19,10 +19,16 @@ from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QWidget
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard.domain.alerts import Severity
-from cbrn_dashboard.domain.indicators import Direction, IndicatorStatus, Module, UnitKind
+from cbrn_dashboard.domain.indicators import (
+    Direction,
+    IndicatorReading,
+    IndicatorStatus,
+    Module,
+    UnitKind,
+)
 from cbrn_dashboard.domain.infrastructure import AssetStatus, MaintenanceKind
 from cbrn_dashboard.services.budget import EntryInput
-from cbrn_dashboard.services.dashboard import ChartSpec, Tile
+from cbrn_dashboard.services.dashboard import ChartSpec, DashboardData, Tile
 from cbrn_dashboard.services.exercises import EditionInput
 from cbrn_dashboard.services.infrastructure import AssetInput, AssetTypeInput
 from cbrn_dashboard.services.personnel import (
@@ -501,9 +507,12 @@ def test_the_chart_adapter_really_stores_the_values(app_context: AppContext, qtb
     page = _page(app_context, qtbot)
     chart = _need(_panel(page, "personnel_valid_by_level").chart_view.chart())
     assert read_back(chart) == (("A", "B", "C"), (("Valid certificates", (3.0, 1.0, 0.0)),))
-    # a participant count that is not recorded is drawn as 0 but stays None in the data
+    # a participant count that is not recorded has no bar, stays None, and the legend says so
     exercises = _panel(page, "exercises_by_edition")
-    assert read_back(_need(exercises.chart_view.chart()))[1][0] == ("Participants", (40.0, 0.0))
+    assert read_back(_need(exercises.chart_view.chart()))[1] == (
+        ("Participants (not recorded: DEMO-EX-25)", (40.0, None)),
+        ("Countries", (3.0, 2.0)),
+    )
 
 
 def test_budget_charts_are_one_per_currency_and_never_mixed(
@@ -814,6 +823,108 @@ def test_a_closed_database_leaves_the_page_empty_and_a_language_switch_raises_no
     page.record_snapshot()  # nothing to call
 
 
+def _corrupt_setting(context: AppContext) -> None:
+    """A stored setting that no longer validates (what a restored older backup can leave)."""
+    assert context.conn is not None
+    context.conn.execute(
+        "INSERT INTO setting (key, value_json) VALUES (?, ?)",
+        ("config.cert_warning_days", "not json"),
+    )
+
+
+def test_an_unreadable_setting_is_explained_in_the_page_and_never_raises(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    """P6-01: every as-of change, data change and language switch used to raise from a slot."""
+    _seed(app_context)
+    page = _page(app_context, qtbot)
+    assert page.tile_widgets
+    assert page.empty_label.isHidden()
+
+    _corrupt_setting(app_context)
+    app_context.notify_data_changed()  # raised ServiceError(CORRUPT_SETTING) inside the slot
+    app_context.set_as_of(EARLIER)
+    assert not page.empty_label.isHidden()
+    assert page.empty_label.text() == "A stored setting cannot be read."
+    assert page.tile_widgets == []
+    assert page.chart_panels() == []
+    assert page.scroll_area.isHidden()
+    assert page.as_of_label.text() == "Readiness as of 06/15/2025"
+    assert fake_prompts.calls == []  # a message in the page, not a dialog
+
+    app_context.translator_manager.set_language("pt_BR")
+    portuguese = "N\u00e3o foi poss\u00edvel ler uma configura\u00e7\u00e3o armazenada."
+    qtbot.waitUntil(lambda: page.empty_label.text() == portuguese)
+    app_context.translator_manager.set_language("es_ES")
+    qtbot.waitUntil(lambda: page.empty_label.text() == "No se puede leer un ajuste almacenado.")
+
+    assert app_context.conn is not None  # repaired: the page shows the data again
+    app_context.conn.execute("DELETE FROM setting WHERE key = 'config.cert_warning_days'")
+    app_context.notify_data_changed()
+    assert page.empty_label.isHidden()
+    assert page.tile_widgets
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_unreadable_setting_message_is_translated_in_the_pseudo_locale(
+    pseudo_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    pseudo_context.translator_manager.set_language(lang)
+    page = _page(pseudo_context, qtbot)
+    _corrupt_setting(pseudo_context)
+
+    pseudo_context.notify_data_changed()
+
+    assert not page.empty_label.isHidden()
+    assert page.empty_label.text().startswith("\u27e6")  # a translated text, not a bare code
+    assert_fully_translated(page, lang)
+
+
+def test_a_language_switch_reads_the_services_once(
+    app_context: AppContext, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
+) -> None:
+    """P6-13: the signal and the posted LanguageChange event both used to read everything."""
+    _seed(app_context)
+    page = _page(app_context, qtbot)
+    service = _need(app_context.services.dashboard)
+    real = service.data
+    calls: list[date] = []
+
+    def counting(as_of: date) -> DashboardData:
+        calls.append(as_of)
+        return real(as_of)
+
+    monkeypatch.setattr(service, "data", counting)
+
+    app_context.translator_manager.set_language("pt_BR")
+    qtbot.waitUntil(lambda: page.as_of_label.text() == "Prontid\u00e3o em 05/03/2026")
+    qtbot.wait(100)  # the posted LanguageChange event is delivered as well
+
+    assert calls == [AS_OF]
+    assert _tile(page, "PERS_CERT_VALID", "level=B").status_label.text() == "Cr\u00edtico"
+
+
+def test_the_dashboard_evaluates_the_indicators_once(
+    app_context: AppContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P6-13: the tiles and the alert counts share one evaluation."""
+    _seed(app_context)
+    indicators = _need(app_context.services.indicators)
+    real = indicators.evaluate
+    calls: list[date] = []
+
+    def counting(as_of: date) -> list[IndicatorReading]:
+        calls.append(as_of)
+        return real(as_of)
+
+    monkeypatch.setattr(indicators, "evaluate", counting)
+
+    data = _need(app_context.services.dashboard).data(AS_OF)
+
+    assert calls == [AS_OF]
+    assert data.alert_counts[Severity.CRITICAL] == 3  # the counts are still right
+
+
 def test_the_factories_work_without_any_service(app_context: AppContext, qtbot: QtBot) -> None:
     for name in (
         "personnel",
@@ -1018,7 +1129,7 @@ def test_an_unknown_code_is_shown_as_itself(app_context: AppContext) -> None:
         "no_such_type"
     )
     assert labels.category_label("budget_BRL", "NO_SUCH_SOURCE", names) == "NO_SUCH_SOURCE"
-    assert labels.dimension_text("X", {"foo": "bar"}, names) == "foo=bar"
+    assert labels.dimension_text("X", {"foo": "bar"}, names) == "foo: bar"
     assert labels.dimension_text("X", {"type": "no_such_type"}, names) == "Type no_such_type"
     assert labels.dimension_text("X", {"source": "NO_SUCH"}, names) == "Source NO_SUCH"
     assert labels.dimension_text("X", {}, names) == ""

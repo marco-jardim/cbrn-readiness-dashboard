@@ -39,6 +39,7 @@ from typing import Final
 
 from cbrn_dashboard.clock import Clock
 from cbrn_dashboard.domain import personnel as rules
+from cbrn_dashboard.domain.config import ConfigError
 from cbrn_dashboard.domain.dates import InvalidDateError, format_iso_date, parse_iso_date
 from cbrn_dashboard.domain.indicators import IndicatorValue, encode_dimension
 from cbrn_dashboard.domain.personnel import (
@@ -51,6 +52,7 @@ from cbrn_dashboard.domain.personnel import (
     StaffLevelRow,
     StaffMember,
 )
+from cbrn_dashboard.services.config import CORRUPT_SETTING
 from cbrn_dashboard.services.errors import (
     CODE_IMMUTABLE,
     INVALID_CODE,
@@ -634,7 +636,10 @@ class PersonnelService:
 
     def _rules(self) -> PersonnelRules:
         """The rules object, built from the stored configuration on each call."""
-        config = settings_repo.load_config(self._conn)
+        try:
+            config = settings_repo.load_config(self._conn)
+        except ConfigError as exc:
+            raise ServiceError(CORRUPT_SETTING, exc.field or None) from exc
         return PersonnelRules(
             cert_warning_days=config.cert_warning_days,
             hierarchy_enabled=config.ppe_hierarchy_enabled,

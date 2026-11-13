@@ -11,12 +11,12 @@ cannot disagree. A past as-of date gives the alerts of that date from the record
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import date
 
 from cbrn_dashboard.domain import alerts as rules
 from cbrn_dashboard.domain.alerts import Alert, Severity
-from cbrn_dashboard.domain.indicators import IndicatorRegistry, Module
+from cbrn_dashboard.domain.indicators import IndicatorReading, IndicatorRegistry, Module
 from cbrn_dashboard.services.indicators import IndicatorService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
@@ -38,8 +38,14 @@ class AlertService:
         self._infrastructure = infrastructure
         self._indicators = indicators
 
-    def alerts(self, as_of: date) -> list[Alert]:
-        """Every alert on ``as_of``: critical first, then by due date (undated last)."""
+    def alerts(
+        self, as_of: date, *, readings: Sequence[IndicatorReading] | None = None
+    ) -> list[Alert]:
+        """Every alert on ``as_of``: critical first, then by due date (undated last).
+
+        ``readings`` are the indicator readings of ``as_of`` when the caller has just evaluated
+        them (the dashboard does); without them they are evaluated here. They are never kept.
+        """
         people = self._personnel.alert_inputs()
         assets = self._infrastructure.alert_inputs()
         return rules.all_alerts(
@@ -51,7 +57,7 @@ class AlertService:
             status_events=assets.status_events,
             maintenance=assets.maintenance,
             infrastructure_rules=assets.rules,
-            readings=self._indicators.evaluate(as_of),
+            readings=self._indicators.evaluate(as_of) if readings is None else list(readings),
             registry=self._registry(),
             d=as_of,
         )
@@ -78,9 +84,14 @@ class AlertService:
             and (severity is None or alert.severity is severity)
         ]
 
-    def counts(self, as_of: date) -> Mapping[Severity, int]:
-        """The number of alerts per severity on ``as_of`` (always all three keys)."""
-        return rules.count_by_severity(self.alerts(as_of))
+    def counts(
+        self, as_of: date, *, readings: Sequence[IndicatorReading] | None = None
+    ) -> Mapping[Severity, int]:
+        """The number of alerts per severity on ``as_of`` (always all three keys).
+
+        ``readings`` as in :meth:`alerts`.
+        """
+        return rules.count_by_severity(self.alerts(as_of, readings=readings))
 
     def has_actionable(self, as_of: date) -> bool:
         """True when at least one alert on ``as_of`` is a warning or critical (not info only)."""

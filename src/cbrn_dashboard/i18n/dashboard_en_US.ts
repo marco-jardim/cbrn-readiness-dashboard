@@ -319,5 +319,17 @@
         <source>Snapshot recorded for %1 (origin: %2).</source>
         <translation>Snapshot recorded for %1 (origin: %2).</translation>
     </message>
+    <message>
+        <source>A stored setting cannot be read.</source>
+        <translation>A stored setting cannot be read.</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation>%1: %2</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
+    </message>
 </context>
 </TS>

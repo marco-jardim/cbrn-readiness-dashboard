@@ -5,6 +5,7 @@
     <name>Alerts</name>
     <message>
         <source>Critical</source>
+        <extracomment>A missing value in a message (data, not a translatable text).</extracomment>
         <translation type="unfinished">Crítico</translation>
     </message>
     <message>
@@ -73,6 +74,7 @@
     </message>
     <message>
         <source>Severity</source>
+        <extracomment>A missing value in a cell (data, not a translatable text). The column that shows the severity icon next to its text.</extracomment>
         <translation type="unfinished">Gravidade</translation>
     </message>
     <message>
@@ -109,6 +111,7 @@
     </message>
     <message>
         <source>Open record</source>
+        <extracomment>The data of the &quot;all&quot; entry of both filter combo boxes (never a module or severity code). Emitted with the registry key of the page to open when an alert is activated.</extracomment>
         <translation type="unfinished">Abrir registro</translation>
     </message>
     <message numerus="yes">
@@ -117,6 +120,15 @@
             <numerusform>%n alerta exibido</numerusform>
             <numerusform>%n alertas exibidos</numerusform>
         </translation>
+    </message>
+    <message>
+        <source>A stored setting cannot be read.</source>
+        <translation type="unfinished">Não foi possível ler uma configuração armazenada.</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <extracomment>The icon of each severity: the shapes differ (never colour alone, D23). Every severity, module and alert-kind code (for the completeness tests).</extracomment>
+        <translation type="unfinished">%1 (%2)</translation>
     </message>
 </context>
 </TS>

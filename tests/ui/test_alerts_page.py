@@ -127,6 +127,55 @@ def pseudo_context(
 # --------------------------------------------------------------------------- the list
 
 
+def test_an_unreadable_setting_is_explained_in_the_page_and_never_raises(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    """P6-01: the real alert service raises CORRUPT_SETTING; the slots used to let it escape."""
+    assert app_context.services.alerts is not None
+    page = _page(app_context, qtbot)
+    assert page.empty_label.text() == "No alerts for this date."
+    assert app_context.conn is not None
+
+    app_context.conn.execute(
+        "INSERT INTO setting (key, value_json) VALUES (?, ?)",
+        ("config.maintenance_warning_days", "not json"),
+    )
+    app_context.notify_data_changed()  # a ServiceError inside the slot reached the crash dialog
+    app_context.set_as_of(date(2026, 3, 6))
+    assert not page.empty_label.isHidden()
+    assert page.empty_label.text() == "A stored setting cannot be read."
+    assert page.model.rowCount() == 0
+
+    app_context.translator_manager.set_language("pt_BR")
+    portuguese = "N\u00e3o foi poss\u00edvel ler uma configura\u00e7\u00e3o armazenada."
+    qtbot.waitUntil(lambda: page.empty_label.text() == portuguese)
+    app_context.translator_manager.set_language("es_ES")
+    qtbot.waitUntil(lambda: page.empty_label.text() == "No se puede leer un ajuste almacenado.")
+
+    app_context.conn.execute("DELETE FROM setting WHERE key = 'config.maintenance_warning_days'")
+    app_context.notify_data_changed()
+    assert page.empty_label.text() == "No hay alertas para esta fecha."
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_unreadable_setting_message_is_translated_in_the_pseudo_locale(
+    pseudo_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    pseudo_context.translator_manager.set_language(lang)
+    page = _page(pseudo_context, qtbot)
+    assert pseudo_context.conn is not None
+    pseudo_context.conn.execute(
+        "INSERT INTO setting (key, value_json) VALUES (?, ?)",
+        ("config.maintenance_warning_days", "not json"),
+    )
+
+    pseudo_context.notify_data_changed()
+
+    assert not page.empty_label.isHidden()
+    assert page.empty_label.text().startswith("\u27e6")
+    assert_fully_translated(page, lang)
+
+
 def test_the_page_lists_the_alerts_of_the_as_of_date(app_context: AppContext, qtbot: QtBot) -> None:
     fake = _install(app_context, ALERTS)
     page = _page(app_context, qtbot)

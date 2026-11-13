@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from cbrn_dashboard.domain.infrastructure import AssetStatus, MaintenanceKind
+from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.services.infrastructure import (
     AssetTypeView,
     MaintenanceView,
@@ -493,6 +494,14 @@ class InfrastructureSettingsSection(QWidget):
             self.delete_action,
             self.confirm_action,
         )
+        #: The placeholder whose badge is due, and the error code of a configuration that
+        #: cannot be read (both ``None`` while there is nothing to show).
+        self._badge_id: str | None = None
+        self._config_error: str | None = None
+        self.config_error_label = QLabel(self)
+        self.config_error_label.setObjectName("config_error_label")
+        self.config_error_label.setWordWrap(True)
+        self.config_error_label.setVisible(False)
         self.rule_caption = QLabel(self)
         self.degraded_check = QCheckBox(self)
         self.degraded_check.setObjectName("degraded_check")
@@ -508,6 +517,7 @@ class InfrastructureSettingsSection(QWidget):
         layout.addWidget(self.view, 1)
         layout.addLayout(action_row(self._actions[:4], self))
         layout.addWidget(self.rule_caption)
+        layout.addWidget(self.config_error_label)
         rule_row = QHBoxLayout()
         rule_row.addWidget(self.degraded_check)
         rule_row.addWidget(self.badge_label)
@@ -535,7 +545,14 @@ class InfrastructureSettingsSection(QWidget):
         )
         for action in self._actions:
             action.retranslate()
+        self._show_config_error()
         self.model.set_language(current_language(self.context))
+
+    def _show_config_error(self) -> None:
+        """Show why the A05 switch is off (a configuration that cannot be read)."""
+        code = self._config_error
+        self.config_error_label.setVisible(code is not None)
+        self.config_error_label.setText("" if code is None else error_label(code))
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
@@ -563,13 +580,24 @@ class InfrastructureSettingsSection(QWidget):
                 if asset_type.id == previous.id:
                     self.view.selectRow(row)
         config = _config_service(self.context)
-        self.degraded_check.blockSignals(True)
+        checked: bool | None = None
+        self._badge_id = None
+        self._config_error = None
         if config is not None:
-            self.degraded_check.setChecked(bool(config.load().degraded_counts_as_available))
+            try:
+                checked = bool(config.load().degraded_counts_as_available)
+                self._badge_id = self._badge()
+            except ServiceError as error:
+                checked = None
+                self._badge_id = None
+                self._config_error = error.code
+        self._show_config_error()
+        self.degraded_check.blockSignals(True)
+        if checked is not None:
+            self.degraded_check.setChecked(checked)
         self.degraded_check.blockSignals(False)
-        badge = self._badge()
-        self.badge_label.setVisible(badge is not None)
-        self.confirm_button.setVisible(badge is not None)
+        self.badge_label.setVisible(self._badge_id is not None)
+        self.confirm_button.setVisible(self._badge_id is not None)
         self._update_actions()
 
     def _update_actions(self, *_args: object) -> None:
@@ -580,8 +608,9 @@ class InfrastructureSettingsSection(QWidget):
         enable(self.edit_action, has_service and asset_type is not None)
         enable(self.deactivate_action, has_service and asset_type is not None and asset_type.active)
         enable(self.delete_action, has_service and asset_type is not None)
-        enable(self.degraded_check, _config_service(self.context) is not None)
-        enable(self.confirm_action, self._badge() is not None)
+        config = _config_service(self.context) is not None and self._config_error is None
+        enable(self.degraded_check, config)
+        enable(self.confirm_action, config and self._badge_id is not None)
 
     # ----- the A05 switch
 
@@ -598,8 +627,8 @@ class InfrastructureSettingsSection(QWidget):
 
     def confirm_placeholder(self) -> None:
         config = _config_service(self.context)
-        badge = self._badge()
-        if config is not None and badge is not None:
+        badge = self._badge_id
+        if config is not None and badge is not None and self._config_error is None:
             apply_change(self.context, self, error_label, lambda: config.confirm(badge))
 
     # ----- the types

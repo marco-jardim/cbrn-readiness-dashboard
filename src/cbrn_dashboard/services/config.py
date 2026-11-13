@@ -23,6 +23,7 @@ from contextlib import contextmanager
 from cbrn_dashboard.clock import Clock
 from cbrn_dashboard.domain.config import (
     PLACEHOLDERS,
+    SETTING_PREFIX,
     ConfigError,
     Placeholder,
     ReadinessConfig,
@@ -109,10 +110,25 @@ class ConfigService:
 
         An invalid configuration raises ``ServiceError(code, field)`` with the domain code and
         nothing is written. Saving what is already stored writes and logs nothing.
+
+        A placeholder whose config field changed is confirmed in the SAME transaction (PLAN.md
+        3.5: the badge stays "until the operator confirms or changes the value"): if the
+        confirmation fails the whole save is rolled back. A save that changes nothing confirms
+        nothing.
         """
         self._require_writable()
         with _translated(), transaction(self._conn):
-            return settings_repo.save_config(self._ctx(), config)
+            ctx = self._ctx()
+            changed = settings_repo.save_config(ctx, config)
+            due: list[str] = []
+            for key in changed:
+                item = placeholder_for_field(key.removeprefix(SETTING_PREFIX))
+                if item is not None and item.id not in due:
+                    due.append(item.id)
+            for placeholder_id in due:
+                if settings_repo.needs_badge(self._conn, placeholder_id):
+                    settings_repo.confirm_placeholder(ctx, placeholder_id)
+            return changed
 
     # ----- placeholders
 

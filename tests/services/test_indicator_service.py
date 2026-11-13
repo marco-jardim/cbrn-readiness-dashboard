@@ -18,6 +18,7 @@ import pytest
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain import indicators as rules
 from cbrn_dashboard.domain import personnel as personnel_rules
+from cbrn_dashboard.domain.config import ConfigError
 from cbrn_dashboard.domain.indicators import (
     IndicatorReading,
     IndicatorStatus,
@@ -32,9 +33,11 @@ from cbrn_dashboard.services.exercises import EditionInput, ExercisesService
 from cbrn_dashboard.services.indicators import (
     INVALID_DIMENSION,
     INVALID_NUMBER,
+    MAX_RATIO_TARGET,
     TARGET_EMPTY,
     TARGET_NOT_FINITE,
     TARGET_ORDER,
+    TARGET_OUT_OF_RANGE,
     UNKNOWN_INDICATOR,
     IndicatorService,
 )
@@ -50,7 +53,7 @@ from cbrn_dashboard.services.personnel import (
     StaffInput,
     TrainingInput,
 )
-from cbrn_dashboard.storage import targets_repo
+from cbrn_dashboard.storage import settings_repo, targets_repo
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.storage.repository import WriteContext
 from cbrn_dashboard.storage.settings_repo import load_config, save_config
@@ -177,21 +180,6 @@ def _all_values(stack: Stack, as_of: date) -> list[IndicatorValue]:
     ]
 
 
-def _expected(stack: Stack, db: DatabaseConnection, as_of: date) -> list[IndicatorReading]:
-    """The domain evaluation computed directly from the module services' values."""
-    registry = build_registry()
-    order = {code: index for index, code in enumerate(registry.codes())}
-    targets = targets_repo.load_targets(db)
-    values = sorted(_all_values(stack, as_of), key=lambda v: (order[v.code], v.dimension))
-    scale = stack.budget.target_scale(as_of)
-    return [
-        rules.evaluate(
-            registry.get(v.code), v, targets, target_scale=scale if v.code == BUDGET else 1.0
-        )
-        for v in values
-    ]
-
-
 def _status(stack: Stack, code: str, dimension: str, as_of: date = AS_OF) -> IndicatorStatus:
     return _reading(stack.indicators.evaluate(as_of), code, dimension).status
 
@@ -244,18 +232,68 @@ def test_evaluate_returns_every_reading_in_registry_order(stack: Stack) -> None:
     assert codes >= {CERT_A, "INFRA_AVAILABLE", "EX_LAST_PARTICIPANTS", BUDGET}
 
 
-def test_evaluate_equals_the_domain_evaluation_of_the_module_values(
-    stack: Stack, db: DatabaseConnection
-) -> None:
+def test_evaluate_equals_the_domain_evaluation_of_the_module_values(stack: Stack) -> None:
     registry = build_registry()
     plain = rules.evaluate_all(registry, _all_values(stack, AS_OF), {})
     assert stack.indicators.evaluate(AS_OF) == plain
 
+    # with targets, the readings are the hand-worked ones of test_evaluate_gives_the_hand_worked_...
+
+
+# (as of, valid level A, status, budget thresholds in force, budget status), worked by hand: the
+# certificate of DEMO-P003 ends on 2026-03-20; the 50 000 of 100 000 BRL were executed on
+# 2026-01-10, so the rate is 0.5 on all three dates; the year-end targets 0.9 / 0.6 are scaled by
+# the day of the year / 365: 15/365, 64/365 and 349/365.
+HAND_WORKED: list[tuple[date, int, IndicatorStatus, tuple[float, float], IndicatorStatus]] = [
+    (
+        date(2026, 1, 15),
+        3,
+        IndicatorStatus.OK,
+        (0.0369863013698630, 0.0246575342465753),
+        IndicatorStatus.OK,
+    ),
+    (
+        date(2026, 3, 5),
+        3,
+        IndicatorStatus.OK,
+        (0.157808219178082, 0.105205479452055),
+        IndicatorStatus.OK,
+    ),
+    (
+        date(2026, 12, 15),
+        2,
+        IndicatorStatus.WARNING,
+        (0.860547945205479, 0.573698630136986),
+        IndicatorStatus.CRITICAL,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("as_of", "valid", "valid_status", "thresholds", "rate_status"), HAND_WORKED
+)
+def test_evaluate_gives_the_hand_worked_readings(
+    stack: Stack,
+    as_of: date,
+    valid: int,
+    valid_status: IndicatorStatus,
+    thresholds: tuple[float, float],
+    rate_status: IndicatorStatus,
+) -> None:
+    """P6-12: literal expectations, not a second run of the code under test."""
     stack.indicators.set_target(CERT_A, LEVEL_A, warning_value=2, critical_value=1)
-    stack.indicators.set_target(MAINT, TYPE_DIM, warning_value=1, critical_value=3)
     stack.indicators.set_target(BUDGET, BUDGET_DIM, warning_value=0.9, critical_value=0.6)
-    for as_of in (date(2026, 1, 15), AS_OF, date(2026, 12, 15)):
-        assert stack.indicators.evaluate(as_of) == _expected(stack, db, as_of)
+
+    readings = stack.indicators.evaluate(as_of)
+
+    level_a = _reading(readings, CERT_A, LEVEL_A)
+    assert (level_a.value, level_a.status) == (valid, valid_status)
+    assert (level_a.warning_value, level_a.critical_value) == (2, 1)
+    rate = _reading(readings, BUDGET, BUDGET_DIM)
+    assert rate.value == pytest.approx(0.5)
+    assert rate.status is rate_status
+    assert rate.warning_value == pytest.approx(thresholds[0], rel=1e-9)
+    assert rate.critical_value == pytest.approx(thresholds[1], rel=1e-9)
 
 
 def test_fresh_database_has_no_target_and_nothing_else_but_no_data(stack: Stack) -> None:
@@ -344,6 +382,121 @@ def test_a_past_date_gives_the_readings_of_that_date(stack: Stack) -> None:
     assert days_early is not None
     assert days_late is not None
     assert days_late - days_early == 365
+
+
+# --------------------------------------------------------------------------- unreadable settings
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["config.cert_warning_days", "config.maintenance_warning_days"],
+)
+def test_an_unreadable_setting_is_a_service_error_not_a_raw_config_error(
+    stack: Stack, db: DatabaseConnection, key: str
+) -> None:
+    """P6-01: the personnel and infrastructure services let a raw ConfigError escape."""
+    db.execute("INSERT INTO setting (key, value_json) VALUES (?, ?)", (key, "not json"))
+
+    with pytest.raises(ServiceError) as info:
+        stack.indicators.evaluate(AS_OF)
+
+    assert info.value.code == "CORRUPT_SETTING"
+
+
+# --------------------------------------------------------------------------- ratio targets
+
+
+def test_a_ratio_target_outside_the_bounds_is_refused_with_a_coded_error(
+    stack: Stack, db: DatabaseConnection
+) -> None:
+    """P6-02: "90" typed for 90 % used to be stored as 9000 %, making every reading Critical."""
+    service = stack.indicators
+
+    def put(warning: float, critical: float) -> Callable[[], object]:
+        return lambda: service.set_target(
+            BUDGET, BUDGET_DIM, warning_value=warning, critical_value=critical
+        )
+
+    _refused(db, put(90.0, 60.0), TARGET_OUT_OF_RANGE, "warning_value")
+    _refused(db, put(10.5, 0.6), TARGET_OUT_OF_RANGE, "warning_value")
+    _refused(db, put(0.9, -0.1), TARGET_OUT_OF_RANGE, "critical_value")
+    assert service.list_targets() == []
+
+    service.set_target(BUDGET, BUDGET_DIM, warning_value=10.0, critical_value=0.0)  # the bounds
+
+    [view] = service.list_targets()
+    assert (view.warning_value, view.critical_value) == (10.0, 0.0)
+    assert MAX_RATIO_TARGET == 10.0
+
+
+def test_the_bound_is_for_ratio_indicators_only(stack: Stack) -> None:
+    stack.indicators.set_target(CERT_A, LEVEL_A, warning_value=90.0, critical_value=60.0)
+
+    [view] = stack.indicators.list_targets()
+    assert (view.warning_value, view.critical_value) == (90.0, 60.0)
+
+
+# --------------------------------------------------------------------------- confirming P03
+
+
+def test_a_changing_target_confirms_its_placeholder_in_the_same_transaction(
+    stack: Stack, db: DatabaseConnection, change_log_rows: ChangeLogRows
+) -> None:
+    """P6-03/P6-04: one call, one transaction; the badge is gone when the target is stored."""
+    assert settings_repo.needs_badge(db, "P03") is True
+    before = len(change_log_rows(db))
+
+    changed = stack.indicators.set_target(
+        CERT_A, LEVEL_A, warning_value=2, critical_value=1, confirm_placeholder="P03"
+    )
+
+    assert changed is True
+    assert settings_repo.needs_badge(db, "P03") is False
+    entities = [row["entity"] for row in change_log_rows(db)[before:]]
+    assert sorted(entities) == ["indicator_target", "setting"]
+
+
+def test_a_target_that_changes_nothing_confirms_nothing(
+    stack: Stack, db: DatabaseConnection
+) -> None:
+    stack.indicators.set_target(CERT_A, LEVEL_A, warning_value=2, critical_value=1)
+    assert settings_repo.needs_badge(db, "P03") is True
+
+    again = stack.indicators.set_target(
+        CERT_A, LEVEL_A, warning_value=2, critical_value=1, confirm_placeholder="P03"
+    )
+
+    assert again is False
+    assert settings_repo.needs_badge(db, "P03") is True
+
+
+def test_switching_a_target_confirms_its_placeholder_too(
+    stack: Stack, db: DatabaseConnection
+) -> None:
+    stack.indicators.set_target(CERT_A, LEVEL_A, warning_value=2, critical_value=1)
+
+    stack.indicators.set_target_enabled(CERT_A, LEVEL_A, False, confirm_placeholder="P03")
+
+    assert settings_repo.needs_badge(db, "P03") is False
+
+
+def test_a_failing_confirmation_rolls_the_target_back(
+    stack: Stack, db: DatabaseConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def failing(*_args: object) -> None:
+        raise ConfigError("UNKNOWN_PLACEHOLDER", "placeholder_id")
+
+    monkeypatch.setattr(settings_repo, "confirm_placeholder", failing)
+
+    _refused(
+        db,
+        lambda: stack.indicators.set_target(
+            CERT_A, LEVEL_A, warning_value=2, critical_value=1, confirm_placeholder="P03"
+        ),
+        "UNKNOWN_PLACEHOLDER",
+    )
+
+    assert stack.indicators.list_targets() == []
 
 
 # --------------------------------------------------------------------------- targets: round trip

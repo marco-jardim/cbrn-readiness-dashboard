@@ -202,12 +202,15 @@
         <translation type="unfinished">El texto no es válido.</translation>
     </message>
     <message>
+        <source>A stored setting cannot be read.</source>
+        <translation type="unfinished">No se puede leer un ajuste almacenado.</translation>
+    </message>
+    <message>
         <source>The setting is not valid.</source>
         <translation type="unfinished">La configuración no es válida.</translation>
     </message>
     <message>
         <source>Not in service</source>
-        <extracomment>Every error code the infrastructure UI can present (for the completeness test).</extracomment>
         <translation type="unfinished">No está en servicio</translation>
     </message>
     <message>
@@ -228,6 +231,7 @@
     </message>
     <message>
         <source>%1, %2</source>
+        <extracomment>Every error code the infrastructure UI can present (for the completeness test).</extracomment>
         <translation type="unfinished">%1; %2</translation>
     </message>
     <message>
@@ -508,6 +512,7 @@
     </message>
     <message>
         <source>Asset types</source>
+        <extracomment>The placeholder whose badge is due, and the error code of a configuration that cannot be read (both ``None`` while there is nothing to show).</extracomment>
         <translation type="unfinished">Tipos de activo</translation>
     </message>
     <message>

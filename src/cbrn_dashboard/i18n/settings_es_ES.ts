@@ -100,8 +100,8 @@
         <translation type="unfinished">El número es demasiado grande.</translation>
     </message>
     <message>
-        <source>Valid certificates</source>
-        <translation type="unfinished">Certificados vigentes</translation>
+        <source>Staff with a valid certificate</source>
+        <translation type="unfinished">Personal con certificado válido</translation>
     </message>
     <message>
         <source>Certificates expiring soon</source>
@@ -112,31 +112,31 @@
         <translation type="unfinished">Personal que necesita reentrenamiento</translation>
     </message>
     <message>
-        <source>Staff with degrees</source>
+        <source>Staff with a degree</source>
         <translation type="unfinished">Personal con titulación</translation>
     </message>
     <message>
-        <source>Staff trained in the last 12 months</source>
-        <translation type="unfinished">Personal formado en los últimos 12 meses</translation>
+        <source>Training records in the last 12 months</source>
+        <translation type="unfinished">Registros de capacitación en los últimos 12 meses</translation>
     </message>
     <message>
-        <source>Available assets</source>
-        <translation type="unfinished">Activos disponibles</translation>
+        <source>Available units</source>
+        <translation type="unfinished">Unidades disponibles</translation>
     </message>
     <message>
-        <source>Assets with overdue maintenance</source>
-        <translation type="unfinished">Activos con mantenimiento vencido</translation>
+        <source>Units with overdue maintenance</source>
+        <translation type="unfinished">Unidades con mantenimiento vencido</translation>
     </message>
     <message>
-        <source>Participants in the last exercise</source>
+        <source>Participants in the latest exercise</source>
         <translation type="unfinished">Participantes en el último ejercicio</translation>
     </message>
     <message>
-        <source>Countries in the last exercise</source>
+        <source>Countries in the latest exercise</source>
         <translation type="unfinished">Países en el último ejercicio</translation>
     </message>
     <message>
-        <source>Days since the last exercise</source>
+        <source>Days since the latest exercise</source>
         <translation type="unfinished">Días desde el último ejercicio</translation>
     </message>
     <message>
@@ -148,8 +148,8 @@
         <translation type="unfinished">Recuento</translation>
     </message>
     <message>
-        <source>Ratio</source>
-        <translation type="unfinished">Razón</translation>
+        <source>Percent</source>
+        <translation type="unfinished">Porcentaje</translation>
     </message>
     <message>
         <source>Amount of money</source>
@@ -344,8 +344,8 @@
         <translation type="unfinished">Objetivos de los indicadores</translation>
     </message>
     <message>
-        <source>Delete the target of %1?</source>
-        <translation type="unfinished">¿Eliminar el objetivo de %1?</translation>
+        <source>Delete the target of %1 (%2)?</source>
+        <translation type="unfinished">¿Eliminar el objetivo de %1 (%2)?</translation>
     </message>
     <message>
         <source>Settings</source>
@@ -358,6 +358,30 @@
     <message>
         <source>Warning windows</source>
         <translation type="unfinished">Ventanas de aviso</translation>
+    </message>
+    <message>
+        <source>The percentage must be between 0% and 1000%.</source>
+        <translation type="unfinished">El porcentaje debe estar entre 0% y 1000%.</translation>
+    </message>
+    <message>
+        <source>Not in use</source>
+        <translation type="unfinished">Fuera de uso</translation>
+    </message>
+    <message>
+        <source>In use</source>
+        <translation type="unfinished">En uso</translation>
+    </message>
+    <message>
+        <source>Use</source>
+        <translation type="unfinished">Uso</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation type="unfinished">%1: %2</translation>
+    </message>
+    <message>
+        <source>%1; %2</source>
+        <translation type="unfinished">%1; %2</translation>
     </message>
 </context>
 </TS>

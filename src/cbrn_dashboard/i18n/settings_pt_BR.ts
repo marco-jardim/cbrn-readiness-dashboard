@@ -100,43 +100,43 @@
         <translation type="unfinished">O número é grande demais.</translation>
     </message>
     <message>
-        <source>Valid certificates</source>
-        <translation type="unfinished">Certificados válidos</translation>
+        <source>Staff with a valid certificate</source>
+        <translation type="unfinished">Pessoal com certificado válido</translation>
     </message>
     <message>
         <source>Certificates expiring soon</source>
-        <translation type="unfinished">Certificados prestes a vencer</translation>
+        <translation type="unfinished">Certificados a vencer em breve</translation>
     </message>
     <message>
         <source>Staff needing retraining</source>
         <translation type="unfinished">Pessoal que precisa de reciclagem</translation>
     </message>
     <message>
-        <source>Staff with degrees</source>
-        <translation type="unfinished">Pessoal com formação acadêmica</translation>
+        <source>Staff with a degree</source>
+        <translation type="unfinished">Pessoal com titulação</translation>
     </message>
     <message>
-        <source>Staff trained in the last 12 months</source>
-        <translation type="unfinished">Pessoal treinado nos últimos 12 meses</translation>
+        <source>Training records in the last 12 months</source>
+        <translation type="unfinished">Registros de treinamento nos últimos 12 meses</translation>
     </message>
     <message>
-        <source>Available assets</source>
-        <translation type="unfinished">Ativos disponíveis</translation>
+        <source>Available units</source>
+        <translation type="unfinished">Unidades disponíveis</translation>
     </message>
     <message>
-        <source>Assets with overdue maintenance</source>
-        <translation type="unfinished">Ativos com manutenção atrasada</translation>
+        <source>Units with overdue maintenance</source>
+        <translation type="unfinished">Unidades com manutenção atrasada</translation>
     </message>
     <message>
-        <source>Participants in the last exercise</source>
+        <source>Participants in the latest exercise</source>
         <translation type="unfinished">Participantes no último exercício</translation>
     </message>
     <message>
-        <source>Countries in the last exercise</source>
+        <source>Countries in the latest exercise</source>
         <translation type="unfinished">Países no último exercício</translation>
     </message>
     <message>
-        <source>Days since the last exercise</source>
+        <source>Days since the latest exercise</source>
         <translation type="unfinished">Dias desde o último exercício</translation>
     </message>
     <message>
@@ -148,8 +148,8 @@
         <translation type="unfinished">Contagem</translation>
     </message>
     <message>
-        <source>Ratio</source>
-        <translation type="unfinished">Razão</translation>
+        <source>Percent</source>
+        <translation type="unfinished">Porcentagem</translation>
     </message>
     <message>
         <source>Amount of money</source>
@@ -344,8 +344,8 @@
         <translation type="unfinished">Metas dos indicadores</translation>
     </message>
     <message>
-        <source>Delete the target of %1?</source>
-        <translation type="unfinished">Excluir a meta de %1?</translation>
+        <source>Delete the target of %1 (%2)?</source>
+        <translation type="unfinished">Excluir a meta de %1 (%2)?</translation>
     </message>
     <message>
         <source>Settings</source>
@@ -358,6 +358,30 @@
     <message>
         <source>Warning windows</source>
         <translation type="unfinished">Janelas de aviso</translation>
+    </message>
+    <message>
+        <source>The percentage must be between 0% and 1000%.</source>
+        <translation type="unfinished">A porcentagem deve estar entre 0% e 1000%.</translation>
+    </message>
+    <message>
+        <source>Not in use</source>
+        <translation type="unfinished">Fora de uso</translation>
+    </message>
+    <message>
+        <source>In use</source>
+        <translation type="unfinished">Em uso</translation>
+    </message>
+    <message>
+        <source>Use</source>
+        <translation type="unfinished">Uso</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation type="unfinished">%1: %2</translation>
+    </message>
+    <message>
+        <source>%1; %2</source>
+        <translation type="unfinished">%1; %2</translation>
     </message>
 </context>
 </TS>

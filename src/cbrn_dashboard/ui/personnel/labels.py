@@ -203,7 +203,7 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
         "Personnel", "The list of placeholders is not valid."
     ),
     "CORRUPT_SETTING": lambda: QCoreApplication.translate(
-        "Personnel", "A stored setting is damaged."
+        "Personnel", "A stored setting cannot be read."
     ),
     "UNKNOWN_PLACEHOLDER": lambda: QCoreApplication.translate(
         "Personnel", "The placeholder is not known."

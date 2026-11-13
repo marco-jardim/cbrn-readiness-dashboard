@@ -8,6 +8,8 @@ open; nothing is written. Indicator and dimension texts shown in combo boxes are
 ``i18nData``.
 """
 
+from decimal import Decimal
+
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QWidget
 
@@ -21,7 +23,7 @@ from cbrn_dashboard.ui.settings.labels import (
     indicator_label,
     unit_label,
 )
-from cbrn_dashboard.ui.settings.models import number_text
+from cbrn_dashboard.ui.settings.models import is_ratio, number_text, percent_input_text
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.formatting import (
     INVALID_NUMBER,
@@ -39,7 +41,6 @@ from cbrn_dashboard.ui.shell.widgets import (
 __all__ = [
     "PLACEHOLDER_TARGETS",
     "TargetDialog",
-    "confirm_if_due",
     "input_text",
     "parse_whole",
     "reformat_number",
@@ -55,13 +56,6 @@ def show_error(
 ) -> None:
     """Show the translated message of ``code`` through the prompts interface."""
     show_service_error(context, parent, ServiceError(code, field), error_label)
-
-
-def confirm_if_due(context: AppContext, placeholder_id: str) -> None:
-    """Confirm ``placeholder_id`` when its badge is due: the operator has just changed the value."""
-    config = context.services.config
-    if config is not None and config.needs_badge(placeholder_id):
-        config.confirm(placeholder_id)
 
 
 def parse_whole(text: str, lang: str) -> int:
@@ -153,8 +147,8 @@ class TargetDialog(FormDialog):
         if target is not None:
             index = self.indicator_combo.findData(target.indicator_code)
             self.indicator_combo.setCurrentIndex(max(0, index))
-            self.warning_edit.setText(input_text(target.warning_value, self.language))
-            self.critical_edit.setText(input_text(target.critical_value, self.language))
+            self.warning_edit.setText(self._input(target.warning_value))
+            self.critical_edit.setText(self._input(target.critical_value))
             self.enabled_check.setChecked(target.enabled)
             # The key of a stored target (indicator and dimension) is not edited.
             self.indicator_combo.setEnabled(False)
@@ -251,9 +245,25 @@ class TargetDialog(FormDialog):
 
     # ----- saving
 
+    def _ratio(self) -> bool:
+        """Whether the thresholds of the selected indicator are typed as percent (ratio unit)."""
+        return is_ratio(self._definition())
+
+    def _input(self, value: float | None) -> str:
+        """A stored threshold as typed: a percent number for a ratio indicator."""
+        if self._ratio():
+            return percent_input_text(value, self.language)
+        return input_text(value, self.language)
+
     def _threshold(self, edit: QLineEdit) -> float | None:
+        """The stored value of a typed threshold: percent / 100 for a ratio indicator."""
         text = edit.text().strip()
-        return float(parse_number(text, self.language)) if text else None
+        if not text:
+            return None
+        number = parse_number(text, self.language)
+        if self._ratio():
+            return float(number / Decimal(100))
+        return float(number)
 
     def submit(self) -> bool:
         service = self.context.services.indicators
@@ -273,10 +283,14 @@ class TargetDialog(FormDialog):
         enabled = self.enabled_check.isChecked()
 
         def save() -> None:
-            changed = service.set_target(
-                code, dimension, warning_value=warning, critical_value=critical, enabled=enabled
+            # One service call, one transaction: a changed target also confirms its placeholder.
+            service.set_target(
+                code,
+                dimension,
+                warning_value=warning,
+                critical_value=critical,
+                enabled=enabled,
+                confirm_placeholder=PLACEHOLDER_TARGETS,
             )
-            if changed:
-                confirm_if_due(self.context, PLACEHOLDER_TARGETS)
 
         return apply_change(self.context, self, error_label, save)

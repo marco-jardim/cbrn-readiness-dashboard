@@ -48,6 +48,7 @@ from datetime import date
 
 from cbrn_dashboard.clock import Clock
 from cbrn_dashboard.domain import indicators as rules
+from cbrn_dashboard.domain.config import ConfigError
 from cbrn_dashboard.domain.indicators import (
     IndicatorDefinition,
     IndicatorReading,
@@ -56,6 +57,7 @@ from cbrn_dashboard.domain.indicators import (
     InvalidDimensionError,
     Target,
     TargetOrderError,
+    UnitKind,
     UnknownIndicatorError,
     decode_dimension,
     validate_target_order,
@@ -72,6 +74,7 @@ from cbrn_dashboard.services.errors import (
 from cbrn_dashboard.services.exercises import ExercisesService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
+from cbrn_dashboard.storage import settings_repo
 from cbrn_dashboard.storage import targets_repo as repo
 from cbrn_dashboard.storage.db import DatabaseConnection, ReadOnlyDatabaseError, transaction
 from cbrn_dashboard.storage.repository import RowNotFoundError, WriteContext
@@ -81,9 +84,11 @@ __all__ = [
     "BUDGET_RATE_CODE",
     "INVALID_DIMENSION",
     "INVALID_NUMBER",
+    "MAX_RATIO_TARGET",
     "TARGET_EMPTY",
     "TARGET_NOT_FINITE",
     "TARGET_ORDER",
+    "TARGET_OUT_OF_RANGE",
     "UNKNOWN_INDICATOR",
     "IndicatorService",
     "TargetView",
@@ -103,8 +108,15 @@ INVALID_NUMBER = "INVALID_NUMBER"
 #: Both thresholds are ``None``: delete the target instead.
 TARGET_EMPTY = "TARGET_EMPTY"
 
+#: A threshold of a ratio indicator is below 0 or above :data:`MAX_RATIO_TARGET`.
+TARGET_OUT_OF_RANGE = "TARGET_OUT_OF_RANGE"
+
 #: The one indicator whose target is pro-rated over the fiscal year at evaluation (P08).
 BUDGET_RATE_CODE = "BUD_EXEC_RATE"
+
+#: The largest accepted threshold of a ratio indicator (10.0 = 1000 %): it catches "90" typed for
+#: 90 %, which would otherwise be stored as 9000 %.
+MAX_RATIO_TARGET = 10.0
 
 
 @dataclass(frozen=True)
@@ -300,6 +312,16 @@ class IndicatorService:
         require(canonical == dimension, INVALID_DIMENSION, "dimension")
         return dimension
 
+    def _confirm_if_changed(self, changed: bool, placeholder_id: str | None) -> None:
+        """Confirm ``placeholder_id`` (its badge is due) in the caller's transaction."""
+        if not changed or placeholder_id is None:
+            return
+        try:
+            if settings_repo.needs_badge(self._conn, placeholder_id):
+                settings_repo.confirm_placeholder(self._ctx(), placeholder_id)
+        except ConfigError as exc:
+            raise ServiceError(exc.code, exc.field or None) from exc
+
     def set_target(
         self,
         code: str,
@@ -308,16 +330,23 @@ class IndicatorService:
         warning_value: float | None,
         critical_value: float | None,
         enabled: bool = True,
+        confirm_placeholder: str | None = None,
     ) -> bool:
         """Create or change the target of ``(code, dimension)``; return whether anything changed.
 
-        For ``BUD_EXEC_RATE`` the values are YEAR-END targets (a ratio, for example 0.9): they are
-        stored as entered and pro-rated only when evaluated (P08).
+        For ``BUD_EXEC_RATE`` the values are YEAR-END targets (a ratio, for example 0.9 = 90 %):
+        they are stored as entered and pro-rated only when evaluated (P08). A ratio target must be
+        between 0 and :data:`MAX_RATIO_TARGET`.
+
+        With ``confirm_placeholder`` (for example ``"P03"``), a call that changed something also
+        confirms that placeholder, in the SAME transaction (PLAN.md 3.5): a failing confirmation
+        rolls the target back.
 
         Refusals (nothing is written): ``UNKNOWN_INDICATOR``, ``INVALID_DIMENSION``,
-        ``INVALID_NUMBER``, ``TARGET_NOT_FINITE``, ``TARGET_EMPTY`` (both values ``None``: delete
-        the target instead) and ``TARGET_ORDER`` (higher is better needs critical <= warning,
-        lower is better needs warning <= critical).
+        ``INVALID_NUMBER``, ``TARGET_NOT_FINITE``, ``TARGET_OUT_OF_RANGE`` (a ratio below 0 or above
+        :data:`MAX_RATIO_TARGET`), ``TARGET_EMPTY`` (both values ``None``: delete the target
+        instead) and ``TARGET_ORDER`` (higher is better needs critical <= warning, lower is better
+        needs warning <= critical).
         """
         self._require_writable()
         with _translated(), transaction(self._conn):
@@ -326,26 +355,42 @@ class IndicatorService:
             warning = _number(warning_value, "warning_value")
             critical = _number(critical_value, "critical_value")
             require(warning is not None or critical is not None, TARGET_EMPTY)
+            if definition.unit is UnitKind.RATIO:
+                for number, field in ((warning, "warning_value"), (critical, "critical_value")):
+                    require(
+                        number is None or 0.0 <= number <= MAX_RATIO_TARGET,
+                        TARGET_OUT_OF_RANGE,
+                        field,
+                    )
             try:
                 validate_target_order(Target(warning, critical, enabled), definition.direction)
             except TargetOrderError as exc:
                 raise ServiceError(exc.code) from None
-            return repo.upsert_target(
+            changed = repo.upsert_target(
                 self._ctx(), definition.code, checked, warning, critical, bool(enabled)
             )
+            self._confirm_if_changed(changed, confirm_placeholder)
+            return changed
 
-    def set_target_enabled(self, code: str, dimension: str, enabled: bool) -> bool:
+    def set_target_enabled(
+        self,
+        code: str,
+        dimension: str,
+        enabled: bool,
+        *,
+        confirm_placeholder: str | None = None,
+    ) -> bool:
         """Switch a stored target on or off; return whether anything changed.
 
         ``NOT_FOUND`` when there is no such target. A disabled target is kept but behaves as if it
-        were absent.
+        were absent. ``confirm_placeholder`` works as in :meth:`set_target`.
         """
         self._require_writable()
         with _translated(), transaction(self._conn):
             current = repo.get_target(self._conn, code, dimension)
             if current is None:
                 raise ServiceError(NOT_FOUND)
-            return repo.upsert_target(
+            changed = repo.upsert_target(
                 self._ctx(),
                 code,
                 dimension,
@@ -353,6 +398,8 @@ class IndicatorService:
                 current.critical_value,
                 bool(enabled),
             )
+            self._confirm_if_changed(changed, confirm_placeholder)
+            return changed
 
     def delete_target(self, code: str, dimension: str) -> None:
         """Delete a stored target; ``NOT_FOUND`` when there is none.

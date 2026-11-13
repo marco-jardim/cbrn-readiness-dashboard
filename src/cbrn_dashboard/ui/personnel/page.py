@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from cbrn_dashboard.domain.config import ReadinessConfig
 from cbrn_dashboard.domain.personnel import (
     CertStatus,
     DegreeLevel,
@@ -598,6 +599,12 @@ class PersonnelSettingsSection(QWidget):
         self._badge_ids: dict[str, str | None] = {"A02": None, "A04": None}
         #: The rule inputs as last loaded from the configuration (``None`` before the first load).
         self._loaded_rules: _RuleState | None = None
+        #: The error code of a configuration that cannot be read (``None`` while it can be).
+        self._config_error: str | None = None
+        self.config_error_label = QLabel(self)
+        self.config_error_label.setObjectName("config_error_label")
+        self.config_error_label.setWordWrap(True)
+        self.config_error_label.setVisible(False)
 
         # A02: the level mapping
         self.mapping_box = QGroupBox(self)
@@ -707,6 +714,7 @@ class PersonnelSettingsSection(QWidget):
             context.register_edit_action(widget)
 
         layout = QVBoxLayout(self)
+        layout.addWidget(self.config_error_label)
         layout.addWidget(self.mapping_box)
         layout.addWidget(self.validity_box)
         layout.addLayout(action_row((self.save_action,), self))
@@ -759,7 +767,14 @@ class PersonnelSettingsSection(QWidget):
         self.a04_badge.setText(badge)
         for action in self._actions:
             action.retranslate()
+        self._show_config_error()
         self.courses_model.set_language(current_language(self.context))
+
+    def _show_config_error(self) -> None:
+        """Show why the rule inputs are off (a configuration that cannot be read)."""
+        code = self._config_error
+        self.config_error_label.setVisible(code is not None)
+        self.config_error_label.setText("" if code is None else error_label(code))
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
@@ -797,7 +812,19 @@ class PersonnelSettingsSection(QWidget):
         config = self._config()
         if config is None:
             return
-        current = config.load()
+        try:
+            current = config.load()
+        except ServiceError as error:
+            self._config_error = error.code
+            self._show_config_error()
+            self._update_actions()
+            return
+        self._config_error = None
+        self._show_config_error()
+        self._apply_rules(current)
+
+    def _apply_rules(self, current: ReadinessConfig) -> None:
+        """Put the loaded configuration into the rule inputs."""
         self.hierarchy_check.setChecked(bool(current.ppe_hierarchy_enabled))
         for (level, other), box in self.mapping_checks.items():
             box.setChecked(other in current.ppe_hierarchy.get(level, ()))
@@ -811,17 +838,28 @@ class PersonnelSettingsSection(QWidget):
 
         The rule inputs are reloaded only the first time and when they hold no unsaved edit: a
         change signalled by the course list or by another page must not discard what was typed.
+        A configuration that cannot be read is shown as a message and switches the inputs off
+        until a later refresh can read it.
         """
         config = self._config()
-        if config is None:
-            self._badge_ids = {"A02": None, "A04": None}
+        self._badge_ids = {"A02": None, "A04": None}
+        if config is not None:
+            try:
+                stored = config.load()
+                self._badge_ids = {
+                    "A02": self._badge_for(config, _A02_FIELDS),
+                    "A04": self._badge_for(config, _A04_FIELDS),
+                }
+            except ServiceError as error:
+                self._badge_ids = {"A02": None, "A04": None}
+                self._config_error = error.code
+            else:
+                self._config_error = None
+                if self._loaded_rules is None or not self.is_dirty():
+                    self._apply_rules(stored)
         else:
-            if self._loaded_rules is None or not self.is_dirty():
-                self.reload_rules()
-            self._badge_ids = {
-                "A02": self._badge_for(config, _A02_FIELDS),
-                "A04": self._badge_for(config, _A04_FIELDS),
-            }
+            self._config_error = None
+        self._show_config_error()
         self.a02_badge.setVisible(self._badge_ids["A02"] is not None)
         self.a04_badge.setVisible(self._badge_ids["A04"] is not None)
         service = self.context.services.personnel
@@ -835,7 +873,7 @@ class PersonnelSettingsSection(QWidget):
         self._update_actions()
 
     def _update_actions(self, *_args: object) -> None:
-        config = self._config() is not None
+        config = self._config() is not None and self._config_error is None
         has_service = self.context.services.personnel is not None
         course = self.selected_course()
         enable = self.context.set_edit_enabled
@@ -899,12 +937,18 @@ class PersonnelSettingsSection(QWidget):
             )
             if also:
                 hierarchy[level.value] = also
-        changed = config.load().with_changes(
-            ppe_hierarchy_enabled=self.hierarchy_check.isChecked(),
-            ppe_hierarchy=hierarchy,
-            ppe_validity_months=months,
-        )
-        if apply_change(self.context, self, error_label, lambda: config.save(changed)):
+        hierarchy_enabled = self.hierarchy_check.isChecked()
+
+        def save() -> object:
+            return config.save(
+                config.load().with_changes(
+                    ppe_hierarchy_enabled=hierarchy_enabled,
+                    ppe_hierarchy=hierarchy,
+                    ppe_validity_months=months,
+                )
+            )
+
+        if apply_change(self.context, self, error_label, save):
             self.reload_rules()
 
     # ----- courses

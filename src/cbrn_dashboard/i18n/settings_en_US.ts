@@ -100,8 +100,8 @@
         <translation>The number is too large.</translation>
     </message>
     <message>
-        <source>Valid certificates</source>
-        <translation>Valid certificates</translation>
+        <source>Staff with a valid certificate</source>
+        <translation>Staff with a valid certificate</translation>
     </message>
     <message>
         <source>Certificates expiring soon</source>
@@ -112,32 +112,32 @@
         <translation>Staff needing retraining</translation>
     </message>
     <message>
-        <source>Staff with degrees</source>
-        <translation>Staff with degrees</translation>
+        <source>Staff with a degree</source>
+        <translation>Staff with a degree</translation>
     </message>
     <message>
-        <source>Staff trained in the last 12 months</source>
-        <translation>Staff trained in the last 12 months</translation>
+        <source>Training records in the last 12 months</source>
+        <translation>Training records in the last 12 months</translation>
     </message>
     <message>
-        <source>Available assets</source>
-        <translation>Available assets</translation>
+        <source>Available units</source>
+        <translation>Available units</translation>
     </message>
     <message>
-        <source>Assets with overdue maintenance</source>
-        <translation>Assets with overdue maintenance</translation>
+        <source>Units with overdue maintenance</source>
+        <translation>Units with overdue maintenance</translation>
     </message>
     <message>
-        <source>Participants in the last exercise</source>
-        <translation>Participants in the last exercise</translation>
+        <source>Participants in the latest exercise</source>
+        <translation>Participants in the latest exercise</translation>
     </message>
     <message>
-        <source>Countries in the last exercise</source>
-        <translation>Countries in the last exercise</translation>
+        <source>Countries in the latest exercise</source>
+        <translation>Countries in the latest exercise</translation>
     </message>
     <message>
-        <source>Days since the last exercise</source>
-        <translation>Days since the last exercise</translation>
+        <source>Days since the latest exercise</source>
+        <translation>Days since the latest exercise</translation>
     </message>
     <message>
         <source>Budget execution rate</source>
@@ -148,8 +148,8 @@
         <translation>Count</translation>
     </message>
     <message>
-        <source>Ratio</source>
-        <translation>Ratio</translation>
+        <source>Percent</source>
+        <translation>Percent</translation>
     </message>
     <message>
         <source>Amount of money</source>
@@ -344,8 +344,8 @@
         <translation>Indicator targets</translation>
     </message>
     <message>
-        <source>Delete the target of %1?</source>
-        <translation>Delete the target of %1?</translation>
+        <source>Delete the target of %1 (%2)?</source>
+        <translation>Delete the target of %1 (%2)?</translation>
     </message>
     <message>
         <source>Settings</source>
@@ -358,6 +358,30 @@
     <message>
         <source>Warning windows</source>
         <translation>Warning windows</translation>
+    </message>
+    <message>
+        <source>The percentage must be between 0% and 1000%.</source>
+        <translation>The percentage must be between 0% and 1000%.</translation>
+    </message>
+    <message>
+        <source>Not in use</source>
+        <translation>Not in use</translation>
+    </message>
+    <message>
+        <source>In use</source>
+        <translation>In use</translation>
+    </message>
+    <message>
+        <source>Use</source>
+        <translation>Use</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation>%1: %2</translation>
+    </message>
+    <message>
+        <source>%1; %2</source>
+        <translation>%1; %2</translation>
     </message>
 </context>
 </TS>

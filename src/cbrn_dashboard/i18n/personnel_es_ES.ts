@@ -208,8 +208,8 @@
         <translation type="unfinished">La lista de valores provisionales no es válida.</translation>
     </message>
     <message>
-        <source>A stored setting is damaged.</source>
-        <translation type="unfinished">Un ajuste guardado está dañado.</translation>
+        <source>A stored setting cannot be read.</source>
+        <translation type="unfinished">No se puede leer una configuración almacenada.</translation>
     </message>
     <message>
         <source>The placeholder is not known.</source>
@@ -475,6 +475,7 @@
     </message>
     <message>
         <source>Confirm</source>
+        <extracomment>The state of the rule inputs: A02 switch, mapping pairs, typed A04 months per level. The rule inputs as last loaded from the configuration (``None`` before the first load). The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation type="unfinished">Confirmar</translation>
     </message>
     <message>

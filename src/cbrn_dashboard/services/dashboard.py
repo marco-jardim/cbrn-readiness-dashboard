@@ -153,8 +153,9 @@ class DashboardService:
 
     def data(self, as_of: date) -> DashboardData:
         """The dashboard for ``as_of``, recomputed from the services (nothing is cached)."""
-        tiles = tuple(self._tile(reading) for reading in self._indicators.evaluate(as_of))
-        counts = self._alerts.counts(as_of)
+        readings = self._indicators.evaluate(as_of)  # once: the alert counts reuse these readings
+        tiles = tuple(self._tile(reading) for reading in readings)
+        counts = self._alerts.counts(as_of, readings=readings)
         return DashboardData(
             as_of=as_of,
             tiles=tiles,

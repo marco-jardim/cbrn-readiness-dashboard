@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from cbrn_dashboard.domain.alerts import Alert, AlertKind, Severity
+from cbrn_dashboard.domain.alerts import Alert, AlertKind, Severity, SubjectKind
 from cbrn_dashboard.domain.indicators import Module
 from cbrn_dashboard.ui.alerts.labels import (
     ALL_KIND_CODES,
@@ -130,7 +130,12 @@ def test_every_kind_gives_a_message_with_every_placeholder_filled(
         assert text == expected, alert.kind
         assert text.strip()
         assert "%" not in text, (lang, alert.kind, text)
-        assert alert.subject_ref in text
+        if alert.kind in (AlertKind.INDICATOR_WARNING, AlertKind.INDICATOR_CRITICAL):
+            # an indicator is named in words, never by its code and the encoded dimension
+            assert alert.subject_ref not in text
+            assert "=" not in text
+        else:
+            assert alert.subject_ref in text
 
 
 def test_the_messages_differ_between_the_languages() -> None:
@@ -154,7 +159,7 @@ def test_plural_forms_are_correct_for_1_and_for_2_days(
 def test_an_indicator_without_values_shows_a_dash(app_context: AppContext) -> None:
     alert = replace(INDICATOR_WARNING, value=None, threshold=None)
     assert alert_message(alert, "en_US") == (
-        "Indicator PERS_CERT_VALID (level=A) is at - (warning threshold: -)."
+        "Indicator Staff with a valid certificate (Level A) is at - (warning threshold: -)."
     )
 
 
@@ -164,12 +169,52 @@ def test_numbers_follow_the_language_and_are_rounded_to_two_places(
     alert = replace(INDICATOR_CRITICAL, dimension="", value=66.66666666666667, threshold=1234.5)
     app_context.translator_manager.set_language("en_US")
     assert alert_message(alert, "en_US") == (
-        "Indicator INFRA_MAINT_OVERDUE is at 66.67 (critical threshold: 1,234.5)."
+        "Indicator Units with overdue maintenance is at 66.67 (critical threshold: 1,234.5)."
     )
     app_context.translator_manager.set_language("pt_BR")
     assert alert_message(alert, "pt_BR") == (
-        "O indicador INFRA_MAINT_OVERDUE está em 66,67 (limite crítico: 1.234,5)."
+        "O indicador Unidades com manutenção atrasada está em 66,67 (limite crítico: 1.234,5)."
     )
+
+
+BUDGET_RATE = Alert(
+    kind=AlertKind.INDICATOR_WARNING,
+    severity=Severity.WARNING,
+    module=Module.BUDGET,
+    subject_kind=SubjectKind.INDICATOR,
+    subject_ref="BUD_EXEC_RATE",
+    dimension="currency=BRL;source=DIRSA",
+    value=0.45,
+    threshold=0.5,
+)
+
+
+@pytest.mark.parametrize(
+    ("lang", "expected"),
+    [
+        (
+            "en_US",
+            "Indicator Budget execution rate (Currency BRL, Source DIRSA) is at 45.0% "
+            "(warning threshold: 50.0%).",
+        ),
+        (
+            "pt_BR",
+            "O indicador Taxa de execução orçamentária (Moeda BRL, Fonte DIRSA) está em 45,0% "
+            "(limite de aviso: 50,0%).",
+        ),
+        (
+            "es_ES",
+            "El indicador Tasa de ejecución presupuestaria (Moneda BRL, Fuente DIRSA) está en "
+            "45,0\xa0% (umbral de advertencia: 50,0\xa0%).",
+        ),
+    ],
+)
+def test_a_ratio_indicator_is_named_in_words_and_shown_as_percent(
+    app_context: AppContext, lang: str, expected: str
+) -> None:
+    """P6-08: no raw code, no encoded dimension, and 0.45 is 45 % (not "0,45")."""
+    app_context.translator_manager.set_language(lang)
+    assert alert_message(BUDGET_RATE, lang) == expected
 
 
 def test_the_subject_is_the_reference_and_for_indicators_also_the_dimension() -> None:

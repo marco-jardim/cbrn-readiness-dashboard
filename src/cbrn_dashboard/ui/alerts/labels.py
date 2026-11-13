@@ -11,21 +11,33 @@ indicator codes and dimensions) are data and are shown unchanged.
 
 import re
 from collections.abc import Callable
+from functools import cache
 
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QStyle
 
 from cbrn_dashboard.domain.alerts import Alert, AlertKind, Severity, SubjectKind
-from cbrn_dashboard.domain.indicators import InvalidDimensionError, Module, decode_dimension
-from cbrn_dashboard.ui.shell.formatting import FormatError, format_number
+from cbrn_dashboard.domain.indicators import (
+    InvalidDimensionError,
+    Module,
+    UnitKind,
+    decode_dimension,
+)
+from cbrn_dashboard.domain.registry import build_registry
+from cbrn_dashboard.services.config import CORRUPT_SETTING
+from cbrn_dashboard.ui.dashboard.labels import DisplayNames, dimension_text, indicator_name
+from cbrn_dashboard.ui.shell.formatting import FormatError, format_number, format_percent
 from cbrn_dashboard.ui.shell.widgets import label_for
 
 __all__ = [
+    "ALL_ERROR_CODES",
     "ALL_KIND_CODES",
     "ALL_MODULE_CODES",
     "ALL_SEVERITY_CODES",
     "alert_message",
+    "error_label",
+    "indicator_text",
     "kind_message",
     "module_label",
     "severity_icon",
@@ -121,10 +133,47 @@ def _number(value: float | None, lang: str) -> str:
 
 
 def subject_text(alert: Alert) -> str:
-    """The subject of an alert: staff identifier, asset tag, or indicator code and dimension."""
+    """The subject of an alert: staff identifier, asset tag, or indicator code and dimension.
+
+    This is the subject REFERENCE of PLAN.md T6.2 ("indicator code and dimension") and is data, so
+    it is shown unchanged; the message of the alert names the indicator in words.
+    """
     if alert.subject_kind is SubjectKind.INDICATOR and alert.dimension:
         return f"{alert.subject_ref} ({alert.dimension})"
     return alert.subject_ref
+
+
+@cache
+def _ratio_codes() -> frozenset[str]:
+    """The registered indicators whose unit is a ratio (their values are shown as percent)."""
+    return frozenset(
+        definition.code for definition in build_registry() if definition.unit is UnitKind.RATIO
+    )
+
+
+def _indicator_number(alert: Alert, value: float | None, lang: str) -> str:
+    """A value or threshold of an indicator alert: a percentage for a ratio indicator."""
+    if value is None:
+        return NOT_RECORDED
+    if alert.subject_ref in _ratio_codes():
+        try:
+            return format_percent(value, lang)
+        except FormatError:
+            return NOT_RECORDED
+    return _number(value, lang)
+
+
+def indicator_text(alert: Alert, lang: str) -> str:
+    """The indicator of an alert in words: its name and, in parentheses, its dimension."""
+    name = indicator_name(alert.subject_ref)
+    try:
+        parts = decode_dimension(alert.dimension)
+    except InvalidDimensionError:
+        return _fill(QCoreApplication.translate("Alerts", "%1 (%2)"), name, alert.dimension)
+    if not parts:
+        return name
+    where = dimension_text(alert.subject_ref, parts, DisplayNames(lang))
+    return _fill(QCoreApplication.translate("Alerts", "%1 (%2)"), name, where)
 
 
 # --------------------------------------------------------------------------- messages
@@ -164,7 +213,11 @@ def _maint_unknown(alert: Alert, lang: str) -> str:
 
 
 def _indicator_values(alert: Alert, lang: str) -> tuple[str, str, str]:
-    return subject_text(alert), _number(alert.value, lang), _number(alert.threshold, lang)
+    return (
+        indicator_text(alert, lang),
+        _indicator_number(alert, alert.value, lang),
+        _indicator_number(alert, alert.threshold, lang),
+    )
 
 
 def _indicator_warning(alert: Alert, lang: str) -> str:
@@ -188,6 +241,21 @@ _MESSAGES: dict[str, Callable[[Alert, str], str]] = {
 }
 
 ALL_KIND_CODES: tuple[str, ...] = tuple(_MESSAGES)
+
+
+_ERROR_LABELS: dict[str, Callable[[], str]] = {
+    CORRUPT_SETTING: lambda: QCoreApplication.translate(
+        "Alerts", "A stored setting cannot be read."
+    ),
+}
+
+#: Every error code the Alerts page can present (for the completeness test).
+ALL_ERROR_CODES: tuple[str, ...] = tuple(_ERROR_LABELS)
+
+
+def error_label(code: str) -> str:
+    """The translated message of a service error code (the code itself when unknown)."""
+    return label_for(_ERROR_LABELS, str(code))
 
 
 def kind_message(code: str, alert: Alert, lang: str) -> str:

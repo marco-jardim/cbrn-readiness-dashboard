@@ -16,7 +16,7 @@ The dashboard service returns codes and numbers only. Here the codes become word
   ``ChartData`` (display text).
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -27,6 +27,7 @@ from cbrn_dashboard.domain.alerts import Severity
 from cbrn_dashboard.domain.budget import is_valid_currency
 from cbrn_dashboard.domain.indicators import IndicatorStatus, Module, UnitKind
 from cbrn_dashboard.services.budget import SourceView
+from cbrn_dashboard.services.config import CORRUPT_SETTING
 from cbrn_dashboard.services.dashboard import (
     CHART_BUDGET_PREFIX,
     CHART_EXERCISES,
@@ -38,7 +39,7 @@ from cbrn_dashboard.services.dashboard import (
 from cbrn_dashboard.services.errors import INVALID_DATE, NOT_FOUND, READ_ONLY
 from cbrn_dashboard.services.infrastructure import AssetTypeView
 from cbrn_dashboard.services.snapshots import AS_OF_IN_FUTURE, ORIGIN_NOT_ALLOWED
-from cbrn_dashboard.ui.budget.labels import source_name
+from cbrn_dashboard.ui.budget.labels import fill_placeholders, source_name
 from cbrn_dashboard.ui.budget.models import money_text, rate_text
 from cbrn_dashboard.ui.dashboard.models import NOT_RECORDED, count_text
 from cbrn_dashboard.ui.exercises.labels import kind_label
@@ -69,6 +70,7 @@ __all__ = [
     "dimension_text",
     "error_label",
     "indicator_name",
+    "join_texts",
     "module_title",
     "origin_label",
     "series_label",
@@ -265,12 +267,24 @@ def _part_text(code: str, key: str, value: str, names: DisplayNames) -> str:
         return QCoreApplication.translate("Dashboard", "Source %1").replace(
             "%1", _source_name(value, names)
         )
-    return f"{key}={value}"
+    return fill_placeholders(QCoreApplication.translate("Dashboard", "%1: %2"), key, value)
+
+
+def join_texts(texts: Sequence[str]) -> str:
+    """``texts`` joined by the translated list pattern ``%1, %2``, each join in a single pass."""
+    joined = ""
+    for position, text in enumerate(texts):
+        joined = (
+            text
+            if position == 0
+            else fill_placeholders(QCoreApplication.translate("Dashboard", "%1, %2"), joined, text)
+        )
+    return joined
 
 
 def dimension_text(code: str, parts: Mapping[str, str], names: DisplayNames) -> str:
     """The dimension of a tile as words (empty for an indicator without a dimension)."""
-    return ", ".join(_part_text(code, key, value, names) for key, value in parts.items())
+    return join_texts([_part_text(code, key, value, names) for key, value in parts.items()])
 
 
 def as_of_text(as_of: date, lang: str) -> str:
@@ -465,6 +479,9 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     ),
     ORIGIN_NOT_ALLOWED: lambda: QCoreApplication.translate(
         "Dashboard", "This snapshot origin is not allowed."
+    ),
+    CORRUPT_SETTING: lambda: QCoreApplication.translate(
+        "Dashboard", "A stored setting cannot be read."
     ),
 }
 

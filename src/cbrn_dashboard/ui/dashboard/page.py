@@ -37,7 +37,8 @@ from PySide6.QtWidgets import (
 from cbrn_dashboard.domain.alerts import Severity
 from cbrn_dashboard.domain.indicators import Module, UnitKind
 from cbrn_dashboard.services.budget import SourceView
-from cbrn_dashboard.services.dashboard import ChartSpec, Tile
+from cbrn_dashboard.services.dashboard import ChartSpec, DashboardData, Tile
+from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.services.infrastructure import AssetTypeView
 from cbrn_dashboard.services.snapshots import SnapshotOrigin, SnapshotService, SnapshotView
 from cbrn_dashboard.ui.dashboard.labels import (
@@ -75,7 +76,6 @@ from cbrn_dashboard.ui.shell.widgets import (
     action_row,
     apply_change,
     current_language,
-    follow_language,
     make_edit_action,
     make_table_view,
 )
@@ -265,6 +265,10 @@ class DashboardPage(QWidget):
         self.tile_widgets: list[TileWidget] = []
         self._panels: dict[str, ChartPanel] = {}
         self._panel_order: list[str] = []
+        self._data: DashboardData | None = None
+        self._problem: str | None = None
+        self._types: dict[str, AssetTypeView] = {}
+        self._sources: dict[str, SourceView] = {}
 
         self.as_of_label = _plain(QLabel(self))
         self.as_of_label.setObjectName("as_of_label")
@@ -328,18 +332,39 @@ class DashboardPage(QWidget):
 
         context.as_of_changed.connect(self._as_of_changed)
         context.data_changed.connect(self.refresh)
-        follow_language(context, self.retranslate)
-        self.retranslate()
+        context.translator_manager.language_changed.connect(self._language_changed)
+        self._static_texts()
+        self.refresh()
 
     # ----- texts
 
-    def retranslate(self) -> None:
-        """Re-apply every text of the page in the current language (it reads the data again)."""
+    def _static_texts(self) -> None:
         self.snapshot_action.retranslate()
         self.alerts_box.setTitle(QCoreApplication.translate("Dashboard", "Alerts"))
         self.tiles_caption.setText(QCoreApplication.translate("Dashboard", "Indicators"))
         self.charts_caption.setText(QCoreApplication.translate("Dashboard", "Charts"))
-        self.empty_label.setText(QCoreApplication.translate("Dashboard", "No database is open."))
+
+    def retranslate(self) -> None:
+        """Re-apply every text of the page in the current language.
+
+        The data is shown again from what was read last: a language change is not a data
+        change, so nothing is read here (see :meth:`_language_changed`). Once the database was
+        closed there is nothing to show again: what was read from it is dropped.
+        """
+        self._static_texts()
+        if self.context.services.dashboard is None:
+            self._data = None
+            self._problem = None
+            self._types, self._sources = {}, {}
+        self._render()
+
+    def _language_changed(self, _code: str) -> None:
+        """The translator manager announced a language: texts and a fresh read, once.
+
+        The ``LanguageChange`` event Qt posts for the same switch only re-renders
+        (:meth:`retranslate`), so a language switch reads the services exactly once.
+        """
+        self._static_texts()
         self.refresh()
 
     def changeEvent(self, event: QEvent) -> None:
@@ -352,7 +377,7 @@ class DashboardPage(QWidget):
     def _as_of_changed(self, _value: object) -> None:
         self.refresh()
 
-    def _names(self, lang: str) -> DisplayNames:
+    def _lookups(self) -> tuple[dict[str, AssetTypeView], dict[str, SourceView]]:
         """The user-defined asset types and funding sources, for the display names."""
         infrastructure = self.context.services.infrastructure
         budget = self.context.services.budget
@@ -362,15 +387,39 @@ class DashboardPage(QWidget):
         sources: dict[str, SourceView] = {}
         if budget is not None:
             sources = {s.code: s for s in budget.list_sources(include_inactive=True)}
-        return DisplayNames(lang, types, sources)
+        return types, sources
 
     def refresh(self) -> None:
-        """Read the dashboard for the as-of date again and rebuild what is shown."""
-        lang = current_language(self.context)
-        as_of = self.context.as_of
+        """Read the dashboard for the as-of date again and rebuild what is shown.
+
+        A stored setting that cannot be used (``CORRUPT_SETTING``) or any other service error
+        leaves the page empty with a translated message; nothing is raised from a slot.
+        """
         service = self.context.services.dashboard
-        data = None if service is None else service.data(as_of)
-        self.as_of_label.setText(as_of_text(as_of, lang))
+        self._data = None
+        self._problem = None
+        self._types, self._sources = {}, {}
+        if service is not None:
+            try:
+                self._data = service.data(self.context.as_of)
+                self._types, self._sources = self._lookups()
+            except ServiceError as error:
+                self._data = None
+                self._types, self._sources = {}, {}
+                self._problem = error.code
+        self._render()
+
+    def _render(self) -> None:
+        """Show what the last :meth:`refresh` read, in the current language."""
+        lang = current_language(self.context)
+        data = self._data
+        self.as_of_label.setText(as_of_text(self.context.as_of, lang))
+        if self._problem is None:
+            self.empty_label.setText(
+                QCoreApplication.translate("Dashboard", "No database is open.")
+            )
+        else:
+            self.empty_label.setText(error_label(self._problem))
         self.empty_label.setVisible(data is None)
         self.scroll_area.setVisible(data is not None)
         if data is None:
@@ -379,7 +428,7 @@ class DashboardPage(QWidget):
                 self.alert_labels[severity].setText("")
             self._show_charts((), DisplayNames(lang))
         else:
-            names = self._names(lang)
+            names = DisplayNames(lang, self._types, self._sources)
             self._show_tiles(data.tiles, names)
             for severity in Severity:
                 text = alert_text(severity.value, data.alert_counts.get(severity, 0), lang)

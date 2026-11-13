@@ -193,18 +193,82 @@ def test_the_value_axis_starts_at_zero_and_covers_the_values(qapp: QApplication)
     assert "e" not in axis.labelFormat().lower()
 
 
-def test_none_is_drawn_as_zero_but_stays_none_in_the_data(qapp: QApplication, qtbot: QtBot) -> None:
+def test_a_missing_value_has_no_bar_and_the_chart_says_so(
+    qapp: QApplication, qtbot: QtBot, translator_manager: TranslatorManager
+) -> None:
+    """P6-05: a value that is not recorded stays None, is not a bar, and the legend names it."""
+    translator_manager.set_language("en_US")
     data = ChartData("T", ("A", "B", "C"), (ChartSeries("S", (4.0, None, 2.0)),))
 
-    _, bar_sets = read_back(build_chart(data))
+    chart = build_chart(data)
     view = ChartView(data)
     qtbot.addWidget(view)
 
-    assert bar_sets == (("S", (4.0, 0.0, 2.0)),)
+    expected = (("S (not recorded: B)", (4.0, None, 2.0)),)
+    assert read_back(chart)[1] == expected
     assert view.data().series[0].values == (4.0, None, 2.0)
     shown = view.chart()
     assert shown is not None
-    assert read_back(shown)[1] == (("S", (4.0, 0.0, 2.0)),)
+    assert read_back(shown)[1] == expected
+    series = chart.series()[0]
+    assert isinstance(series, QAbstractBarSeries)
+    assert series.barSets()[0].at(1) == 0.0  # no height: nothing is drawn for it
+    assert chart.legend().isVisible()  # the note is in the legend, also for a single series
+
+
+@pytest.mark.parametrize(
+    ("language", "label"),
+    [
+        ("en_US", "S (not recorded: B)"),
+        ("pt_BR", "S (não registrado: B)"),
+        ("es_ES", "S (sin registrar: B)"),
+    ],
+)
+def test_the_not_recorded_note_follows_the_language(
+    qapp: QApplication, translator_manager: TranslatorManager, language: str, label: str
+) -> None:
+    translator_manager.set_language(language)
+    data = ChartData("T", ("A", "B"), (ChartSeries("S", (1.0, None)),))
+
+    assert read_back(build_chart(data))[1][0][0] == label
+
+
+def test_a_real_zero_is_not_marked_as_missing(qapp: QApplication) -> None:
+    data = ChartData("T", ("A", "B"), (ChartSeries("S", (0.0, 3.0)),))
+
+    assert read_back(build_chart(data)) == (("A", "B"), (("S", (0.0, 3.0)),))
+    assert not build_chart(data).legend().isVisible()
+
+
+@pytest.mark.parametrize(
+    ("language", "name"), [("pt_BR", "pt_BR"), ("en_US", "en_US"), ("es_ES", "es_ES")]
+)
+def test_the_axis_numbers_follow_the_active_language(
+    qapp: QApplication, translator_manager: TranslatorManager, language: str, name: str
+) -> None:
+    """P6-06: the chart is localized (decimal separator of the axis labels) like the pages."""
+    translator_manager.set_language(language)
+
+    chart = build_chart(BAR)
+
+    assert chart.localizeNumbers()
+    assert chart.locale().name() == name
+
+
+def test_a_shown_chart_follows_a_language_switch(
+    qapp: QApplication, qtbot: QtBot, translator_manager: TranslatorManager
+) -> None:
+    translator_manager.set_language("en_US")
+    view = ChartView(BAR)
+    qtbot.addWidget(view)
+    shown = view.chart()
+    assert shown is not None
+    assert shown.locale().name() == "en_US"
+
+    translator_manager.set_language("pt_BR")
+
+    qtbot.waitUntil(lambda: shown.locale().name() == "pt_BR")
+    assert shown.localizeNumbers()
 
 
 # --------------------------------------------------------------------------- rendering

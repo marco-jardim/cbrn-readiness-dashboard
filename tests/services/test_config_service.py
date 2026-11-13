@@ -20,6 +20,7 @@ from cbrn_dashboard.services.config import (
     ConfigService,
 )
 from cbrn_dashboard.services.errors import READ_ONLY, ServiceError
+from cbrn_dashboard.storage import settings_repo
 from cbrn_dashboard.storage.db import DatabaseConnection
 from tests.services.conftest import ChangeLogRows
 
@@ -83,8 +84,10 @@ def test_save_round_trips_and_logs_only_the_changed_keys(
     assert set(changed) == expected
     assert service.load() == changed_config
     rows = change_log_rows(db)[before:]
-    assert _logged_keys(rows) == expected
-    assert len(rows) == len(expected)
+    # the placeholders of the changed fields (P01, A02, A04) are confirmed in the same save
+    confirmed = {"confirmed.P01", "confirmed.A02", "confirmed.A04"}
+    assert _logged_keys(rows) == expected | confirmed
+    assert len(rows) == len(expected) + len(confirmed)
     assert all(row["entity"] == "setting" and row["action"] == "insert" for row in rows)
     assert all(row["operator"] == OPERATOR and row["at_utc"] == NOW_TEXT for row in rows)
 
@@ -115,6 +118,73 @@ def test_saving_a_later_change_logs_an_update_of_that_key_only(
     assert rows[0]["action"] == "update"
     assert _logged_keys(rows) == {"config.small_count_threshold"}
     assert service.load().small_count_threshold == 9
+
+
+def test_a_changing_save_confirms_the_placeholder_of_the_changed_field_only(
+    service: ConfigService, db: DatabaseConnection
+) -> None:
+    """P6-03/P6-04: "until the operator confirms or changes the value" (PLAN.md 3.5)."""
+    assert service.badge_for_field("cert_warning_days") == "P01"
+
+    service.save(service.load().with_changes(cert_warning_days=120))
+
+    assert service.badge_for_field("cert_warning_days") is None
+    assert _stored(db, "confirmed.P01") is True
+    assert service.needs_badge("P02") is True  # another field: its badge stays
+    assert _stored(db, "confirmed.P02") is None
+
+
+def test_a_save_that_changes_nothing_confirms_nothing(
+    service: ConfigService, db: DatabaseConnection, change_log_rows: ChangeLogRows
+) -> None:
+    before = len(change_log_rows(db))
+
+    assert service.save(service.load()) == ()  # the defaults, not stored yet
+    assert service.save(service.load().with_changes(cert_warning_days=90)) == ()  # still default
+
+    assert service.needs_badge("P01") is True
+    assert len(change_log_rows(db)) == before
+
+
+def test_the_confirmation_is_made_in_the_same_transaction_as_the_save(
+    service: ConfigService, db: DatabaseConnection, change_log_rows: ChangeLogRows
+) -> None:
+    before = len(change_log_rows(db))
+
+    service.save(service.load().with_changes(unit_name="Demo unit", small_count_threshold=7))
+
+    rows = change_log_rows(db)[before:]
+    # D18 pins both of its fields, even the one that was not typed (institution_name)
+    assert _logged_keys(rows) == {
+        "config.unit_name",
+        "config.small_count_threshold",
+        "config.institution_name",
+        "confirmed.D18",
+        "confirmed.A11",
+    }
+    assert service.needs_badge("D18") is False
+    assert service.needs_badge("A11") is False
+
+
+def test_a_failing_confirmation_rolls_the_save_back(
+    service: ConfigService,
+    db: DatabaseConnection,
+    change_log_rows: ChangeLogRows,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def failing(*_args: object) -> None:
+        raise domain_config.ConfigError("UNKNOWN_PLACEHOLDER", "placeholder_id")
+
+    monkeypatch.setattr(settings_repo, "confirm_placeholder", failing)
+    settings_before = _count(db, "setting")
+    log_before = len(change_log_rows(db))
+
+    error = _error(lambda: service.save(service.load().with_changes(cert_warning_days=120)))
+
+    assert error.code == "UNKNOWN_PLACEHOLDER"
+    assert _count(db, "setting") == settings_before
+    assert len(change_log_rows(db)) == log_before
+    assert service.load().cert_warning_days == 90
 
 
 _INVALID: tuple[tuple[ReadinessConfig, str, str], ...] = (

@@ -28,8 +28,10 @@ CATALOGUE_IDS = [f"{area}_{lang}" for area, lang, _ in CATALOGUES]
 REVIEWED_LANGUAGES = frozenset({"pt_BR", "es_ES"})
 """Languages whose translations await the committee's review (plan section 10.1)."""
 
-IDENTICAL_ALLOWED: frozenset[str] = frozenset()
-"""Source texts whose pt_BR/es_ES translation may equal the English text (none so far)."""
+IDENTICAL_ALLOWED: frozenset[str] = frozenset({"%1: %2", "%1, %2", "%1; %2", "%1 (%2)"})
+"""Source texts whose pt_BR/es_ES translation may equal the English text: the pure punctuation
+patterns that join two already translated pieces (they are translatable so that a language can
+reorder or re-punctuate them)."""
 
 APP_NAME = {
     "pt_BR": "Painel de Prontidão QBRN",

@@ -29,18 +29,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from cbrn_dashboard.domain.config import SETTING_PREFIX, ReadinessConfig, placeholder_for_field
+from cbrn_dashboard.domain.config import ReadinessConfig
 from cbrn_dashboard.i18n import LANGUAGES
 from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.ui.settings.dialogs import (
     PLACEHOLDER_TARGETS,
     TargetDialog,
-    confirm_if_due,
     parse_whole,
     reformat_number,
     show_error,
 )
-from cbrn_dashboard.ui.settings.labels import dimension_text, error_label, indicator_label
+from cbrn_dashboard.ui.settings.labels import (
+    dimension_text,
+    error_label,
+    fill_placeholders,
+    indicator_label,
+)
 from cbrn_dashboard.ui.settings.models import TargetRow, TargetsModel
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.formatting import FormatError, format_number
@@ -55,7 +59,7 @@ from cbrn_dashboard.ui.shell.widgets import (
     make_table_view,
 )
 
-__all__ = ["AlertsSection", "GeneralSection", "PlaceholderBadge", "TargetsSection"]
+__all__ = ["AlertsSection", "GeneralSection", "PlaceholderBadge", "ProblemNote", "TargetsSection"]
 
 
 def _open(dialog: QDialog) -> None:
@@ -67,15 +71,47 @@ def _open(dialog: QDialog) -> None:
 # --------------------------------------------------------------------------- shared helpers
 
 
-def _load_config(context: AppContext) -> ReadinessConfig | None:
-    """The stored configuration; ``None`` without a configuration service or when it is unusable."""
+def _read_config(context: AppContext) -> tuple[ReadinessConfig | None, str | None]:
+    """The stored configuration and the error code of an unusable one.
+
+    ``(None, None)`` without a configuration service, ``(None, code)`` when a stored setting
+    cannot be read (the section then shows the translated message of ``code``).
+    """
     service = context.services.config
     if service is None:
-        return None
+        return None, None
     try:
-        return service.load()
-    except ServiceError:
-        return None
+        return service.load(), None
+    except ServiceError as error:
+        return None, error.code
+
+
+def _load_config(context: AppContext) -> ReadinessConfig | None:
+    """The stored configuration; ``None`` without a configuration service or when it is unusable."""
+    return _read_config(context)[0]
+
+
+class ProblemNote:
+    """A visible translated line that says why a section cannot show its values.
+
+    It is hidden until :meth:`show_code` is given an error code (a stored setting that cannot be
+    read); it follows the language through :meth:`retranslate`.
+    """
+
+    def __init__(self, parent: QWidget, name: str) -> None:
+        self.label = QLabel(parent)
+        self.label.setObjectName(f"{name}_problem")
+        self.label.setWordWrap(True)
+        self.label.setVisible(False)
+        self._code: str | None = None
+
+    def show_code(self, code: str | None) -> None:
+        self._code = code
+        self.label.setVisible(code is not None)
+        self.retranslate()
+
+    def retranslate(self) -> None:
+        self.label.setText("" if self._code is None else error_label(self._code))
 
 
 def _badge_for_field(context: AppContext, field: str) -> str | None:
@@ -105,21 +141,15 @@ def _save_config(
     parent: QWidget,
     change: Callable[[ReadinessConfig], ReadinessConfig],
 ) -> bool:
-    """Save ``change(stored configuration)``; a changed value confirms its placeholder.
+    """Save ``change(stored configuration)``.
 
-    A refusal is shown translated and nothing is written. ``True`` when the call succeeded.
+    ``ConfigService.save`` confirms the placeholders of the fields that changed in the same
+    transaction. A refusal is shown translated and nothing is written. ``True`` on success.
     """
     service = context.services.config
     if service is None:
         return False
-
-    def save() -> None:
-        for key in service.save(change(service.load())):
-            item = placeholder_for_field(key.removeprefix(SETTING_PREFIX))
-            if item is not None and service.needs_badge(item.id):
-                service.confirm(item.id)
-
-    return apply_change(context, parent, error_label, save)
+    return apply_change(context, parent, error_label, lambda: service.save(change(service.load())))
 
 
 def _confirm(context: AppContext, parent: QWidget, placeholder: str | None) -> None:
@@ -200,6 +230,8 @@ class GeneralSection(QWidget):
         self.unit_edit.setObjectName("unit_edit")
         self.unit_caption.setBuddy(self.unit_edit)
         self.names_badge = PlaceholderBadge(context, self, "names")
+        self.problem = ProblemNote(self, "general")
+        self._loaded: tuple[str, str, str] | None = None
         self.save_button = QPushButton(self)
         self.save_button.setObjectName("general_save")
         # Read-only mode disables every control that changes data. The language is a preference
@@ -219,6 +251,7 @@ class GeneralSection(QWidget):
         form.addRow(self.unit_caption, self.unit_edit)
         form.addRow(self.names_badge.row())
         layout = QVBoxLayout(self)
+        layout.addWidget(self.problem.label)
         layout.addLayout(form)
         save_row = QHBoxLayout()
         save_row.addWidget(self.save_button)
@@ -242,6 +275,7 @@ class GeneralSection(QWidget):
         self.unit_caption.setText(QCoreApplication.translate("Settings", "Unit name"))
         self.save_button.setText(QCoreApplication.translate("Settings", "Save"))
         self.names_badge.retranslate()
+        self.problem.retranslate()
         for index in range(self.language_combo.count()):
             self.language_combo.setItemText(
                 index, language_display_name(str(self.language_combo.itemData(index)))
@@ -272,13 +306,39 @@ class GeneralSection(QWidget):
 
     # ----- data
 
-    def refresh(self) -> None:
-        """Show the stored values and badge again; the operator label is given to the context."""
+    def _typed(self) -> tuple[str, str, str]:
+        return (
+            self.operator_edit.text().strip(),
+            self.institution_edit.text().strip(),
+            self.unit_edit.text().strip(),
+        )
+
+    def is_dirty(self) -> bool:
+        """Whether the inputs differ from what was last loaded into them (unsaved typing)."""
+        return self._loaded is not None and self._typed() != self._loaded
+
+    def reload(self) -> None:
+        """Put the stored values into the inputs (discarding what was typed)."""
         config = _load_config(self.context)
         if config is not None:
-            self.operator_edit.setText(config.operator_label)
-            self.institution_edit.setText(config.institution_name)
-            self.unit_edit.setText(config.unit_name)
+            self._show(config)
+
+    def _show(self, config: ReadinessConfig) -> None:
+        self.operator_edit.setText(config.operator_label)
+        self.institution_edit.setText(config.institution_name)
+        self.unit_edit.setText(config.unit_name)
+        self._loaded = self._typed()
+
+    def refresh(self) -> None:
+        """Show the badge again, and the stored values unless the form holds unsaved typing.
+
+        The operator label is given to the context.
+        """
+        config, problem = _read_config(self.context)
+        self.problem.show_code(problem)
+        if config is not None:
+            if not self.is_dirty():
+                self._show(config)
             self.context.set_operator_label(config.operator_label)
         due = _badge_for_field(self.context, "institution_name") or _badge_for_field(
             self.context, "unit_name"
@@ -298,13 +358,15 @@ class GeneralSection(QWidget):
         operator = self.operator_edit.text().strip()
         institution = self.institution_edit.text().strip()
         unit = self.unit_edit.text().strip()
-        _save_config(
+        saved = _save_config(
             self.context,
             self,
             lambda config: config.with_changes(
                 operator_label=operator, institution_name=institution, unit_name=unit
             ),
         )
+        if saved:
+            self.reload()  # what is stored now is what is typed: the form is clean again
 
     def _confirm_names(self) -> None:
         _confirm(self.context, self, self.names_badge.placeholder)
@@ -331,6 +393,8 @@ class AlertsSection(QWidget):
         self.maintenance_edit.setObjectName("maintenance_days_edit")
         self.maintenance_caption.setBuddy(self.maintenance_edit)
         self.maintenance_badge = PlaceholderBadge(context, self, "maintenance")
+        self.problem = ProblemNote(self, "alerts")
+        self._loaded: tuple[int, int] | None = None
         self.save_button = QPushButton(self)
         self.save_button.setObjectName("alerts_save")
         for target in (self.cert_edit, self.maintenance_edit, self.save_button):
@@ -347,6 +411,7 @@ class AlertsSection(QWidget):
         grid.addWidget(self.maintenance_badge.confirm, 1, 3)
         grid.setColumnStretch(4, 1)
         layout = QVBoxLayout(self)
+        layout.addWidget(self.problem.label)
         layout.addLayout(grid)
         save_row = QHBoxLayout()
         save_row.addWidget(self.save_button)
@@ -373,6 +438,7 @@ class AlertsSection(QWidget):
         self.save_button.setText(QCoreApplication.translate("Settings", "Save"))
         self.cert_badge.retranslate()
         self.maintenance_badge.retranslate()
+        self.problem.retranslate()
         lang = current_language(self.context)
         if lang != self._lang:
             reformat_number(self.cert_edit, self._lang, lang)
@@ -386,13 +452,39 @@ class AlertsSection(QWidget):
 
     # ----- data
 
-    def refresh(self) -> None:
-        """Show the stored windows and the badges of P01 and P02 again."""
-        config = _load_config(self.context)
+    def _typed(self) -> tuple[int, int] | None:
+        """The typed windows as numbers (``None`` while one of them does not parse)."""
         lang = current_language(self.context)
+        try:
+            return parse_whole(self.cert_edit.text(), lang), parse_whole(
+                self.maintenance_edit.text(), lang
+            )
+        except FormatError:
+            return None
+
+    def is_dirty(self) -> bool:
+        """Whether the inputs differ from what was last loaded into them (unsaved typing)."""
+        return self._loaded is not None and self._typed() != self._loaded
+
+    def reload(self) -> None:
+        """Put the stored windows into the inputs (discarding what was typed)."""
+        config = _load_config(self.context)
         if config is not None:
-            self.cert_edit.setText(format_number(config.cert_warning_days, lang))
-            self.maintenance_edit.setText(format_number(config.maintenance_warning_days, lang))
+            self._show(config)
+
+    def _show(self, config: ReadinessConfig) -> None:
+        lang = current_language(self.context)
+        self.cert_edit.setText(format_number(config.cert_warning_days, lang))
+        self.maintenance_edit.setText(format_number(config.maintenance_warning_days, lang))
+        self._loaded = (config.cert_warning_days, config.maintenance_warning_days)
+
+    def refresh(self) -> None:
+        """Show the badges of P01 and P02 again, and the stored windows unless the form is dirty."""
+        config, problem = _read_config(self.context)
+        self.problem.show_code(problem)
+        lang = current_language(self.context)
+        if config is not None and not self.is_dirty():
+            self._show(config)
         self._lang = lang
         enable = self.context.set_edit_enabled
         for widget in (self.cert_edit, self.maintenance_edit, self.save_button):
@@ -414,13 +506,15 @@ class AlertsSection(QWidget):
         except FormatError as error:
             show_error(self.context, self, error.code)
             return
-        _save_config(
+        saved = _save_config(
             self.context,
             self,
             lambda config: config.with_changes(
                 cert_warning_days=cert, maintenance_warning_days=maintenance
             ),
         )
+        if saved:
+            self.reload()
 
     def _confirm_cert(self) -> None:
         _confirm(self.context, self, self.cert_badge.placeholder)
@@ -446,6 +540,7 @@ class TargetsSection(QWidget):
         self.note_label.setObjectName("targets_note")
         self.note_label.setWordWrap(True)
         self.badge = PlaceholderBadge(context, self, "targets")
+        self.problem = ProblemNote(self, "targets")
         self.add_action = make_edit_action(
             context,
             self,
@@ -478,6 +573,7 @@ class TargetsSection(QWidget):
         )
 
         layout = QVBoxLayout(self)
+        layout.addWidget(self.problem.label)
         layout.addWidget(self.note_label)
         layout.addLayout(self.badge.row())
         layout.addWidget(self.view, 1)
@@ -488,6 +584,7 @@ class TargetsSection(QWidget):
             selection.selectionChanged.connect(self._update_actions)
         self.badge.confirm.clicked.connect(self._confirm_targets)
         context.data_changed.connect(self.refresh)
+        context.as_of_changed.connect(self._as_of_changed)  # the dimensions in use depend on it
         follow_language(context, self.retranslate)
         self.retranslate()
         self.refresh()
@@ -504,6 +601,7 @@ class TargetsSection(QWidget):
         )
         self.view.setAccessibleName(QCoreApplication.translate("Settings", "Indicator targets"))
         self.badge.retranslate()
+        self.problem.retranslate()
         for action in self._actions:
             action.retranslate()
         self.model.set_language(current_language(self.context))
@@ -519,13 +617,28 @@ class TargetsSection(QWidget):
         row = self.model.selected_row(self.view)
         return row if isinstance(row, TargetRow) else None
 
+    def _as_of_changed(self, _value: object) -> None:
+        self.refresh()
+
     def refresh(self) -> None:
-        """Read the stored targets and the badge of P03 again."""
+        """Read the stored targets and the badge of P03 again.
+
+        A target whose dimension currently has no value is marked "Not in use". When the
+        dimensions cannot be read (a stored setting is unusable) the message is shown instead.
+        """
         service = self.context.services.indicators
         previous = self.selected_target()
         targets = [] if service is None else service.list_targets()
         definitions = {} if service is None else {d.code: d for d in service.definitions()}
-        self.model.set_targets(targets, definitions)
+        known: dict[str, list[str]] | None = None
+        problem: str | None = None
+        if service is not None:
+            try:
+                known = service.known_dimensions(self.context.as_of)
+            except ServiceError as error:
+                problem = error.code
+        self.problem.show_code(problem)
+        self.model.set_targets(targets, definitions, known)
         if previous is not None:
             for row, target in enumerate(targets):
                 if (target.indicator_code, target.dimension) == (
@@ -564,8 +677,12 @@ class TargetsSection(QWidget):
         view = row.view
 
         def switch() -> None:
-            if service.set_target_enabled(view.indicator_code, view.dimension, not view.enabled):
-                confirm_if_due(self.context, PLACEHOLDER_TARGETS)
+            service.set_target_enabled(
+                view.indicator_code,
+                view.dimension,
+                not view.enabled,
+                confirm_placeholder=PLACEHOLDER_TARGETS,
+            )
 
         apply_change(self.context, self, error_label, switch)
 
@@ -575,10 +692,11 @@ class TargetsSection(QWidget):
         if row is None or service is None:
             return
         view = row.view
-        name = f"{indicator_label(view.indicator_code)} ({dimension_text(view.dimension)})"
         title = QCoreApplication.translate("Settings", "Delete target")
-        question = QCoreApplication.translate("Settings", "Delete the target of %1?").replace(
-            "%1", name
+        question = fill_placeholders(
+            QCoreApplication.translate("Settings", "Delete the target of %1 (%2)?"),
+            indicator_label(view.indicator_code),
+            dimension_text(view.dimension),
         )
         if self.context.prompts.confirm(self, title, question):
             apply_change(

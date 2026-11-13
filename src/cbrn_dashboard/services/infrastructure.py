@@ -31,6 +31,7 @@ from datetime import date, datetime
 
 from cbrn_dashboard.clock import Clock
 from cbrn_dashboard.domain import infrastructure as rules
+from cbrn_dashboard.domain.config import ConfigError
 from cbrn_dashboard.domain.dates import (
     InvalidDateError,
     format_iso_date,
@@ -46,6 +47,7 @@ from cbrn_dashboard.domain.infrastructure import (
     MaintenanceKind,
     StatusEvent,
 )
+from cbrn_dashboard.services.config import CORRUPT_SETTING
 from cbrn_dashboard.services.errors import (
     CODE_IMMUTABLE,
     INVALID_CODE,
@@ -910,7 +912,10 @@ class InfrastructureService:
     # ----- as-of views (built with the domain functions)
 
     def _rules(self) -> rules.InfrastructureRules:
-        config = load_config(self._conn)
+        try:
+            config = load_config(self._conn)
+        except ConfigError as exc:
+            raise ServiceError(CORRUPT_SETTING, exc.field or None) from exc
         return rules.InfrastructureRules(
             maintenance_warning_days=config.maintenance_warning_days,
             degraded_counts_as_available=config.degraded_counts_as_available,

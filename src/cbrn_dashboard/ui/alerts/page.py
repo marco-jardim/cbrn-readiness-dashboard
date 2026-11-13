@@ -13,9 +13,11 @@ from PySide6.QtCore import QCoreApplication, QEvent, QModelIndex, Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from cbrn_dashboard.domain.alerts import Alert
+from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.ui.alerts.labels import (
     ALL_MODULE_CODES,
     ALL_SEVERITY_CODES,
+    error_label,
     module_label,
     severity_label,
 )
@@ -46,6 +48,7 @@ class AlertsPage(QWidget):
         self.setObjectName("alerts_page")
         self.context = context
         self._alerts: list[Alert] = []
+        self._problem: str | None = None
         self.model = AlertsModel(self)
 
         self.module_caption = QLabel(self)
@@ -114,7 +117,7 @@ class AlertsPage(QWidget):
         self.severity_combo.setItemText(0, QCoreApplication.translate("Alerts", "All severities"))
         for position, code in enumerate(ALL_SEVERITY_CODES, start=1):
             self.severity_combo.setItemText(position, severity_label(code))
-        self.empty_label.setText(QCoreApplication.translate("Alerts", "No alerts for this date."))
+        self._update_empty_text()
         self.open_action.retranslate()
         self.model.set_language(current_language(self.context))
         self._update_count()
@@ -138,10 +141,27 @@ class AlertsPage(QWidget):
         self.refresh()
 
     def refresh(self) -> None:
-        """Read the alerts of the as-of date again and apply the filters."""
+        """Read the alerts of the as-of date again and apply the filters.
+
+        A service error (a stored setting that cannot be used) leaves the table empty with the
+        translated message in the empty-state label; nothing is raised from a slot.
+        """
         service = self.context.services.alerts
-        self._alerts = [] if service is None else service.alerts(self.context.as_of)
+        self._alerts = []
+        self._problem = None
+        if service is not None:
+            try:
+                self._alerts = service.alerts(self.context.as_of)
+            except ServiceError as error:
+                self._problem = error.code
         self._apply_filters()
+
+    def _update_empty_text(self) -> None:
+        if self._problem is None:
+            text = QCoreApplication.translate("Alerts", "No alerts for this date.")
+        else:
+            text = error_label(self._problem)
+        self.empty_label.setText(text)
 
     def _filter_changed(self, _index: int) -> None:
         self._apply_filters()
@@ -159,6 +179,7 @@ class AlertsPage(QWidget):
         self.model.set_alerts(shown)
         if previous is not None and previous in shown:
             self.view.selectRow(shown.index(previous))
+        self._update_empty_text()
         self.empty_label.setVisible(not shown)
         self._update_count()
         self._update_actions()
