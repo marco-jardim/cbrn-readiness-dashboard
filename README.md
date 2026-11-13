@@ -29,6 +29,8 @@ Documentation:
 - [Indicator reference](docs/indicators.md): every indicator, its definition, default target and placeholder status.
 - [Data protection](docs/data-protection.md): what is stored, where, and how it is protected.
 - [Import templates](docs/import-templates.md): the CSV layouts accepted by the import.
+- [Manual test guide](docs/guia-teste-manual.pt-BR.md) (Portuguese): how to run the manual tests on a clean Windows profile without administrator rights.
+- [Questionnaire for the CBRN defence committee](docs/questionario-comite.pt-BR.md) (Portuguese): the open questions of the plan, in plain language; answers are kept outside the repository.
 
 ## Background
 

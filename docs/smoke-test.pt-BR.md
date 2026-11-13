@@ -19,6 +19,8 @@ dúvida, o texto em inglês do código-fonte é a referência (por exemplo, "Bac
 
 ## 0. Antes de começar
 
+- Para preparar o computador (conta local sem direitos de administrador, download, checksum e
+  limpeza), siga o [guia prático](guia-teste-manual.pt-BR.md).
 - Um computador com Windows 10 (versão 1809 ou posterior) ou Windows 11, 64 bits, **com um perfil de
   usuário limpo**, que **não** seja administrador. Nunca tenha usado o programa nesse perfil: a pasta
   `%LOCALAPPDATA%\cbrn-readiness-dashboard` não deve existir. Se existir, o teste não é de perfil

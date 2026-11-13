@@ -22,6 +22,8 @@ nos arquivos e pastas que você escolhe.
 
 ## 0. Antes de começar
 
+- Para preparar o computador (conta local sem direitos de administrador, download, checksum,
+  extração e limpeza), siga o [guia prático](guia-teste-manual.pt-BR.md).
 - O programa já extraído e iniciável (veja [install.pt-BR.md](install.pt-BR.md)), ou um clone do
   repositório com `uv run cbrn-dashboard` no lugar de `.\cbrn-dashboard.exe`.
 - Uma pasta de trabalho descartável, por exemplo `C:\Temp\cbrn-teste`, e **uma mídia removível** (por
