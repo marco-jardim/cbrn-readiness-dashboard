@@ -65,6 +65,7 @@ def app_context(
     )
     yield context
     conn.close()
+    context.conn = None  # as ``AppHandle.close_database`` does: no service outlives the connection
     context.deleteLater()
 
 
