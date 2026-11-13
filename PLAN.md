@@ -218,6 +218,7 @@ A-items without a setting (A01, A03, A12, A13, A14) are assumptions, not placeho
 | P07 | Disclaimer wording (I06) | "Preliminary version — indicators not institutionally validated." | translations | Q15 |
 | P08 | Pro-rating of the `BUD_EXEC_RATE` target over the fiscal year (the target is multiplied by the elapsed fraction of the year, linear) | linear, on | Settings → Budget | Q8 |
 | P09 | Reminder banner when the last encrypted backup is older than this many days | 30 days | Settings → Backup | Q11 |
+| P10 | Handling notice printed on the internal report (local-only value: no code default, flag never cleared in code) | empty | Settings → Reports | Q10 |
 
 ---
 
