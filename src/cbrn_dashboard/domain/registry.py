@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 
-from cbrn_dashboard.domain import budget, exercises
+from cbrn_dashboard.domain import budget, exercises, infrastructure, personnel
 from cbrn_dashboard.domain.indicators import IndicatorDefinition, IndicatorRegistry
 
 IndicatorProvider = Callable[[], Sequence[IndicatorDefinition]]
@@ -18,6 +18,8 @@ IndicatorProvider = Callable[[], Sequence[IndicatorDefinition]]
 # here importing their module's ``indicator_definitions`` function (import at the top of the file,
 # entry below). Empty until those tasks land.
 PROVIDERS: tuple[IndicatorProvider, ...] = (
+    personnel.indicator_definitions,
+    infrastructure.indicator_definitions,
     exercises.indicator_definitions,
     budget.indicator_definitions,
 )
