@@ -179,6 +179,8 @@ The appendix defines **five modules**: personnel (L74), infrastructure (L76), ex
 | D25 | Demo data lives in a separate database file with its own backups, every identifier starts with `DEMO`, and a permanent banner is shown. The banner, a PDF watermark and the `DEMO-` prefix on CSV file names are driven by `app_meta.is_demo`, not by the command-line flag | §7 |
 | D26 | An asset with no status event on or before the as-of date has the status "unknown": not available, and flagged as a data-quality issue | T3.2 |
 | D27 | Negative budget amounts are rejected; corrections are made by editing the entry, and every edit is recorded in `change_log` | T5.3 |
+| D28 | `staff_member.category` is treated as personal free text while Q4 (whether to record a category, and from which coded list) is open: like `identifier` and `label`, its value never reaches `change_log` (only the fact that it changed), "pseudonymise person" clears it, and its input shows the free-text hint (QA finding P2-01) | §5.1, T2.3, T2.4, Q4 |
+| D29 | `EX_LAST_COUNTRIES`, empty country set: an edition saved with no countries is read as "countries not entered", not as zero countries, so the indicator is No data (D14) for that kind, as it is for participants not recorded. An edition that really had no foreign participation cannot be told apart from one whose countries were not filled in; an operator who wants to show a real zero (no foreign participation) should record the host country. The number of countries in the editions table still shows 0 for such an edition (QA finding P4-04) | §5.4, T4.3, T4.5 |
 
 New A, P and D identifiers are assigned at merge time (next free number). Design decisions go to this register and assumptions or placeholders to §3.5 (§10.1).
 
@@ -650,6 +652,8 @@ CREATE TABLE snapshot_withdrawal (       -- append-only: a snapshot is withdrawn
 -- (snapshots are evidence for R31; a withdrawn snapshot stays stored but is ignored by exports and lists)
 ```
 Migration numbers 0002–0007 are reserved in `storage/migrations/README.md` until v0.1.0, so modules developed in parallel do not collide. After v0.1.0 every new migration takes the next free number at merge time (D06).
+
+Migrations 0002–0005 were edited in place after their first merge; no release is tagged yet, so D06 allows it, and databases made with the earlier files are disposable developer or demo databases. The edits add CHECK constraints that repeat service rules, so a wrong row cannot get in by another path: every date column must have the shape `YYYY-MM-DD` (a `GLOB` check; whether the date exists stays a service rule); `active_until` ≥ `active_from`, `in_service_until` ≥ `in_service_from` and `next_due_on` ≥ `performed_on`, beside the existing `valid_until` ≥ `issued_on` and `end_on` ≥ `start_on`; a `no_renewal_reason` needs a `no_renewal_from`; `training_course.active` is 0 or 1; `hours` is not negative; a degree `year` and a `fiscal_year` lie between 1900 and 2200. The sketch above does not show these checks (QA findings P2-06, P3-04, and the schema checks of the Phase 4 and Phase 5 QA).
 
 ### 5.3 Relations
 - `staff_member` 1–n `ppe_certification`, `training_record`, `academic_degree`. `training_course` 1–n `training_record`.
@@ -1198,6 +1202,7 @@ This phase covers R07, R14–R16 and R36, and supplies the inputs for R25. It fo
     - `PERS_CERT_VALID`, `PERS_CERT_EXPIRING` and `PERS_RETRAINING_NEEDED`, with dimension level;
     - `PERS_DEGREE`, with dimensions level and status;
     - `PERS_TRAINING_12M`.
+  - `PERS_DEGREE` and the degree year: a completed degree whose recorded `year` is later than the year of *d* (the local date) is not counted on *d*. A completed degree without a year, and an in-progress degree whatever its year, is counted (QA finding P2-07).
 - Accept: table-driven tests with `FixedClock` show that:
   - a certificate whose `valid_until` equals the as-of date is still valid that day and counts as expiring;
   - inactive staff are never counted;
@@ -1235,6 +1240,7 @@ This phase covers R07, R14–R16 and R36, and supplies the inputs for R25. It fo
   - A staff table with filters: active, level, needs retraining.
   - A detail view showing the person's certificates, training records and degrees.
   - One dialog per record type, with date pickers. The certificate dialog pre-fills `valid_until` from A04 and offers "no renewal from" (a date) with the reason code. There are no free-text note fields. The remaining free-text fields (`label`, `reference`, degree `field`) show a hint: no names, health or contact data; the identifier field hints "a local code, not a service number".
+  - Without configured validity months for the level (A04) there is no proposed `valid_until`: the field shows "Not set" (it is never pre-filled with the issue date), and saving is refused with `REQUIRED` on `valid_until` until a date is entered (QA finding P2-02).
   - A "Pseudonymise person" action, with a confirmation that says it cannot be undone.
   - Summary counts per level for the as-of date.
   - A course-list editor.
@@ -1318,6 +1324,8 @@ This phase covers R08 and R17–R20, and supplies the inputs for R26 and R36.
   - "Retire" (sets `in_service_until`) is separate from "delete" (for entry mistakes).
   - Asset types can be created and edited, with labels in three languages (only the pt-BR label is required for user-defined types, D16) and a default interval. Built-in types can be deactivated but not deleted.
   - Error codes include `DUPLICATE_TAG`, `STATUS_DATE_TAKEN`, `TYPE_IN_USE` and `BUILT_IN_TYPE`.
+  - Deactivating an asset type only stops new assets of that type. `INFRA_AVAILABLE`, `INFRA_MAINT_OVERDUE` and the availability summary cover every active type plus every inactive type that still has an asset in service on the as-of date, so those assets keep counting; an inactive type without an asset in service on that date is left out (QA finding P3-01).
+  - The only status event of an asset cannot be deleted (`ONLY_STATUS_EVENT`): without it the status would silently become "unknown" (D26), so the event is corrected instead. An asset whose status is still unknown on the as-of date (for example after `in_service_from` was moved before its first event) carries the flag "Status unknown (data quality)" in the asset table (T3.4) (QA finding P3-03).
 - Accept:
   - every write produces its `change_log` row;
   - a new asset without an initial status is rejected;
@@ -1408,6 +1416,7 @@ This phase covers R09 and R21–R23, and supplies the editions and results used 
   - Country codes are checked against `countries.json`, loaded with `importlib.resources`.
   - A result is checked against its metric's scale.
   - Error codes include `DUPLICATE_CODE`, `UNKNOWN_COUNTRY`, `VALUE_OUT_OF_SCALE` and `METRIC_IN_USE`.
+  - Once a result uses a metric, its code (`CODE_IMMUTABLE`, §5.1), unit (`UNIT_IMMUTABLE`) and direction (`DIRECTION_IMMUTABLE`) are frozen, and its scale can be changed only to one that still contains every stored result of the metric (`SCALE_EXCLUDES_RESULTS`) (QA finding P4-01).
 - Accept:
   - every write produces its `change_log` row;
   - an unknown country code and an out-of-scale value are rejected with their codes;
@@ -1487,6 +1496,8 @@ This phase covers R10, R24 and R36.
   - The service works in minor units only; parsing the amounts users type is the UI's job (T1.10).
   - Negative amounts are rejected (design decision D27, §3.4): corrections are made by editing the entry, and every edit is recorded in `change_log`.
   - Error codes include `NEGATIVE_AMOUNT`, `INVALID_CURRENCY` (a currency outside the allow-list of D15), `SOURCE_IN_USE` and `BUILT_IN_SOURCE`.
+  - An entry with execution rows cannot change currency (`CURRENCY_IN_USE`; D15, no conversion), and its fiscal year can change only to one that contains the date of every row (`EXECUTION_OUTSIDE_FISCAL_YEAR` on `fiscal_year`). The date of an execution row must lie in the fiscal year of its entry when the row is added or edited (`EXECUTION_OUTSIDE_FISCAL_YEAR` on `executed_on`, A08); the CSV import adds rows through the same service call, so it is refused there too (T8.4). Rows that got into the database another way are still reported by `data_quality()` (QA findings P5-01, P5-02).
+  - Stored amounts (allocated and executed) are at most `MAX_MINOR` = 2**53 − 1 minor units, else `INVALID_AMOUNT`: the largest integer a `float` holds exactly, because the indicator context carries amounts as floats; the database itself could hold up to 2**63 − 1 (QA finding P5-07).
 - Accept:
   - every write produces its `change_log` row;
   - each invalid case returns its code, including a currency outside the allow-list;
@@ -1504,6 +1515,7 @@ This phase covers R10, R24 and R36.
   - An entry dialog that takes the amount typed in the locale's format, and an execution dialog (date and amount).
   - A module settings section — the funding-source editor, the default currency (A08) and the P08 pro-rating switch — registered through the T1.9 settings-section registry, which T6.1 renders under Settings → Budget.
   - Labels for the built-in sources and the error codes.
+  - The multi-year planning table (R36) is a domain and service function (`multi_year_table` in `domain/budget.py` and `services/budget.py`, T5.2). The Budget page does not show it; add a UI task if the committee wants a multi-year view (QA finding P5-05).
 - Accept:
   - an amount typed as `1.234,56` in pt-BR or es-ES, or as `1,234.56` in en-US, is stored as 123456 minor units and shown back in the locale's format;
   - the summary updates after each edit, and changing the as-of date changes the executed amount;
