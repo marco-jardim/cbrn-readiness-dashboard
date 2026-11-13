@@ -10,8 +10,13 @@
     (``scripts/collect_licenses.py``).
 
 The functions are importable (the packaging tests load this file by path, since ``scripts/`` is
-not a package): :func:`build`, :func:`package_data_files`, :func:`prune_bundle` and the tables
+not a package): :func:`build`, :func:`package_data_files`, :func:`prune_bundle`,
+:func:`write_version_file`, :func:`bundle_size_report` and the tables
 :data:`UNWANTED_FILE_PATTERNS` / :data:`UNWANTED_PLUGIN_DIRS`.
+
+The Windows version resource of the executable is generated from ``__version__`` into the work
+folder (``version/version_info.txt``) and passed to PyInstaller with ``--version-file``; it is
+never committed. The build ends by printing the bundle size by top-level folder.
 
 The package data comes from ``git ls-files`` (tracked files only); without a git work tree every
 file is a candidate and the build is refused if one looks like a database, backup or other user
@@ -28,6 +33,7 @@ import fnmatch
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -77,6 +83,14 @@ DATA_FILE_MAGIC: tuple[bytes, ...] = (b"SQLite format 3\x00", b"CBRNBAK1")
 #: Generated at build time (work folder) and shipped as ``cbrn_dashboard/build_info.json``; the
 #: application's start-up clock check reads ``built_at_utc`` from it.
 BUILD_INFO_NAME = "build_info.json"
+
+#: The Windows version resource (T9.1): generated from ``__version__`` into the work folder at
+#: build time and handed to PyInstaller with ``--version-file``. It is never committed.
+VERSION_FILE_NAME = "version_info.txt"
+VERSION_FILE_PRODUCT_NAME = "CBRN Readiness Dashboard"
+VERSION_FILE_COPYRIGHT = "GPL-3.0-or-later"
+#: Language 0x0409 (US English) and code page 0x04B0 (Unicode), the usual pair.
+VERSION_FILE_LANGUAGE = "040904B0"
 
 EXCLUDED_MODULES: tuple[str, ...] = (
     "PySide6.QtNetwork",
@@ -311,6 +325,71 @@ def write_build_info(work_dir: Path) -> Path:
     return path
 
 
+def read_package_version() -> str:
+    """Return ``__version__`` from the package's ``__init__.py`` (read as text, not imported)."""
+    text = (PACKAGE_DIR / "__init__.py").read_text(encoding="utf-8")
+    match = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
+    if match is None:
+        raise BuildError(f"No __version__ in {PACKAGE_DIR / '__init__.py'}")
+    return match.group(1)
+
+
+def version_quad(version: str) -> tuple[int, int, int, int]:
+    """Return ``(major, minor, patch, 0)`` of a version string such as ``1.2.3rc1``."""
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)", version)
+    if match is None:
+        raise BuildError(f"Version {version!r} does not start with major.minor.patch")
+    major, minor, patch = (int(part) for part in match.groups())
+    return major, minor, patch, 0
+
+
+def render_version_file(version: str) -> str:
+    """Return the text of a PyInstaller ``--version-file`` for ``version`` (ASCII only)."""
+    quad = version_quad(version)
+    strings = [
+        ("CompanyName", ""),
+        ("FileDescription", VERSION_FILE_PRODUCT_NAME),
+        ("FileVersion", version),
+        ("InternalName", APP_NAME),
+        ("LegalCopyright", VERSION_FILE_COPYRIGHT),
+        ("OriginalFilename", f"{APP_NAME}.exe"),
+        ("ProductName", VERSION_FILE_PRODUCT_NAME),
+        ("ProductVersion", version),
+    ]
+    structs = ",\n          ".join(f"StringStruct({key!r}, {value!r})" for key, value in strings)
+    return (
+        "VSVersionInfo(\n"
+        "  ffi=FixedFileInfo(\n"
+        f"    filevers={quad!r},\n"
+        f"    prodvers={quad!r},\n"
+        "    mask=0x3f,\n"
+        "    flags=0x0,\n"
+        "    OS=0x40004,\n"
+        "    fileType=0x1,\n"
+        "    subtype=0x0,\n"
+        "    date=(0, 0)\n"
+        "  ),\n"
+        "  kids=[\n"
+        "    StringFileInfo([\n"
+        f"      StringTable({VERSION_FILE_LANGUAGE!r}, [\n"
+        f"          {structs}\n"
+        "      ])\n"
+        "    ]),\n"
+        "    VarFileInfo([VarStruct('Translation', [1033, 1200])])\n"
+        "  ]\n"
+        ")\n"
+    )
+
+
+def write_version_file(work_dir: Path) -> Path:
+    """Write the version resource into ``work_dir`` (not the source tree); return its path."""
+    folder = work_dir / "version"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / VERSION_FILE_NAME
+    path.write_text(render_version_file(read_package_version()), encoding="utf-8")
+    return path
+
+
 def _add_data_argument(source: Path, destination: str) -> str:
     return f"--add-data={source}{os.pathsep}{destination}"
 
@@ -341,11 +420,13 @@ def pyinstaller_arguments(
     qm_files: Sequence[Path],
     data_files: Sequence[Path] | None = None,
     build_info: Path | None = None,
+    version_file: Path | None = None,
 ) -> list[str]:
     """Return the PyInstaller command line (without the program name).
 
     ``data_files`` (relative to the package folder) defaults to :func:`package_data_files`;
-    ``build_info`` is the generated ``build_info.json``, added to the package folder when given.
+    ``build_info`` is the generated ``build_info.json``, added to the package folder when given;
+    ``version_file`` is the generated Windows version resource, passed as ``--version-file``.
     """
     if data_files is None:
         data_files = package_data_files(PACKAGE_DIR)
@@ -367,6 +448,8 @@ def pyinstaller_arguments(
         f"--contents-directory={INTERNAL_DIR_NAME}",
         f"--collect-submodules={PACKAGE_NAME}",
     ]
+    if version_file is not None:
+        arguments.append(f"--version-file={version_file}")
     arguments.extend(f"--exclude-module={module}" for module in EXCLUDED_MODULES)
     for relative in data_files:
         destination = _destination(relative.parent)
@@ -410,6 +493,45 @@ def bundle_size_bytes(bundle: Path) -> int:
     return sum(path.stat().st_size for path in bundle.rglob("*") if path.is_file())
 
 
+def _tree_size(path: Path) -> int:
+    return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
+
+
+def _human_megabytes(size: int) -> str:
+    return f"{size / (1024 * 1024):8.1f} MB"
+
+
+def bundle_size_report(bundle: Path) -> list[str]:
+    """Return report lines with the bundle size by top-level folder (biggest first).
+
+    Files directly in the bundle folder (the executable) are summed on one ``(files)`` line; the
+    contents of ``_internal`` are broken down once more, since nearly everything lives there.
+    """
+    sizes: dict[str, int] = {}
+    loose = 0
+    for entry in sorted(bundle.iterdir()):
+        if entry.is_dir():
+            sizes[entry.name + "/"] = _tree_size(entry)
+        elif entry.is_file():
+            loose += entry.stat().st_size
+    if loose:
+        sizes["(files)"] = loose
+    lines = ["bundle size by top-level folder:"]
+    for name, size in sorted(sizes.items(), key=lambda item: (-item[1], item[0])):
+        lines.append(f"  {_human_megabytes(size)}  {name}")
+    internal = bundle / INTERNAL_DIR_NAME
+    if internal.is_dir():
+        inner: dict[str, int] = {}
+        for entry in sorted(internal.iterdir()):
+            inner[entry.name + ("/" if entry.is_dir() else "")] = (
+                _tree_size(entry) if entry.is_dir() else entry.stat().st_size
+            )
+        lines.append(f"  within {INTERNAL_DIR_NAME}/ (largest 10):")
+        for name, size in sorted(inner.items(), key=lambda item: (-item[1], item[0]))[:10]:
+            lines.append(f"    {_human_megabytes(size)}  {name}")
+    return lines
+
+
 def build(dist_dir: Path, work_dir: Path) -> Path:
     """Build the bundle into ``dist_dir`` using ``work_dir`` for scratch files.
 
@@ -430,7 +552,10 @@ def build(dist_dir: Path, work_dir: Path) -> Path:
     data_files, data_source = package_data_with_source(PACKAGE_DIR)
     print(f"package data: {len(data_files)} file(s) from {data_source}")
     build_info = write_build_info(work_dir)
-    arguments = pyinstaller_arguments(dist_dir, work_dir, qm_files, data_files, build_info)
+    version_file = write_version_file(work_dir)
+    arguments = pyinstaller_arguments(
+        dist_dir, work_dir, qm_files, data_files, build_info, version_file
+    )
     import PyInstaller.__main__ as pyinstaller_main
 
     pyinstaller_main.run(arguments)
@@ -444,6 +569,8 @@ def build(dist_dir: Path, work_dir: Path) -> Path:
     print(f"licenses: {len(license_entries)} component(s) in {licenses_dir}")
     megabytes = bundle_size_bytes(bundle) / (1024 * 1024)
     print(f"pruned {pruned} file(s)")
+    for line in bundle_size_report(bundle):
+        print(line)
     print(f"bundle size: {megabytes:.1f} MB ({bundle})")
     return bundle
 

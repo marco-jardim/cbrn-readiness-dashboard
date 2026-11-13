@@ -5,6 +5,8 @@ Deselected by default (``-m "not packaging"``); run with ``pytest -m packaging``
 built once per session by the ``bundle_dir`` fixture.
 """
 
+import ast
+import ctypes
 import fnmatch
 import json
 import os
@@ -12,12 +14,13 @@ import re
 import subprocess
 import sys
 from collections.abc import Callable
+from ctypes import wintypes
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
-from cbrn_dashboard import i18n
+from cbrn_dashboard import __version__, i18n
 
 pytestmark = pytest.mark.packaging
 
@@ -45,8 +48,56 @@ FORBIDDEN_INTERNAL_PATH_PARTS: tuple[str, ...] = (
     "qtnetwork",
     "qt6network",
     "qtwebsockets",
+    "qt6websockets",
+    "qtwebchannel",
+    "qt6webchannel",
+    "qt6webengine",
     "qthttpserver",
+    "qt6httpserver",
 )
+
+#: The checks of the frozen self-test that PLAN.md section 8 / T9.1 names: paths, database, i18n
+#: in three languages, main window, chart, encrypted backup and PDF (plus the two basics).
+REQUIRED_SELF_TESTS: frozenset[str] = frozenset(
+    {
+        "python",
+        "qt",
+        "paths",
+        "database",
+        "i18n.pt-BR",
+        "i18n.en-US",
+        "i18n.es-ES",
+        "main_window",
+        "chart",
+        "encrypted_backup",
+        "pdf",
+    }
+)
+
+#: Folder names that must not occur anywhere in the bundle: tool caches and version control. (A
+#: ``__pycache__`` folder is checked only inside the application's own package folder.)
+FORBIDDEN_FOLDER_NAMES: frozenset[str] = frozenset(
+    {".git", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".venv"}
+)
+
+#: File-name patterns (lower case) of user data; none may be in the bundle (T9.1, PLAN section 8).
+DATA_NAME_PATTERNS: tuple[str, ...] = (
+    "*.sqlite",
+    "*.sqlite3",
+    "*.db",
+    "*.db-*",
+    "*-journal",
+    "*-wal",
+    "*-shm",
+    "*.cbrnbak",
+    "*.before-restore-*",
+    "*.csv",
+    "prefs.json",
+    "selftest.json",
+    "location.json",
+)
+#: Leading bytes of an SQLite database and of an encrypted backup (T7.2), whatever the file name.
+DATA_MAGIC: tuple[bytes, ...] = (b"SQLite format 3\x00", b"CBRNBAK1")
 
 
 def _internal(bundle: Path) -> Path:
@@ -114,6 +165,13 @@ def test_frozen_self_test_passes(bundle_dir: Path, tmp_path: Path) -> None:
     failed = [check for check in document["checks"] if check["passed"] is not True]
     assert document["checks"], text
     assert not failed, f"failed checks: {failed}\n{text}"
+    # T9.1: every check of PLAN section 8 ran (not just "no check failed"), and so did every
+    # check registered in the source, so a check added later cannot be silently skipped.
+    from cbrn_dashboard import selftest
+
+    ran = {check["name"] for check in document["checks"]}
+    expected = REQUIRED_SELF_TESTS | {name for name, _check in selftest.CHECKS}
+    assert expected <= ran, f"checks that did not run: {sorted(expected - ran)}\n{text}"
 
 
 def test_bundle_has_compiled_catalogues(bundle_dir: Path) -> None:
@@ -307,3 +365,318 @@ def test_bundle_size_is_reasonable(
     record_property("bundle_size_mb", megabytes)
     report_bundle_size(megabytes, bundle_dir)  # printed by the terminal summary (conftest.py)
     assert megabytes < MAX_BUNDLE_MB
+
+
+# --------------------------------------------------------------------------- T9.1: contents
+
+
+def _git_files(*paths: str) -> list[Path] | None:
+    """Files git tracks below ``paths`` (relative to the repository), or ``None`` without git."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z", "--", *paths],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    names = [os.fsdecode(item) for item in result.stdout.split(b"\x00") if item]
+    return sorted(Path(name) for name in names) or None
+
+
+def _imported_qt_modules() -> set[str]:
+    """The ``PySide6.Qt*`` modules the application's source imports (read from its syntax trees)."""
+    found: set[str] = set()
+    for path in SRC_PACKAGE.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                if node.module == "PySide6":
+                    found.update(alias.name for alias in node.names)
+                elif node.module.startswith("PySide6."):
+                    found.add(node.module.split(".")[1])
+            elif isinstance(node, ast.Import):
+                found.update(
+                    alias.name.split(".")[1]
+                    for alias in node.names
+                    if alias.name.startswith("PySide6.")
+                )
+    return {name for name in found if name.startswith("Qt")}
+
+
+def test_bundle_has_every_migration(bundle_dir: Path) -> None:
+    # The expected set is the tracked ``storage/migrations/*.sql`` list (git), not the script's.
+    migrations = Path("storage") / "migrations"
+    expected = sorted(
+        path
+        for path in _expected_package_data()
+        if path.parent == migrations and path.suffix == ".sql"
+    )
+    numbers = [int(path.name[:4]) for path in expected]
+    assert len(expected) >= 7, f"fewer migrations than 0001-0007 are tracked: {expected}"
+    assert numbers == list(range(1, len(numbers) + 1)), f"gap in the migration numbers: {numbers}"
+    folder = _internal(bundle_dir) / "cbrn_dashboard" / migrations
+    missing = [path.name for path in expected if not (folder / path.name).is_file()]
+    assert not missing, f"migrations missing from the bundle: {missing}"
+    empty = [path.name for path in expected if (folder / path.name).stat().st_size == 0]
+    assert not empty, f"empty migrations in the bundle: {empty}"
+    bundled = sorted(path.name for path in folder.glob("*.sql"))
+    assert bundled == [path.name for path in expected], "the bundle holds other migrations"
+
+
+def test_bundle_has_a_compiled_catalogue_for_every_ts_file(bundle_dir: Path) -> None:
+    # Two independent sources: i18n.AREAS x LANGUAGES (so a new area is expected at once) and the
+    # tracked .ts files (so a catalogue the build forgot to compile is found).
+    tracked = _tracked_package_files()
+    if tracked is None:
+        pytest.skip("git is missing or the folder is not a git work tree: no independent list")
+    ts_names = {
+        path.name for path in tracked if path.parent == Path("i18n") and path.suffix == ".ts"
+    }
+    from_areas = {
+        i18n.catalogue_path(area, lang).name for area in i18n.AREAS for lang in i18n.LANGUAGES
+    }
+    untracked = sorted(from_areas - ts_names)
+    assert not untracked, f"areas without a tracked catalogue: {untracked}"
+    expected = sorted({Path(name).with_suffix(".qm").name for name in ts_names | from_areas})
+    folder = _internal(bundle_dir) / "cbrn_dashboard" / "i18n"
+    missing = [name for name in expected if not (folder / name).is_file()]
+    assert not missing, f"compiled catalogues missing from {folder}: {missing}"
+    empty = [name for name in expected if (folder / name).stat().st_size == 0]
+    assert not empty, f"empty compiled catalogues: {empty}"
+    extra = sorted(path.name for path in folder.glob("*.qm") if path.name not in expected)
+    assert not extra, f"catalogues without a source in the bundle: {extra}"
+
+
+def test_bundle_has_countries_and_data_documents(bundle_dir: Path) -> None:
+    package_root = _internal(bundle_dir) / "cbrn_dashboard"
+    source = SRC_PACKAGE / "resources" / "countries.json"
+    bundled = package_root / "resources" / "countries.json"
+    assert bundled.is_file(), f"missing {bundled}"
+    assert bundled.read_bytes() == source.read_bytes(), "the bundled countries.json differs"
+    document = json.loads(bundled.read_text(encoding="utf-8"))
+    assert document, "countries.json is empty"
+    for relative in ("resources/THIRD_PARTY_DATA.md", "resources/app.ico"):
+        path = package_root / relative
+        assert path.is_file(), f"missing {path}"
+        assert path.stat().st_size > 0, f"empty {path}"
+    help_files = [path for path in _expected_package_data() if path.parts[0] == "help"]
+    missing = [path.as_posix() for path in help_files if not (package_root / path).is_file()]
+    assert not missing, f"help files missing from the bundle: {missing}"
+
+
+def test_bundle_has_the_qt_modules_the_code_imports(
+    bundle_dir: Path, build_script: ModuleType
+) -> None:
+    imported = _imported_qt_modules()
+    # QtCharts: the charts; QtGui: QPdfWriter / QTextDocument of the PDF report (no extra plug-in:
+    # the writer needs none and the chart images are QImage resources).
+    assert {"QtCore", "QtGui", "QtWidgets", "QtCharts"} <= imported, sorted(imported)
+    excluded = {
+        name.removeprefix("PySide6.")
+        for name in build_script.EXCLUDED_MODULES
+        if name.startswith("PySide6.")
+    }
+    assert not imported & excluded, f"the code imports excluded modules: {imported & excluded}"
+    missing: list[str] = []
+    for module in sorted(imported):
+        for pattern in (f"{module}*.pyd", f"Qt6{module.removeprefix('Qt')}.dll"):
+            if not list(_internal(bundle_dir).rglob(pattern)):
+                missing.append(pattern)
+    assert not missing, f"Qt files missing from the bundle: {missing}"
+
+
+def test_bundle_has_no_qt_network_or_web_library(bundle_dir: Path) -> None:
+    # PLAN.md section 7.3 / K03: named explicitly, besides the broader substring check above.
+    names = {path.name.lower() for path in _files(_internal(bundle_dir))}
+    offenders = sorted(
+        name
+        for name in names
+        if name == "qt6network.dll" or name.startswith(("qt6webengine", "qtwebengine"))
+    )
+    assert not offenders, f"network or web libraries in the bundle: {offenders}"
+
+
+def test_bundle_holds_no_data_files(bundle_dir: Path) -> None:
+    offenders: list[str] = []
+    longest = max(len(magic) for magic in DATA_MAGIC)
+    for path in _files(bundle_dir):
+        relative = path.relative_to(bundle_dir).as_posix()
+        name = path.name.lower()
+        if any(fnmatch.fnmatchcase(name, pattern) for pattern in DATA_NAME_PATTERNS):
+            offenders.append(relative)
+            continue
+        with path.open("rb") as handle:
+            head = handle.read(longest)
+        if any(head.startswith(magic) for magic in DATA_MAGIC):
+            offenders.append(relative)
+    assert not offenders, f"database, backup, CSV or preference files in the bundle: {offenders}"
+
+
+def test_bundle_holds_nothing_from_tests_or_caches(bundle_dir: Path) -> None:
+    internal = _internal(bundle_dir)
+    package_root = internal / "cbrn_dashboard"
+    assert not (internal / "tests").exists(), "a tests folder in the bundle"
+    offenders = [
+        path.relative_to(bundle_dir).as_posix()
+        for path in bundle_dir.rglob("*")
+        if path.name.lower() in FORBIDDEN_FOLDER_NAMES
+    ]
+    offenders += [
+        path.relative_to(bundle_dir).as_posix()
+        for path in package_root.rglob("*")
+        if path.name in {"__pycache__", "tests", "test", "conftest.py"}
+        or path.suffix in {".pyc", ".pyo"}
+        or (path.is_file() and path.name.startswith("test_"))
+    ]
+    tracked = _git_files("tests")
+    if tracked is not None:
+        test_names = {
+            path.name
+            for path in tracked
+            if path.suffix == ".py"
+            and (path.name.startswith("test_") or path.name == "conftest.py")
+        }
+        offenders += [
+            path.relative_to(bundle_dir).as_posix()
+            for path in _files(bundle_dir)
+            if path.name in test_names
+        ]
+    assert not offenders, f"test files or caches in the bundle: {sorted(set(offenders))}"
+
+
+class _FixedFileInfo(ctypes.Structure):
+    """``VS_FIXEDFILEINFO`` of the Windows version API."""
+
+    _fields_ = (
+        ("dwSignature", wintypes.DWORD),
+        ("dwStrucVersion", wintypes.DWORD),
+        ("dwFileVersionMS", wintypes.DWORD),
+        ("dwFileVersionLS", wintypes.DWORD),
+        ("dwProductVersionMS", wintypes.DWORD),
+        ("dwProductVersionLS", wintypes.DWORD),
+        ("dwFileFlagsMask", wintypes.DWORD),
+        ("dwFileFlags", wintypes.DWORD),
+        ("dwFileOS", wintypes.DWORD),
+        ("dwFileType", wintypes.DWORD),
+        ("dwFileSubtype", wintypes.DWORD),
+        ("dwFileDateMS", wintypes.DWORD),
+        ("dwFileDateLS", wintypes.DWORD),
+    )
+
+
+def _read_version_resource(exe: Path) -> tuple[_FixedFileInfo, dict[str, str]]:
+    """Read the version resource of ``exe`` with the Windows version API (``ctypes``)."""
+    if sys.platform != "win32":
+        pytest.skip("the Windows version API is available on Windows only")
+    dll = ctypes.WinDLL("version")
+    get_size = dll.GetFileVersionInfoSizeW
+    get_size.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(wintypes.DWORD)]
+    get_size.restype = wintypes.DWORD
+    get_info = dll.GetFileVersionInfoW
+    get_info.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p]
+    get_info.restype = wintypes.BOOL
+    query = dll.VerQueryValueW
+    query.argtypes = [
+        ctypes.c_void_p,
+        wintypes.LPCWSTR,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(wintypes.UINT),
+    ]
+    query.restype = wintypes.BOOL
+
+    ignored = wintypes.DWORD(0)
+    size = int(get_size(str(exe), ctypes.byref(ignored)))
+    assert size > 0, f"{exe.name} has no version resource"
+    buffer = ctypes.create_string_buffer(size)
+    assert get_info(str(exe), 0, size, ctypes.addressof(buffer)), "GetFileVersionInfoW failed"
+
+    def lookup(sub_block: str) -> tuple[int, int]:
+        pointer = ctypes.c_void_p()
+        length = wintypes.UINT(0)
+        found = query(
+            ctypes.addressof(buffer), sub_block, ctypes.byref(pointer), ctypes.byref(length)
+        )
+        assert found, f"no {sub_block} in the version resource"
+        assert pointer.value is not None
+        return pointer.value, int(length.value)
+
+    address, _length = lookup("\\")
+    fixed = _FixedFileInfo.from_address(address)
+    fixed_copy = _FixedFileInfo.from_buffer_copy(fixed)
+    address, _length = lookup("\\VarFileInfo\\Translation")
+    raw = ctypes.string_at(address, 4)
+    language = int.from_bytes(raw[:2], "little")
+    code_page = int.from_bytes(raw[2:4], "little")
+    strings: dict[str, str] = {}
+    for key in ("FileVersion", "ProductVersion", "ProductName", "OriginalFilename"):
+        address, length = lookup(f"\\StringFileInfo\\{language:04x}{code_page:04x}\\{key}")
+        strings[key] = ctypes.wstring_at(address, length).rstrip("\x00")
+    return fixed_copy, strings
+
+
+def test_version_resource_equals_the_package_version(bundle_dir: Path) -> None:
+    fixed, strings = _read_version_resource(bundle_dir / EXE_NAME)
+    match = re.match(r"(\d+)\.(\d+)\.(\d+)", __version__)
+    assert match is not None, f"__version__ {__version__!r} is not major.minor.patch"
+    major, minor, patch = (int(part) for part in match.groups())
+    assert fixed.dwSignature == 0xFEEF04BD
+    for high, low in (
+        (fixed.dwFileVersionMS, fixed.dwFileVersionLS),
+        (fixed.dwProductVersionMS, fixed.dwProductVersionLS),
+    ):
+        assert (high >> 16, high & 0xFFFF, low >> 16) == (major, minor, patch)
+    assert strings["FileVersion"] == __version__
+    assert strings["ProductVersion"] == __version__
+    assert strings["ProductName"] == "CBRN Readiness Dashboard"
+    assert strings["OriginalFilename"] == EXE_NAME
+
+
+def test_version_file_is_generated_into_the_work_folder(
+    build_script: ModuleType, tmp_path: Path
+) -> None:
+    path = build_script.write_version_file(tmp_path)
+    assert isinstance(path, Path)
+    assert tmp_path in path.parents
+    text = path.read_text(encoding="utf-8")
+    assert text.isascii()
+    assert f"StringStruct('ProductVersion', {__version__!r})" in text
+    arguments = build_script.pyinstaller_arguments(
+        tmp_path / "dist", tmp_path / "work", [], data_files=[], version_file=path
+    )
+    assert f"--version-file={path}" in arguments
+    tracked = _git_files(".")
+    if tracked is not None:
+        assert not [item for item in tracked if item.name == path.name], "version file committed"
+
+
+@pytest.mark.parametrize(
+    ("version", "quad"),
+    [("1.2.3", (1, 2, 3, 0)), ("0.0.1", (0, 0, 1, 0)), ("1.0.0rc1", (1, 0, 0, 0))],
+)
+def test_version_quad_takes_the_numeric_prefix(
+    build_script: ModuleType, version: str, quad: tuple[int, int, int, int]
+) -> None:
+    assert build_script.version_quad(version) == quad
+    assert f"filevers={quad!r}" in build_script.render_version_file(version)
+
+
+def test_version_quad_refuses_a_version_without_numbers(build_script: ModuleType) -> None:
+    with pytest.raises(build_script.BuildError):
+        build_script.version_quad("next")
+
+
+def test_size_report_lists_the_top_level_folders(build_script: ModuleType, tmp_path: Path) -> None:
+    (tmp_path / "_internal" / "big").mkdir(parents=True)
+    (tmp_path / "_internal" / "big" / "a.bin").write_bytes(b"x" * 3000)
+    (tmp_path / "licenses").mkdir()
+    (tmp_path / "licenses" / "l.txt").write_bytes(b"y" * 10)
+    (tmp_path / "app.exe").write_bytes(b"z" * 20)
+    lines = build_script.bundle_size_report(tmp_path)
+    text = "\n".join(lines)
+    assert "_internal/" in text
+    assert "licenses/" in text
+    assert "(files)" in text
+    assert text.index("_internal/") < text.index("licenses/"), "not sorted by size"
+    assert "big/" in text
