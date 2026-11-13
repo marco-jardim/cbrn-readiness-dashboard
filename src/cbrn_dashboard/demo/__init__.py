@@ -34,7 +34,7 @@ from pathlib import Path
 
 from cbrn_dashboard import __version__
 from cbrn_dashboard.clock import Clock
-from cbrn_dashboard.demo import budget, exercises, personnel
+from cbrn_dashboard.demo import budget, exercises, infrastructure, personnel
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import DatabaseConnection, DatabaseError, open_database, transaction
 from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
@@ -107,6 +107,7 @@ class DemoGenerator:
 #: the signature ``generate(ctx: DemoContext) -> None``.
 GENERATORS: tuple[DemoGenerator, ...] = (
     DemoGenerator("personnel", personnel.generate),
+    DemoGenerator("infrastructure", infrastructure.generate),
     DemoGenerator("exercises", exercises.generate),
     DemoGenerator("budget", budget.generate),
 )
