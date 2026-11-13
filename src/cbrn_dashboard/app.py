@@ -6,14 +6,15 @@ the main window. ``build_application`` does everything except entering the event
 (and the self-test) can create the real window without blocking.
 
 The only database opened here is the demo database of ``--demo`` (T1.7); the start-up sequence that
-opens the real database arrives with T1.9. Preferences (and therefore a saved language) arrive with
-T1.5, so the language is ``--lang`` or the default, Brazilian Portuguese.
+opens the real database arrives with T1.9. The start-up language is ``--lang`` (this run only),
+else the saved preference, else Brazilian Portuguese; a later switch is saved in ``prefs.json``.
 """
 
 import sqlite3
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
@@ -21,8 +22,8 @@ from PySide6.QtWidgets import QApplication
 from cbrn_dashboard import __version__, cli
 from cbrn_dashboard.clock import SystemClock
 from cbrn_dashboard.demo import open_demo_database
-from cbrn_dashboard.i18n import DEFAULT_LANGUAGE
 from cbrn_dashboard.paths import DataLocation, resolve_data_location
+from cbrn_dashboard.prefs import PreferencesStore
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import DatabaseConnection, DatabaseError
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
@@ -38,6 +39,7 @@ class AppHandle:
     app: QApplication
     translator_manager: TranslatorManager
     window: MainWindow
+    preferences: PreferencesStore
     database: DatabaseConnection | None = None
 
     @property
@@ -76,18 +78,34 @@ def build_application(
     """
     # Opening the real database belongs to the start-up sequence of T1.9.
     database = open_demo_database(location.path, SystemClock()) if options.demo else None
+    preferences = PreferencesStore(location.path, writable=location.writable)
+    saved = preferences.load()  # never raises; a damaged file gives defaults plus a warning
     try:
         app = ensure_application()
         app.setApplicationName(APPLICATION_NAME)
         app.setApplicationVersion(__version__)
         manager = TranslatorManager(app, qm_dir)
-        manager.set_language(DEFAULT_LANGUAGE if options.lang is None else options.lang)
+        # --lang overrides the saved language for this run only and is never stored by itself.
+        manager.set_language(saved.language if options.lang is None else options.lang)
         window = MainWindow(manager, location)
+        # Connected after the start-up language is applied: only later (menu) switches are saved.
+        manager.language_changed.connect(partial(_remember_language, preferences))
     except BaseException:
         if database is not None:
             database.close()
         raise
-    return AppHandle(app=app, translator_manager=manager, window=window, database=database)
+    return AppHandle(
+        app=app,
+        translator_manager=manager,
+        window=window,
+        preferences=preferences,
+        database=database,
+    )
+
+
+def _remember_language(preferences: PreferencesStore, code: str) -> None:
+    """Store the language the user picked; a read-only folder keeps it for the session only."""
+    preferences.update(language=code)
 
 
 def main(argv: Sequence[str] | None = None, *, qm_dir: Path | None = None) -> int:
