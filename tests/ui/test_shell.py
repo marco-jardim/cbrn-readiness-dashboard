@@ -201,11 +201,12 @@ def test_settings_sections_and_dialogs_are_returned_by_their_registries() -> Non
     dialogs_before = registry.dialogs()
     backup_before = registry.settings_sections("backup")
     personnel_before = registry.settings_sections("personnel")
+    reports_before = registry.settings_sections("reports")
     with registry.registered(backup, personnel, dialog):
         assert registry.settings_sections() == (*sections_before, backup, personnel)
         assert registry.settings_sections("backup") == (*backup_before, backup)
         assert registry.settings_sections("personnel") == (*personnel_before, personnel)
-        assert registry.settings_sections("reports") == ()
+        assert registry.settings_sections("reports") == reports_before  # another group: unchanged
         assert registry.dialogs() == (*dialogs_before, dialog)
     assert registry.settings_sections() == sections_before
     assert registry.dialogs() == dialogs_before

@@ -24,6 +24,7 @@ from cbrn_dashboard.ui.dashboard import page as dashboard_page
 from cbrn_dashboard.ui.exercises import page as exercises_page
 from cbrn_dashboard.ui.infrastructure import page as infrastructure_page
 from cbrn_dashboard.ui.personnel import page as personnel_page
+from cbrn_dashboard.ui.reports import page as reports_page
 from cbrn_dashboard.ui.settings import page as settings_page
 from cbrn_dashboard.ui.shell.context import AppContext
 
@@ -112,6 +113,7 @@ PAGES: tuple[PageSpec, ...] = (
     PageSpec("exercises", 30, exercises_page.page_title, exercises_page.create_page),
     PageSpec("budget", 40, budget_page.page_title, budget_page.create_page),
     PageSpec("alerts", 50, alerts_page.page_title, alerts_page.create_page),
+    PageSpec("reports", 60, reports_page.page_title, reports_page.create_page),
     PageSpec("settings", 90, settings_page.page_title, settings_page.create_page),
 )
 
@@ -165,6 +167,18 @@ SETTINGS_SECTIONS: tuple[SettingsSectionSpec, ...] = (
         backup_page.settings_section_title,
         backup_page.create_settings_section,
     ),
+    SettingsSectionSpec(
+        "reports.settings",
+        "reports",
+        reports_page.reports_section_title,
+        reports_page.create_reports_section,
+    ),
+    SettingsSectionSpec(
+        "snapshots.settings",
+        "snapshots",
+        reports_page.snapshots_section_title,
+        reports_page.create_snapshots_section,
+    ),
 )
 
 # Dialogs, one line per dialog (each factory fills the dialog with fictitious data): T2.4, T3.4,
@@ -188,6 +202,9 @@ DIALOGS: tuple[DialogSpec, ...] = (
     DialogSpec("settings.target", settings_page.demo_target_dialog),
     DialogSpec("backup.passphrase_backup", backup_page.demo_backup_dialog),
     DialogSpec("backup.passphrase_restore", backup_page.demo_restore_dialog),
+    DialogSpec("reports.report", reports_page.demo_report_dialog),
+    DialogSpec("reports.validation_export", reports_page.demo_validation_export_dialog),
+    DialogSpec("reports.import", reports_page.demo_import_dialog),
 )
 
 # Temporary registrations made by tests, in registration order.
