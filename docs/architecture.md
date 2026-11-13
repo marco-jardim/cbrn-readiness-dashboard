@@ -278,9 +278,9 @@ The rules (from `storage/migrate.py` and `storage/migrations/README.md`):
   transaction and runs `PRAGMA foreign_key_check` before the commit.
 - A non-empty database is backed up before the first migration runs.
 - **A migration is never edited after it has shipped in a tagged release.** Nothing is tagged yet,
-  so developer and demo databases are disposable for now. Change the schema with a new
-  migration, numbered one more than the highest number on the main branch when it is merged. The
-  numbers 0002 to 0007 were reserved per module only until v0.1.0.
+  so developer and demo databases are disposable until a release is published. Change the schema
+  with a new migration, numbered one more than the highest number on the main branch when it is
+  merged. The numbers 0002 to 0007 were reserved per module only until v0.1.0.
 - Tables are `STRICT`, and every write to a data table goes through the repository helpers.
 
 ### Backups and restore
@@ -436,8 +436,10 @@ fictitious.
   and the packaging tests, zips the bundle those tests built and uploads it. The `release` job, the
   only one with write permissions, attests the zip's build provenance and creates a **draft**
   release.
-- The version in the source is `0.0.1` and nothing is tagged. See the
-  [install guide](install.en-US.md).
+- The version in the source is `0.1.0`, single-sourced in `__init__.py` (hatch reads it, and
+  `uv.lock` records none). The release is prepared in the repository (`CHANGELOG.md`,
+  `docs/smoke-test.pt-BR.md`), but nothing is tagged and nothing is published: a person must tag
+  `v0.1.0`, run the smoke test and publish the draft. See the [install guide](install.en-US.md).
 
 ## 15. Known limits and unfinished parts
 

@@ -12,7 +12,7 @@ The interface is in Brazilian Portuguese (default), English and Spanish.
 
 ## Status
 
-**Version 0.0.1. Nothing has been released yet.** The code exists and is still being reviewed and tested before a first release. The implementation plan, with requirements, architecture, data model and tasks, is in [PLAN.md](PLAN.md).
+**Version 0.1.0 is prepared in this repository. No release has been published yet.** The version is set and the release material is written ([CHANGELOG.md](CHANGELOG.md), [manual smoke test](docs/smoke-test.pt-BR.md)), but nothing is tagged: a person must still tag `v0.1.0`, run the smoke test on a clean Windows profile and publish the draft pre-release that the release workflow creates. Published releases will appear on the [releases page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases); until then there is no file to download. The executable will be unsigned, and the tool is preliminary and not institutionally validated. The implementation plan, with requirements, architecture, data model and tasks, is in [PLAN.md](PLAN.md).
 
 What exists in the repository:
 

@@ -47,5 +47,5 @@ def test_the_readme_links_the_reference_documents(required: str) -> None:
 def test_the_status_no_longer_says_there_is_no_code() -> None:
     text = README.read_text(encoding="utf-8")
     assert "no code yet" not in text
-    assert "0.0.1" in text
-    assert "Nothing has been released" in text
+    assert "0.1.0" in text
+    assert "No release has been published" in text
