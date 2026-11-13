@@ -70,6 +70,7 @@ __all__ = [
     "GUARD_TRIGGERS",
     "LINE_TERMINATOR",
     "QUOTE_CHAR",
+    "BelowThreshold",
     "CellError",
     "ColumnKind",
     "ColumnSpec",
@@ -102,6 +103,17 @@ GUARD_PREFIX = "'"
 GUARD_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
 
 _TEMP_SUFFIX = ".part"
+
+
+@dataclass(frozen=True)
+class BelowThreshold:
+    """A suppressed small count (A11): a REAL cell holding this is written as ``< <threshold>``.
+
+    Only the writer accepts it (the validation export of T8.2); the strict reader of the module
+    entities never meets it.
+    """
+
+    threshold: int
 
 
 class CsvFormatError(ValueError):
@@ -444,6 +456,8 @@ def _format_cell(column: ColumnSpec, value: object, currency: object) -> str:
         if isinstance(value, int) and not isinstance(value, bool):
             return str(value)
     elif kind is ColumnKind.REAL:
+        if isinstance(value, BelowThreshold):
+            return f"< {value.threshold}"
         if isinstance(value, int | float) and not isinstance(value, bool):
             number = float(value)
             if math.isfinite(number):
@@ -496,12 +510,21 @@ def _format_row(spec: EntitySpec, row: Mapping[str, object]) -> list[str]:
     return [_format_cell(column, row.get(column.code), currency) for column in spec.columns]
 
 
-def write_entity(path: Path, spec: EntitySpec, rows: Iterable[Mapping[str, object]]) -> int:
+def write_entity(
+    path: Path,
+    spec: EntitySpec,
+    rows: Iterable[Mapping[str, object]],
+    *,
+    banner: str | None = None,
+) -> int:
     """Write ``rows`` to ``path`` (header row = the column codes); returns the number of rows.
 
     The rows are written in a deterministic order (sorted by the natural key). The file is written
     under a temporary name beside ``path`` and renamed when complete, so a failure never leaves a
     half-written file under the final name; the temporary file is removed on every error.
+
+    ``banner`` (used by the validation export of T8.2) is written as a one-cell record BEFORE the
+    header row, to label the file; the module exports pass none.
     """
     prepared = sorted((_sort_key(spec, row), _format_row(spec, row)) for row in rows)
     temp = path.with_name(path.name + _TEMP_SUFFIX)
@@ -514,6 +537,8 @@ def write_entity(path: Path, spec: EntitySpec, rows: Iterable[Mapping[str, objec
                 quoting=csv.QUOTE_MINIMAL,
                 lineterminator=LINE_TERMINATOR,
             )
+            if banner is not None:
+                writer.writerow([guard_cell(banner)])
             writer.writerow(spec.column_codes)
             for _key, cells in prepared:
                 writer.writerow(cells)
