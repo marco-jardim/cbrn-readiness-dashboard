@@ -375,7 +375,7 @@ def test_data_is_relative_to_the_clock(databases: Databases) -> None:
 def test_is_registered_second_in_the_default_registry() -> None:
     names = [generator.name for generator in GENERATORS]
     assert names[:2] == ["personnel", "infrastructure"]
-    assert names == ["personnel", "infrastructure", "exercises", "budget"]
+    assert names == ["personnel", "infrastructure", "exercises", "budget", "targets", "snapshots"]
     registered = next(generator for generator in GENERATORS if generator.name == "infrastructure")
     assert registered.run is demo_infrastructure.generate
 

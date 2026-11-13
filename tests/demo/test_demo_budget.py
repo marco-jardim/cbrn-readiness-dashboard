@@ -303,9 +303,11 @@ def test_the_change_log_carries_the_demo_operator(opener: Opener) -> None:
     ]
 
 
-def test_the_generator_is_registered_last_with_one_line() -> None:
-    assert GENERATORS[-1].name == "budget"
-    assert GENERATORS[-1].run is demo_budget.generate
+def test_the_generator_is_registered_with_one_line() -> None:
+    # T10.1 registers the cross-module generators (targets, snapshots) after the module ones.
+    names = [generator.name for generator in GENERATORS]
+    assert names.index("budget") == 3
+    assert GENERATORS[names.index("budget")].run is demo_budget.generate
 
 
 def test_the_framework_seeds_the_demo_database_once(tmp_path: Path) -> None:
