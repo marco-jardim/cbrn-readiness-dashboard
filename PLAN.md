@@ -181,6 +181,8 @@ The appendix defines **five modules**: personnel (L74), infrastructure (L76), ex
 | D27 | Negative budget amounts are rejected; corrections are made by editing the entry, and every edit is recorded in `change_log` | T5.3 |
 | D28 | `staff_member.category` is treated as personal free text while Q4 (whether to record a category, and from which coded list) is open: like `identifier` and `label`, its value never reaches `change_log` (only the fact that it changed), "pseudonymise person" clears it, and its input shows the free-text hint (QA finding P2-01) | §5.1, T2.3, T2.4, Q4 |
 | D29 | `EX_LAST_COUNTRIES`, empty country set: an edition saved with no countries is read as "countries not entered", not as zero countries, so the indicator is No data (D14) for that kind, as it is for participants not recorded. An edition that really had no foreign participation cannot be told apart from one whose countries were not filled in; an operator who wants to show a real zero (no foreign participation) should record the host country. The number of countries in the editions table still shows 0 for such an edition (QA finding P4-04) | §5.4, T4.3, T4.5 |
+| D30 | A chart value that is not recorded (`None`) is not drawn as a value: its bar has no height, the legend entry of its series names the categories that are not recorded ("… (not recorded: …)"), the legend is shown whenever a value is missing, and reading the chart back gives `None` for those categories. Inside Qt the bar still holds 0, so the legend note is what tells a missing value from a recorded 0. Chart axis numbers follow the locale of the language in use (QA finding P6-05) | D08, T6.4, T6.5, T8.6 |
+| D31 | When the data folder named by `--data-dir` or by `CBRN_DASHBOARD_DATA_DIR` is unusable (not writable and holding no database), the offer to choose another folder says the choice is for this session only, and the chosen folder is used for this session only: no `location.json` pointer is written. These two sources rank above the pointer (D02), so a pointer written then would be ignored by the next start with the same option and followed only by a later plain start, which would move the data silently. Other sources keep the T7.5 behaviour (QA finding P7-05) | D02, T7.5 |
 
 New A, P and D identifiers are assigned at merge time (next free number). Design decisions go to this register and assumptions or placeholders to §3.5 (§10.1).
 
@@ -405,6 +407,7 @@ The project's source code is GPL-3.0-or-later. Because the binary bundle include
   - a build-provenance attestation, made with GitHub's attestation action and verifiable with `gh attestation verify`.
 
   It then creates a **draft** GitHub release, marked pre-release while the version is below 1.0.0. A person publishes it after a manual smoke test.
+- *Release jobs (QA findings P9-01, P9-03):* the release workflow builds once. A read-only `build` job runs the tests and the packaging tests, which build the bundle into `dist/`, then zips that tested bundle and uploads it as a workflow artefact; a separate `release` job, the only one with write permissions, downloads that artefact, attests the zip and creates the draft. There is no second build (T9.3).
 - *Supply chain:* every action is pinned to a full commit SHA, workflow permissions are least-privilege, and Dependabot proposes updates.
 - *Unsigned executable — consequences:* Windows SmartScreen shows "Windows protected your PC" the first time a downloaded copy runs. Smart App Control, or AppLocker/WDAC policies, may block it outright.
 - *What the published checks prove:* `SHA256SUMS.txt` on the same release page proves transfer integrity, not authenticity. The attestation proves where and how the build ran, not that the program is safe.
@@ -1552,6 +1555,10 @@ This phase covers R01, R05, R06, R25–R27 and R36. It starts once Phases 2–5 
     - The module sections registered by T2.4, T3.4, T4.5 and T5.4 through the T1.9 settings-section registry, rendered under Personnel, Infrastructure, Exercises and Budget.
     - Further sections registered by later tasks (T7.4 Backup, T8.7 Reports and Snapshots) in the same registry, one line each. T6.1 only renders what the registry holds.
   - Every placeholder value shows the "placeholder — to be confirmed" badge (§3.5).
+  - A changed value confirms its placeholder in the same transaction as the change: `ConfigService.save` confirms the placeholder of every field it changed whose badge is due, and `set_target` / `set_target_enabled` confirm P03 when called with `confirm_placeholder`. A failing confirmation rolls the whole save back; a save that changes nothing confirms nothing (QA findings P6-03, P6-04).
+  - Ratio indicators (unit `RATIO`; today only `BUD_EXEC_RATE`) have their thresholds typed and shown as percentages and stored as ratios (90 → 0.9); the Alerts page shows their values and thresholds as percentages too (T6.3). The service refuses a ratio threshold below 0 or above `MAX_RATIO_TARGET` = 10.0 (1000 %) with `TARGET_OUT_OF_RANGE`, which catches "90" stored as 9000 % (QA finding P6-02).
+  - The targets table has a "Use" column: a target whose dimension has no value on the as-of date (`known_dimensions`) is marked "Not in use"; the column follows the as-of date (QA finding P6-09).
+  - A stored setting that cannot be read (`CORRUPT_SETTING`) is shown as a translated message instead of an error: on the Dashboard (T6.5) and Alerts (T6.3) pages in place of their content, in the General, Alerts and Targets sections of Settings, and in the module sections (the Personnel and Infrastructure sections show it and switch their rule inputs off). **Open (QA finding P6-01):** there is no action yet to reset one unreadable setting; the message is all the operator gets. It would need a `ConfigService.reset(field)` that deletes the stored row and un-confirms its placeholder in one transaction written to `change_log`, and a UI action that offers it.
 - Accept:
   - targets round-trip and every change writes a `change_log` row;
   - targets in the wrong order for the indicator's direction are rejected with `TARGET_ORDER`;
@@ -1586,6 +1593,7 @@ This phase covers R01, R05, R06, R25–R27 and R36. It starts once Phases 2–5 
   - The page lists the alerts for the as-of date, showing severity as text and icon, the module, the subject, the due date and a localized message. It can be filtered by module and severity.
   - Activating an alert opens the page of the record it refers to, found through the registry.
   - Messages are built from the alert's codes and parameters, with `%n` plural forms.
+  - The Subject column shows the subject reference of T6.2 as data, unchanged: for an indicator alert its code and dimension (`CODE (dimension)`). The message is translated and names the indicator in words, with its dimension in words (QA finding P6-08).
 - Accept:
   - every alert kind, in each of the three languages, gives a non-empty message with every placeholder filled;
   - plural forms are correct for 1 and for 2 days;
@@ -1656,6 +1664,7 @@ This phase covers I02, R33 and D02–D04. Its first task, T7.1, follows T1.9, th
   - The pre-migration backup from T1.3 moves to this helper and has its own pool.
   - Rotation: the daily pool keeps the newest P06 copies (7); the pre-migration pool keeps the last 3 and is never rotated out by daily backups; `.before-restore-*` safety copies (T7.3) are rotated too, keeping the last 2.
   - Each new copy passes `PRAGMA quick_check` before any older copy is deleted, and the newest copy that passed is never deleted. When the clock sanity check of T1.9 has failed, rotation is skipped for the session.
+  - A suspect clock skips the rotation of all three pools, not only the daily one: the pre-migration pool (the start-up asks `clock_is_suspect` on the opened database before it migrates, because the session's own clock check runs later) and the before-restore pool (T7.3). The copy itself is still made; only older copies are kept (QA finding P7-04).
 - Accept:
   - a copy taken while another connection holds an open write transaction still passes `PRAGMA integrity_check` and contains only committed data;
   - the daily backup is made once per day, however many times the app starts; its start-up hook is skipped in read-only mode and in demo mode;
@@ -1679,6 +1688,7 @@ This phase covers I02, R33 and D02–D04. Its first task, T7.1, follows T1.9, th
   - The schema version that drives migration is the restored database's own `user_version`; the copy in the header is informational.
   - The service enforces the minimum passphrase length P05 (12 characters at least) and a small strength rule: not on a short blocklist, and a minimum number of distinct characters.
   - It records the time of the last successful backup for the reminder (P09).
+  - The encrypted file is written beside the target under a staging name (`<target>.new`), read back with the same passphrase and compared with the snapshot, and only then moved onto the target, so a failed write (`BACKUP_WRITE_FAILED`) or a failed read-back (`BACKUP_VERIFY_FAILED`) leaves an earlier backup of that name as it was. When `.cbrnbak` is appended to the chosen name, the save dialog never saw the final name, so an existing file of that name is refused (`BACKUP_TARGET_EXISTS`) unless the user agreed to replace it; T7.4 asks first (QA finding P7-10).
 - Accept:
   - a round trip returns a database identical to the source;
   - a wrong passphrase (header intact) raises `WrongPassphraseError`;
@@ -1704,6 +1714,9 @@ This phase covers I02, R33 and D02–D04. Its first task, T7.1, follows T1.9, th
   8. Copy the validated temporary database into the live one with SQLite's backup API (no rename).
   9. Reopen.
   10. Write a `change_log` row with action `restore` in the restored database; it names the safety copy.
+  - When the copy fails and putting the safety copy back also fails (or the put-back database fails its integrity check), the error is `RESTORE_ROLLBACK_FAILED` instead of `RESTORE_COPY_FAILED`; it carries the file name (never the path) of the safety copy, and the message names that file. While the live database fails its own integrity check (looked at before the safety copy is made) the before-restore pool is not rotated, so later attempts never push out the good safety copy of an earlier one; with a suspect clock it is not rotated either (T7.1) (QA findings P7-01, P7-04).
+  - `LIVE_UNREADABLE`: the live database cannot be read for the demo/real check, so the restore stops before anything is changed (QA finding P7-13).
+  - The connection to the decrypted temporary database sets `PRAGMA temp_store=MEMORY`, so SQLite's statement journals and sort spills during the integrity check or the migration stay in memory instead of the OS temp folder; a `<data>\tmp\` that is a link is refused with `TEMP_FILE_FAILED` (QA finding P7-03).
 - Accept:
   - a backup made with an older schema is restored and migrated, and no pre-migration backup is written during that migration;
   - a restored database whose own `user_version` is newer than the app raises `BackupTooNewError`;
@@ -1724,6 +1737,7 @@ This phase covers I02, R33 and D02–D04. Its first task, T7.1, follows T1.9, th
   - Restore asks for confirmation and reports the result, and reports the error code of a demo/real mismatch in words.
   - A settings section for P05, P06 and P09 (with the hard floors of T1.5), registered through the T1.9 settings-section registry for Settings → Backup. T6.1 only renders it, so it appears once T6.1 exists.
   - Every dialog and file picker goes through the prompts interface.
+  - **Open (QA finding P7-08):** removable media cannot be detected. No API the T0.4 guard allows can tell a removable drive from a fixed one: `QStorageInfo` has no removable flag (its file-system type is no indicator, USB drives are often NTFS), and `ctypes` (`GetDriveType`) is forbidden in application code. The removable-media check therefore always answers "not removable", and the advice "Keep another copy on separate media, away from this computer" is shown after every successful backup.
 - Accept, using the prompts fake:
   - mismatched or too-short passphrases show a translated error and write no file;
   - a successful backup writes the `.cbrnbak` file at the chosen path and reports success;
@@ -1777,6 +1791,7 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
     - `report`, used by T8.7;
     - `retroactive`, whenever the local date on which the snapshot is taken is after its `as_of`, whatever triggered it (manual or report included). The service sets it and the caller cannot override it.
   - The monthly snapshot is skipped for the session when the clock sanity check of T1.9 has failed.
+  - A withdrawn monthly snapshot still counts for its month: once the month's `monthly` snapshot was taken, no other is taken that month, whether or not it was withdrawn later (QA finding P8-14).
 - Accept:
   - a snapshot stores one value row per indicator and dimension, and its `config_json` holds exactly the hashed fields;
   - the configuration hash changes when a target or any other hashed field changes, and not when the operator label or the institution or unit names change;
@@ -1797,6 +1812,7 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
     - results: edition code, metric code, value, respondents, scale.
 
   The statistical analysis is outside the app (§2.2).
+  - Retroactive snapshots asked for by an export are recorded before the files are written, because their ids go into the files. When writing then fails, the error carries the ids of the snapshots it recorded (`ValidationExportError`); they stay stored, and the UI names them and says they can be withdrawn in the snapshot list (QA finding P8-08).
 - Accept:
   - with snapshots both before and after an edition, the right one is chosen;
   - a withdrawn snapshot and a `retroactive` snapshot are not preferred over an earlier valid one;
@@ -1815,6 +1831,7 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
   - A text cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'`.
   - When `app_meta.is_demo` is 1, every file name starts with `DEMO-`.
   - Money is written in major units with a currency column, and converted exactly from minor units using the decimal places of the currency allow-list (D15).
+  - Exporting all entities is all-or-nothing: every file is written into a staging folder inside the chosen folder and moved into place only after all were written. On a failure (`EXPORT_FAILED`, with the entity in `field`) the staging folder is removed and the files already in the folder are left untouched, so a failed export never leaves a mix of new and older files. Before exporting, the UI (T8.7) counts the files of this export that already exist in the folder and asks before replacing them. This supersedes the earlier behaviour of the code, in which files finished before a failure stayed in the folder (QA finding P8-07).
 - Accept:
   - reading the exported files back gives the same rows as the database;
   - a field containing `;`, quotes and line breaks survives the round trip;
@@ -1849,6 +1866,8 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
     - budget execution: the budget-entry key above, `executed_on` and amount.
   - Duplicates by natural key are rejected.
   - Every imported row writes a `change_log` row with action `import`.
+  - A row that the storage layer refuses (a constraint that no service check caught first) is reported for that row with `STORAGE_REFUSED`, and the import goes on to the next row; as for any error, nothing is written (QA finding P8-13).
+  - An `asset` import reports, as a warning and not an error, how many of its assets are in service today and have no status event yet; until their status events are imported they count as in service with an unknown status (D26). The dry run reports the same count; the CSV format is unchanged (QA finding P8-12).
 - Accept:
   - a valid fixture imports with the expected counts;
   - a file with any invalid row writes nothing and lists every error with row, column and code;
@@ -1877,6 +1896,8 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
   - Secondary suppression: any total or sibling cell from which a suppressed value could be recomputed is suppressed too.
   - Charts of the anonymised variant are built only from the suppressed model; suppressed cells are not drawn.
   - Differencing between successive reports (the same population read at two dates) is not prevented; it is recorded as a residual risk (K03, Q10).
+  - The alert summary is split by source (`reports/model.py`). For each of the severities critical and warning it holds a total and three parts: personnel (certificate alerts; personnel-derived; the warning part declares the per-level `kf:PERSONNEL:expiring:<level>` cells as what it sums, the critical part the per-level `kf:PERSONNEL:expired:<level>` cells), infrastructure (maintenance alerts; never suppressed), and indicators (the readings with that status; it declares the personnel count readings that carry a status, so it is hidden whenever one of them is). The total declares its three parts, so a total with a hidden part is hidden too. The info count is maintenance only and is not personnel-derived. The personnel key figures gain an "expired" count per level (expired-certificate alerts at that level), and "retraining needed" (key figure and `PERS_RETRAINING_NEEDED` row) declares the expiring and expired cells of its level (A03), so a hidden expired count cannot be recovered as retraining minus expiring (QA findings P8-01, P8-03).
+  - Residual limit, documented in `reports/anonymise.py` ("Not covered"): relations that are not declared are not considered. In particular `active_staff - valid:<level>` is the number of active people without a valid certificate at that level (expired, no renewal, or none); where every active person holds the level it equals the hidden expired count. That relation is not declared and not prevented (Q10).
   - The internal variant carries a handling notice set locally in Settings (empty by default, like D18). When `app_meta.is_demo` is 1, the report model carries the "DEMO — FICTITIOUS DATA" marker, which T8.6 draws.
 - Accept:
   - on a fixture, the internal variant contains the expected sections and figures;
@@ -1896,6 +1917,7 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
   - Include the title, page numbers, the preliminary notice in every page footer, and charts embedded through the T6.4 adapter. When the report model carries the demo marker (`app_meta.is_demo` is 1), every page, in both variants, carries a "DEMO — FICTITIOUS DATA" watermark and the PDF title says so.
   - Set the PDF document metadata (Info and XMP) explicitly, with no operator label, institution name or identifier in the anonymised variant.
   - The language is chosen per report. The renderer loads its own `QTranslator` set for that language and calls those translators directly, formats with an explicit `QLocale`, and never swaps the application's installed translators. Labels shared with the UI come from the Qt-free code→message-key map in `reports/message_keys.py`, so `reports/` does not import `ui/`.
+  - **Open (QA finding P8-04), decision pending:** the Accept bullet "the output parses with pypdf" is not met. pypdf is in neither `pyproject.toml` nor `uv.lock`. The test file is `tests/reports/test_report_pdf.py`, not the `tests/reports/test_pdf.py` named in Files and in the check command below; it asserts content on the layout the renderer builds before painting (text and chart data), and checks the PDF itself only for its signature, page count, page size, the absence of identifying strings in its bytes, and the failure behaviour. Either the dependency and a parse test are added, or the K18 fallback is adopted for this bullet; the decision is not taken here.
 - Accept:
   - the output parses with pypdf;
   - the pages are A4;
@@ -1917,6 +1939,8 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
   - CSV export, with a warning that the files contain internal data.
   - An import wizard: choose the entity and file, see the dry-run preview with its errors, confirm.
   - Settings sections for Reports (the A11 threshold and the handling notice) and Snapshots (P04), registered through the T1.9 settings-section registry.
+  - A report is refused when its file name carries the marker of the other variant (`internal` for an anonymised report, `anonymised` for an internal one, compared without case); the user is told to change the name or the report. While the path is still the suggested one, it follows a change of variant or date (QA finding P8-02).
+  - A "Write templates..." action writes the header-only template of every entity (T8.4) into a chosen folder, with the same destination warnings, and asks before replacing existing template files (QA finding P8-10).
 - Accept, using the prompts fake:
   - each action produces its file under `tmp_path`;
   - generating a report for today with the option ticked records a snapshot with origin `report`, and for a past as-of date one with origin `retroactive`;
@@ -1937,6 +1961,7 @@ T9.2, T9.3 and T9.4 belong to the MVP: T9.2 and T9.3 can start any time after T0
   - The excludes of T0.9 are kept, together with the post-build deletion of the unwanted Qt DLLs and plugins from `_internal` (`--exclude-module` takes Python module names and may leave Qt DLLs behind).
   - The bundle receives all package data except `*.ts` (migration `.sql` files, resources, `countries.json`, `THIRD_PARTY_DATA.md`, the `help/` files and every compiled `.qm`), plus the `licenses\` folder produced by T9.2.
   - The script prints the bundle size by top-level folder.
+  - The self-test has a `demo` check (it creates and seeds a demo database inside its throwaway folder through the same entry point as `--demo`, and checks the demo flag, the seed marker and that every staff identifier starts with `DEMO`), and its `pdf` check renders a report with one small fictitious chart, so Qt Charts and `render_to_image` also run frozen (QA findings P9-12, P8-11).
 - Accept (`packaging` marker):
   - every `storage/migrations/*.sql` file and `countries.json` is in the bundle;
   - the test asserts on the files actually present (no unwanted Qt DLLs or plugins), and the self-test shows nothing needed them;
@@ -1962,6 +1987,10 @@ T9.2, T9.3 and T9.4 belong to the MVP: T9.2 and T9.3 can start any time after T0
     - a pointer to the exact Qt and PySide6 source release matching the bundled version, with a written offer for that source (GPL-3.0 §6, LGPL).
   - Write them into `licenses\`, with an index listing component, version and licence expression (the chosen alternative for an `OR` expression).
   - The allow-list test enforces the §4.2 list: MIT, BSD, Apache-2.0, PSF-2.0, MPL-2.0, Unicode-3.0, LGPL-3.0 and GPL-3.0. It evaluates SPDX expressions: an `OR` expression passes when at least one alternative is allowed, and the chosen alternative is recorded in the index. PySide6 and shiboken6 declare `LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only`: the index records LGPL-3.0-only for Qt core and the bindings, and GPL-3.0-only for Qt Charts as a separate entry.
+  - The allow-list also holds `MIT-0`, because `cffi` (a dependency of `cryptography`) declares it; §4.2 names it, and the list in the bullet above and the "`cffi` MIT" of the §4.2 table are read with it (QA finding P9-14).
+  - The §4.2 table row "Cryptography", which gives `cffi` as MIT, predates finding P9-14 and is left as it was written; the `MIT-0` that `cffi` declares is recorded in the §4.2 paragraph below that table and in the bullet above (QA finding P9-14).
+  - The licence index and the licence folders cover only the distributions that have files in the built bundle: the build passes the bundle to the collector, and a distribution that installs native files (`.pyd`, `.dll`, `.exe`) of which none is left in `_internal` (the build deletes them, for example the Qt PDF and web-engine wheels) gets no entry; a pure-Python distribution is compiled into the executable and counts as bundled (QA finding P9-04).
+  - uv uses only its managed Pythons (`python-preference = "only-managed"`), and `.python-version` pins a full 3.12 patch version, because the CPython notices in `licenses\` describe that managed build. This is stricter than the plain `3.12` of D12 and T0.1 (QA finding P9-08).
 - Accept:
   - every runtime distribution has an index entry and a licence text;
   - the allow-list test passes on the real environment;
@@ -1984,6 +2013,8 @@ T9.2, T9.3 and T9.4 belong to the MVP: T9.2 and T9.3 can start any time after T0
     6. GitHub's build-provenance attestation of the zip.
     7. `gh release create --draft` with the zip, the checksum file and the per-file manifest, adding `--prerelease` when the version is below 1.0.0 (the choice is made by a small function in `scripts/make_release_zip.py`, tested for 0.1.0 and 1.0.0; the workflow test asserts that the step uses it).
   - The release body, built from `.github/release-body.template.md`, states that the executable is unsigned (D10), that the tool is preliminary and not institutionally validated (I06), how to verify the checksum, what the checksum and the attestation do and do not prove (`SHA256SUMS.txt` on the same release page proves transfer integrity, not authenticity; the attestation proves where and how the build ran, not that the program is safe), and which placeholders are still flagged in `domain/config.py` (the code-level flags of §3.5). It links the matching source tag of this project and the exact Qt and PySide6 source release matching the bundled version, and carries the written offer for that source (§4.2, §8).
+  - The workflow has two jobs; the steps above are not one job and there is no second build. A read-only `build` job runs steps 1–3, where the packaging suite builds the bundle once into `dist/` and runs its frozen self-test; step 5 zips that same tested folder; the release notes and the pre-release flag are written there; and the zip, the checksum files and the notes are uploaded as one workflow artefact. The `release` job, which needs `build` and alone has the write permissions, has no checkout and installs nothing: it downloads that artefact with the pinned `actions/download-artifact`, attests the zip (step 6) and creates the draft (step 7) (QA findings P9-01, P9-03).
+  - The per-file manifest `SHA256-FILES.txt` is for verifying each extracted file. Allow-listing rules are then made from the verified folder with the organisation's own policy tooling, as the release body says. This supersedes the premise of step 5 and of D10, §8, T9.4 and T10.3 that IT teams allow-list by file hash straight from the manifest (QA finding P9-02; see the note on K02 in §11).
 - Accept:
   - on a fake folder, the zip script produces the expected top folder and file list;
   - two runs produce byte-identical zips;
@@ -2057,6 +2088,10 @@ This phase covers R28, R32 and I06, plus D23 with T6.5. It closes v1.0.
 - Work:
   - The demo database receives illustrative targets. They exist only in the demo database, whose banner and watermark mark everything as fictitious. They are never written to a real database and are not placeholders for one (P03 still applies to real data).
   - It also receives retroactive snapshots dated before the demo editions, so the validation export (T8.2) has content.
+  - The day the demo data was created is stored in `app_meta` (`demo_created_on`), in the seeding transaction. A read-write `--demo` start of a demo database created on another day asks once whether to create the demo data again for today: yes replaces only the demo database file (a file that is not a demo database is refused and left as it is; the real database and `demo\backups\` are never touched), no keeps it as it is. In read-only mode nothing is asked or written, and a demo database without a stored creation day is not outdated (QA finding P10-02).
+  - `generate()` refuses a database whose `app_meta.is_demo` is not set (`NOT_A_DEMO_DATABASE`) before it writes anything, so demo targets and snapshots never reach a real database (QA finding P10-07).
+  - The year-end `BUD_EXEC_RATE` targets of the demo are stored at most at `YEAR_END_TARGET_MAX` = 1.0 (100 % of the allocation), so they are valid on every day of the year (early in January the plain quotient would be far above 1). The price: a group can read Warning or Critical only while its executed share is at or below the elapsed fraction of the year, so the DIRSA group (executed 4–12 %) reads OK instead of Critical in a demo database created before about mid-February; the walkthrough gives 13 February (`demo/targets.py`, `docs/demo-walkthrough.md`). On 31 December no execution row is dated after today, because a row must stay inside its fiscal year (QA finding P10-03).
+  - The two sources word the end of that period differently, and both wordings are kept: the docstring of `demo/targets.py` says the DIRSA group reads OK "from 1 January until about the middle of February"; `docs/demo-walkthrough.md` says the table is exact "in a demo database created from 13 February on" and that one "created before 13 February" reads OK instead of Critical (QA finding P10-03).
 - Accept:
   - every registered page shows at least one row;
   - the dashboard shows at least one alert of every kind in §5.5;
@@ -2244,6 +2279,8 @@ Likelihood and impact are rated H (high), M (medium) or L (low).
 | K18 | Text extraction with pypdf from Qt-generated PDFs is unverified, and Qt's `QTextDocument.print()` has no per-page footer, so the PDF tests or the pagination may not work as planned. | M / L | T8.6 starts with a spike and paginates manually with `QPainter`. If extraction is unreliable, content assertions move to the Qt-free report model and the PDF test checks page count, page size and metadata only. | D09, T8.6 |
 | K19 | The data, or part of it, is formally classified or access-restricted (Lei 12.527/2011, arts. 23–28, or military rules), and real data is entered into a design that is not suitable for it. | M / H | Q19 is first in §12 and gates the entry of real data, together with Q4, Q11 and Q13. §1, §7.1, §10.4, the first-run notice (T7.5) and the first-run notes (T9.4) say that "sensitive" is not a classification and that real data must not be entered until the question is answered. Until then only demo data is used. As the plan reads Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made by a formal decision of the competent authority; this is not legal advice, and the plan gives no legal conclusion. | F05, §7.1, Q19 |
 
+Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for IT teams", taken straight from the per-file manifest, is superseded. `SHA256-FILES.txt` is for verifying each extracted file; IT teams then make their allow-listing rules from the verified folder with their organisation's own policy tooling (T9.3). The same reading applies to D10, §8, T9.4 and T10.3.
+
 ---
 
 ## 12. Open questions for the author
@@ -2303,6 +2340,7 @@ Likelihood and impact are rated H (high), M (medium) or L (low).
 - Answered by: the committee.
 - Confirms: A11 (threshold 5) and the report sections. XLSX would be deferred item X3.
 - Until answered: the two PDF variants of T8.5 and T8.6 are produced in the chosen UI language, personnel-derived counts below 5 (zeros included) are suppressed with secondary suppression, and differencing is a documented residual risk.
+- Also recorded as residual (QA findings P8-01, P8-16): the anonymised variant prints the operator-entered codes as they are (funding-source, asset-type and edition codes), and the built-in source `DIRSA` by its code, as a proper name; and the undeclared relation `active_staff - valid:<level>` can reveal a hidden expired count (T8.5).
 
 **Q11 — Information security (L91).** Which institutional rules apply to this data? In particular: is encryption of the database file itself required, in addition to full-disk encryption of the workstation? Where may backups be stored? Is there a passphrase policy? Is Argon2id required instead of scrypt for the backup key? After how many days should the reminder for an old encrypted backup appear (P09)? Gates the entry of real data, together with Q19, Q4 and Q13.
 - Answered by: the committee.
@@ -2343,6 +2381,31 @@ Likelihood and impact are rated H (high), M (medium) or L (low).
 - Answered by: the thesis author.
 - Confirms: the traceability table of §3.1.
 - Until answered: the quotes and line references are unverifiable from the repository; the application is not affected.
+
+**Q20 — Qt and PySide6 source for the written offer.** The source links in the release body and in `SOURCE-OFFER.md` are built from URL patterns of `download.qt.io` in `scripts/make_release_zip.py` and have not been checked to resolve for the bundled versions. `uv.lock` records only wheels for the PySide6 family, so `SOURCE-OFFER.md` says it records no source archive for those packages. Are those links right, and is the written offer enough for the PySide6 family? (Phase 9 QA; the per-package source list is finding P9-10)
+- Answered by: the project owner.
+- Confirms: §4.2, T9.2 and T9.3 (the source pointer and the written offer).
+- Until answered: the links are generated from the patterns and the written offer covers the Qt and PySide6 source of the bundled versions.
+
+**Q21 — Visual C++ runtime notice.** Is the wording of `MSVC-RUNTIME.md` (the runtime files are redistributed unmodified, with a pointer to Microsoft's terms, and the file list is written from the files found in the bundle) what Microsoft's redistribution terms require? (Phase 9 QA; the generated file list is finding P9-07)
+- Answered by: the project owner.
+- Confirms: T9.2 (the Visual C++ runtime notice).
+- Until answered: the notice is shipped with that wording, unconfirmed.
+
+**Q22 — Qt third-party attributions.** The PySide6 wheels the bundle is built from ship no SBOM and no attribution files, so `QT-THIRD-PARTY.md` carries a pointer to Qt's "Licenses Used in Qt" page and to the Qt source release instead of the attribution texts that T9.2 asks for. Is the pointer acceptable, or must the attribution texts be taken from the Qt source release? (Phase 9 QA)
+- Answered by: the project owner.
+- Confirms: T9.2 and §8 (Qt's third-party attributions).
+- Until answered: the pointer is shipped, recorded as a known limitation.
+
+**Q23 — First release run and attestation.** The two-job release workflow (T9.3) has not run yet. Do the repository's plan and settings allow GitHub's build-provenance attestation, and does the workflow produce the draft release as tested? (Phase 9 QA; the two jobs are findings P9-01, P9-03)
+- Answered by: the project owner, on the first tag.
+- Confirms: D10 and T9.3.
+- Until answered: the workflow is checked only by the workflow tests; the first tag is the first real run.
+
+**Q24 — Branch protection.** Merging only green pull requests (Dependabot ones included, T9.5) needs branch protection on `main` with the CI jobs `test` and `build` as required status checks. That is a setting of the repository on the hosting site, which nothing in the repository's files can enforce. Is it configured? (Phase 9 QA)
+- Answered by: the project owner.
+- Confirms: T9.5 and `CONTRIBUTING.md`.
+- Until answered: the rule is stated in `CONTRIBUTING.md` only.
 
 ---
 
