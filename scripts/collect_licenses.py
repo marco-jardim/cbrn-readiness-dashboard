@@ -43,9 +43,10 @@ DEFAULT_OUT_DIR = Path("build") / "licenses"
 
 # Allowed licences (PLAN.md section 4.2): MIT, BSD, Apache-2.0, PSF-2.0, MPL-2.0, Unicode-3.0,
 # LGPL-3.0 and GPL-3.0, as SPDX identifiers. The BSD 2/3-clause ids are the concrete SPDX members
-# of the plan's "BSD" family. GPL-2.0-only is NOT allowed. ``MIT-0`` and ``Python-2.0`` were
-# allowed earlier but are outside the plan and no locked runtime package needs them: they were
-# removed (P9-14). ``tests/meta/test_dependency_licences.py`` pins this exact set.
+# of the plan's "BSD" family. GPL-2.0-only is NOT allowed. ``MIT-0`` is allowed because the locked
+# ``cffi`` declares it (recorded in PLAN.md section 4.2). ``Python-2.0`` was allowed earlier but no
+# locked runtime package needs it: it was removed (P9-14).
+# ``tests/meta/test_dependency_licences.py`` pins this exact set.
 ALLOWED_LICENSES: frozenset[str] = frozenset(
     {
         "MIT",

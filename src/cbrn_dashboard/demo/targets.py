@@ -23,7 +23,8 @@ multiplies it by the elapsed fraction of the fiscal year (``scale``) when it eva
 stored value is the wanted threshold of the day divided by ``scale``, but it is never stored above
 :data:`YEAR_END_TARGET_MAX` (1.0, that is 100 % of the allocation): a year-end target is a share of
 the allocation, and early in January the plain quotient would be far above 1 (on 1 January
-``scale`` is 1/365) and the service refuses it. The target is therefore valid on every day of the
+``scale`` is 1/365) and above what the service accepts (it refuses a ratio target over 10.0,
+``MAX_RATIO_TARGET``). The target is therefore valid on every day of the
 year. The price is that a ratio can only read WARNING or CRITICAL while the group's executed share
 is at or below ``scale``: with the stored value at its 1.0 ceiling the threshold of the day is
 ``scale`` itself. Where the executed share is above it (for the DIRSA group, executed 4 to 12 %,
