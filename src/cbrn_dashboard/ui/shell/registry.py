@@ -17,6 +17,7 @@ from typing import Protocol
 
 from PySide6.QtWidgets import QDialog, QWidget
 
+from cbrn_dashboard.ui.alerts import page as alerts_page
 from cbrn_dashboard.ui.budget import page as budget_page
 from cbrn_dashboard.ui.exercises import page as exercises_page
 from cbrn_dashboard.ui.infrastructure import page as infrastructure_page
@@ -106,6 +107,7 @@ PAGES: tuple[PageSpec, ...] = (
     PageSpec("infrastructure", 20, infrastructure_page.page_title, infrastructure_page.create_page),
     PageSpec("exercises", 30, exercises_page.page_title, exercises_page.create_page),
     PageSpec("budget", 40, budget_page.page_title, budget_page.create_page),
+    PageSpec("alerts", 50, alerts_page.page_title, alerts_page.create_page),
 )
 
 # Settings sections, one line per section: T2.4, T3.4, T4.5, T5.4, T7.4, T8.7 (T6.1 only renders).
