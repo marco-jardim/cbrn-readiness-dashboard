@@ -18,7 +18,30 @@ Design notes
   locale's decimal and group separators.
 * The exact strings of ``QLocale`` depend on the CLDR version inside the pinned Qt; the tests
   are regenerated deliberately on a Qt upgrade.
-* Integers handed to ``QLocale.toString`` must fit in 64 bits (|n| < 2**63).
+* Integers handed to ``QLocale.toString`` must fit in 64 bits (|n| < 2**63). Formatting a
+  larger magnitude raises ``TOO_LARGE``; so does parsing an amount of 2**63 minor units or more
+  (the SQLite INTEGER limit) and parsing a plain number of 10**18 or more.
+* The currency allow-list and its decimal places come from :mod:`cbrn_dashboard.domain.budget`
+  (D15, single source of truth). A currency outside it raises ``INVALID_CURRENCY``.
+
+Separator rule (what "ambiguous" means)
+---------------------------------------
+The **locale's own separators are authoritative**. Text that follows them is read that way, even
+when it would also be valid under the other convention with a different value:
+
+* pt-BR ``1.234`` is 1234 and en-US ``1,234`` is 1234 (the group separator typed with no
+  decimals is read as an integer **by design**; this is how Brazilian and Spanish users type
+  thousands, and ``1.234,56`` must be accepted as well).
+
+Text that does **not** follow the locale's separators but would parse under the other convention
+is rejected with ``AMBIGUOUS_NUMBER``, so that a number typed in the wrong convention is never
+silently misread:
+
+* pt-BR ``1.23`` (read as 1.23 elsewhere) and ``1,234.56`` are rejected; en-US ``1,5`` too.
+
+:func:`other_convention_value` is a pure safety net for dialogs: it reports the value an
+accepted text would have under the swapped separators, so a confirmation hint can be shown. It
+does not change what is accepted.
 """
 
 import re
@@ -29,6 +52,7 @@ from typing import Final
 from PySide6.QtCore import QDate, QLocale
 from PySide6.QtWidgets import QDateEdit, QWidget
 
+from cbrn_dashboard.domain.budget import currency_decimals, is_valid_currency
 from cbrn_dashboard.i18n import to_catalogue_code
 
 # --------------------------------------------------------------------------------------------
@@ -41,6 +65,7 @@ NEGATIVE_AMOUNT: Final = "NEGATIVE_AMOUNT"
 TOO_MANY_DECIMALS: Final = "TOO_MANY_DECIMALS"
 INVALID_DATE: Final = "INVALID_DATE"
 INVALID_CURRENCY: Final = "INVALID_CURRENCY"
+TOO_LARGE: Final = "TOO_LARGE"
 
 
 class FormatError(ValueError):
@@ -56,6 +81,9 @@ class FormatError(ValueError):
 
 _NBSP: Final = "\xa0"
 _CTX: Final = Context(prec=100)
+_INT64_MAX: Final = 2**63 - 1  # largest integer QLocale.toString and SQLite INTEGER take
+_INT64_MIN: Final = -(2**63)
+_MAX_NUMBER_DIGITS: Final = 18  # parse_number accepts |value| < 10**18
 
 
 def locale_for(lang: str) -> QLocale:
@@ -176,9 +204,14 @@ def _format_decimal(value: Decimal, locale: QLocale, decimals: int) -> str:
     """Round half up to ``decimals`` places and group with the locale; sign is ``-``."""
     if decimals < 0:
         raise ValueError("decimals must be >= 0")
+    # 10**19 > 2**63; checking first also keeps ``quantize`` within the context precision.
+    if value and value.adjusted() >= 19:
+        raise FormatError(TOO_LARGE, "magnitude does not fit in 64 bits")
     rounded = value.quantize(Decimal(1).scaleb(-decimals), rounding=ROUND_HALF_UP, context=_CTX)
     text = format(abs(rounded), "f")
     major, _, fraction = text.partition(".")
+    if int(major) > _INT64_MAX:
+        raise FormatError(TOO_LARGE, "magnitude does not fit in 64 bits")
     result = locale.toString(int(major))
     if fraction:
         result += locale.decimalPoint() + fraction
@@ -218,11 +251,8 @@ def format_percent(ratio: float | Decimal, lang: str, *, decimals: int = 1) -> s
 # --------------------------------------------------------------------------------------------
 # Money
 
-# TODO(T5.2): domain/budget.py becomes the source of truth of the currency allow-list and its
-# decimal places (D15); this table is then replaced by an import.
-CURRENCY_DECIMALS: Final[dict[str, int]] = {"BRL": 2, "USD": 2, "EUR": 2}
-
-_DEFAULT_DECIMALS: Final = 2
+# The allow-list and the decimal places live in domain/budget.py (D15). Every currency of the
+# allow-list needs a symbol here (a test checks it).
 _CURRENCY_SYMBOLS: Final[dict[str, str]] = {"BRL": "R$", "EUR": "€", "USD": "US$"}
 # Placement of the symbol, as CLDR does it: pt "R$ 1,00", en "R$1.00", es "1,00 R$".
 _MONEY_TEMPLATES: Final[dict[str, str]] = {
@@ -230,27 +260,31 @@ _MONEY_TEMPLATES: Final[dict[str, str]] = {
     "en_US": "{symbol}{number}",
     "es_ES": f"{{number}}{_NBSP}{{symbol}}",
 }
-_CURRENCY_CODE: Final = re.compile(r"[A-Z]{3}", re.ASCII)
 
 
 def _currency_decimals(currency: str) -> int:
-    if _CURRENCY_CODE.fullmatch(currency) is None:
-        raise FormatError(INVALID_CURRENCY, f"not an ISO 4217 code: {currency!r}")
-    return CURRENCY_DECIMALS.get(currency, _DEFAULT_DECIMALS)
+    """Decimal places of ``currency``; ``INVALID_CURRENCY`` outside the allow-list."""
+    if not is_valid_currency(currency):
+        raise FormatError(INVALID_CURRENCY, f"currency not in the allow-list: {currency!r}")
+    return currency_decimals(currency)
 
 
 def currency_symbol(currency: str) -> str:
-    """Return the display symbol of ``currency`` (the ISO code when it has no symbol)."""
+    """Return the display symbol of ``currency`` (``INVALID_CURRENCY`` if not allowed)."""
     _currency_decimals(currency)
-    return _CURRENCY_SYMBOLS.get(currency, currency)
+    return _CURRENCY_SYMBOLS[currency]
 
 
 def format_amount(minor_units: int, currency: str, lang: str) -> str:
     """Format whole ``minor_units`` as a plain number without symbol (for input fields).
 
-    Exact integer arithmetic. A negative amount gets a leading ``-``.
+    Exact integer arithmetic. A negative amount gets a leading ``-``. ``INVALID_CURRENCY``
+    outside the allow-list; ``TOO_LARGE`` when ``minor_units`` is outside the signed 64-bit
+    range.
     """
     decimals = _currency_decimals(currency)
+    if not _INT64_MIN <= minor_units <= _INT64_MAX:
+        raise FormatError(TOO_LARGE, "amount does not fit in 64 bits")
     locale = locale_for(lang)
     major, fraction = divmod(abs(minor_units), 10**decimals)
     result = locale.toString(major)
@@ -262,17 +296,14 @@ def format_amount(minor_units: int, currency: str, lang: str) -> str:
 def format_money(minor_units: int, currency: str, lang: str) -> str:
     """Format whole ``minor_units`` of ``currency`` with its symbol placed as ``lang`` does.
 
-    pt-BR ``R$<nbsp>1.234,56``, en-US ``R$1,234.56``, es-ES ``1234,56<nbsp>R$``. Currencies
-    without a symbol in the map show their ISO code (en-US then adds a non-breaking space so
-    the code does not touch the digits). A negative amount gets a ``-`` before everything
-    (``-R$<nbsp>1,00``).
+    pt-BR ``R$<nbsp>1.234,56``, en-US ``R$1,234.56``, es-ES ``1234,56<nbsp>R$``. A negative
+    amount gets a ``-`` before everything (``-R$<nbsp>1,00``). ``INVALID_CURRENCY`` outside the
+    allow-list; ``TOO_LARGE`` when ``minor_units`` is outside the signed 64-bit range.
     """
     code = to_catalogue_code(lang)
     symbol = currency_symbol(currency)
-    number = format_amount(abs(minor_units), currency, code)
+    number = format_amount(minor_units, currency, code).removeprefix("-")
     template = _MONEY_TEMPLATES[code]
-    if code == "en_US" and symbol[-1].isalpha():
-        template = f"{{symbol}}{_NBSP}{{number}}"
     result = template.format(symbol=symbol, number=number)
     return f"-{result}" if minor_units < 0 else result
 
@@ -321,17 +352,55 @@ def _strip_sign(text: str) -> tuple[bool, str]:
 def parse_number(text: str, lang: str) -> Decimal:
     """Parse a number typed in ``lang`` exactly (optional leading ``-``).
 
-    Accepts plain digits or digits grouped by the locale's group separator in groups of three,
-    and at most one decimal separator. Spaces, ``'`` and the other convention's separators are
-    refused: text valid only under the other convention (``1,234.56`` in pt-BR/es-ES, ``1,5``
-    in en-US, ``1.5`` in pt-BR) raises ``AMBIGUOUS_NUMBER``; other garbage ``INVALID_NUMBER``;
-    blank input ``EMPTY``. ``1.234`` is 1234 in pt-BR/es-ES and ``1,234`` is 1234 in en-US.
+    The locale's own separators are authoritative. Accepts plain digits or digits grouped by the
+    locale's group separator in groups of three, and at most one decimal separator. A value
+    typed with the group separator and no decimals is read as an integer **by design**:
+    ``1.234`` is 1234 in pt-BR/es-ES and ``1,234`` is 1234 in en-US, although the other
+    convention would read 1.234. Text that does not follow the locale's separators but would
+    parse under the other convention (``1.23`` and ``1,234.56`` in pt-BR, ``1,5`` in en-US) is
+    rejected with ``AMBIGUOUS_NUMBER`` so that it is never silently misread; use
+    :func:`other_convention_value` to detect the case where an accepted text has a different
+    valid reading. Spaces and ``'`` are refused; other garbage raises ``INVALID_NUMBER``; blank
+    input ``EMPTY``. A magnitude of 10**18 or more raises ``TOO_LARGE``.
     """
     locale = locale_for(lang)
     negative, body = _strip_sign(text.strip())
     integer, fraction = _parse_digits(body.strip(), locale)
-    value = Decimal(f"{integer}.{fraction}" if fraction else integer)
+    if len(integer.lstrip("0")) > _MAX_NUMBER_DIGITS:
+        raise FormatError(TOO_LARGE, "magnitude must be below 10**18")
+    value = _to_value(integer, fraction)
     return -value if negative else value
+
+
+def _to_value(integer: str, fraction: str) -> Decimal:
+    return Decimal(f"{integer}.{fraction}" if fraction else integer)
+
+
+def other_convention_value(text: str, lang: str) -> Decimal | None:
+    """Return the value ``text`` would have with the separators swapped, if it differs.
+
+    Pure safety net, e.g. for a confirmation hint in a dialog; it never changes what
+    :func:`parse_number` accepts. The result is not ``None`` only when ``text`` is valid under
+    BOTH the locale's own separators and the swapped ones, with different values: pt-BR
+    ``"1.234"`` (read as 1234) gives ``Decimal("1.234")``; en-US ``"1,234"`` gives
+    ``Decimal("1.234")``. ``"1.234,56"`` (valid only one way), ``"1234"`` (same value both ways),
+    blank or invalid text give ``None``. A leading minus is honoured; currency symbols are not
+    stripped.
+    """
+    locale = locale_for(lang)
+    negative, body = _strip_sign(text.strip())
+    body = body.strip()
+    decimal_point = locale.decimalPoint()
+    group = locale.groupSeparator()
+    own = _scan(body, decimal_point, group)
+    swapped = _scan(body, group, decimal_point)
+    if own is None or swapped is None:
+        return None
+    own_value = _to_value(*own)
+    swapped_value = _to_value(*swapped)
+    if own_value == swapped_value:
+        return None
+    return -swapped_value if negative else swapped_value
 
 
 def _strip_currency(text: str, currency: str) -> str:
@@ -349,10 +418,14 @@ def _strip_currency(text: str, currency: str) -> str:
 def parse_amount(text: str, currency: str, lang: str) -> int:
     """Parse an amount typed in ``lang`` into whole minor units of ``currency``.
 
-    Same rules as :func:`parse_number`, plus: a currency symbol or ISO code of ``currency`` as
+    Same separator rule as :func:`parse_number` (the locale's own separators are authoritative;
+    pt-BR ``1.234`` is 1234 major units, i.e. 123400 minor units, by design; pt-BR ``1.23`` is
+    rejected as ``AMBIGUOUS_NUMBER``). Plus: a currency symbol or ISO code of ``currency`` as
     prefix or suffix is tolerated; fewer fraction digits than the currency has are padded
     (``1.234,5`` -> 123450); more raise ``TOO_MANY_DECIMALS``; a negative amount raises
-    ``NEGATIVE_AMOUNT`` (after the text has been found otherwise valid). Exact: no float.
+    ``NEGATIVE_AMOUNT`` (after the text has been found otherwise valid). A currency outside the
+    allow-list raises ``INVALID_CURRENCY``; a result of 2**63 minor units or more (the SQLite
+    INTEGER limit) raises ``TOO_LARGE``. Exact: no float.
     """
     decimals = _currency_decimals(currency)
     locale = locale_for(lang)
@@ -365,4 +438,7 @@ def parse_amount(text: str, currency: str, lang: str) -> int:
         raise FormatError(TOO_MANY_DECIMALS, f"{currency} has {decimals} decimal places")
     if negative:
         raise FormatError(NEGATIVE_AMOUNT, "amounts cannot be negative")
-    return int(integer + fraction.ljust(decimals, "0"))
+    digits = (integer + fraction.ljust(decimals, "0")).lstrip("0")
+    if len(digits) > len(str(_INT64_MAX)) or int(digits or "0") > _INT64_MAX:
+        raise FormatError(TOO_LARGE, "amount does not fit in 64 bits")
+    return int(digits or "0")

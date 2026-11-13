@@ -14,6 +14,7 @@ from PySide6.QtCore import QLocale
 from PySide6.QtWidgets import QDateEdit, QDoubleSpinBox
 from pytestqt.qtbot import QtBot
 
+from cbrn_dashboard.domain.budget import CURRENCY_DECIMALS
 from cbrn_dashboard.i18n import LANGUAGES, UnknownLanguageError
 from cbrn_dashboard.ui.shell import formatting as fmt
 from cbrn_dashboard.ui.shell.formatting import FormatError
@@ -219,7 +220,6 @@ def test_format_percent_variants(ratio: float, decimals: int, pt: str, en: str, 
         (99999, "BRL", "R$\xa0999,99", "R$999.99", "999,99\xa0R$"),
         (-100, "BRL", "-R$\xa01,00", "-R$1.00", "-1,00\xa0R$"),
         (-123456, "EUR", "-€\xa01.234,56", "-€1,234.56", "-1234,56\xa0€"),
-        (123456, "CHF", "CHF\xa01.234,56", "CHF\xa01,234.56", "1234,56\xa0CHF"),
     ],
 )
 def test_format_money(minor: int, currency: str, pt: str, en: str, es: str) -> None:
@@ -249,13 +249,86 @@ def test_format_money_is_exact_for_huge_values() -> None:
     assert fmt.format_amount(minor, "BRL", "en_US") == "90,071,992,547,409.93"
 
 
-@pytest.mark.parametrize("currency", ["", "br", "BRLX", "R$", "123"])
+@pytest.mark.parametrize(
+    "currency", ["", "br", "BRLX", "R$", "123", "CHF", "JPY", "KWD", "GBP", "brl"]
+)
 def test_invalid_currency_code(currency: str) -> None:
+    # Outside the allow-list of domain/budget.py: no silent 2-decimal fallback (P1B-30).
     with pytest.raises(FormatError) as info:
         fmt.format_money(100, currency, "pt_BR")
     assert info.value.code == "INVALID_CURRENCY"
-    with pytest.raises(FormatError):
+    with pytest.raises(FormatError) as info:
+        fmt.format_amount(100, currency, "pt_BR")
+    assert info.value.code == "INVALID_CURRENCY"
+    with pytest.raises(FormatError) as info:
+        fmt.currency_symbol(currency)
+    assert info.value.code == "INVALID_CURRENCY"
+    with pytest.raises(FormatError) as info:
         fmt.parse_amount("1", currency, "pt_BR")
+    assert info.value.code == "INVALID_CURRENCY"
+
+
+def test_every_allow_listed_currency_is_formattable() -> None:
+    # The allow-list and decimals come from domain/budget.py; the symbol map must cover it.
+    for currency, decimals in CURRENCY_DECIMALS.items():
+        assert fmt.currency_symbol(currency)
+        text = fmt.format_amount(1, currency, "en_US")
+        assert text == "0." + "0" * (decimals - 1) + "1"
+        assert fmt.parse_amount(text, currency, "en_US") == 1
+    assert not hasattr(fmt, "CURRENCY_DECIMALS")
+
+
+# ---------------------------------------------------------------------------- 64-bit limits
+
+INT64_MAX = 2**63 - 1
+
+
+def test_format_amount_boundary_in_each_locale() -> None:
+    assert fmt.format_amount(INT64_MAX, "BRL", "en_US") == "92,233,720,368,547,758.07"
+    assert fmt.format_amount(INT64_MAX, "BRL", "pt_BR") == "92.233.720.368.547.758,07"
+    assert fmt.format_amount(INT64_MAX, "BRL", "es_ES") == "92.233.720.368.547.758,07"
+    assert fmt.format_money(INT64_MAX, "BRL", "en_US") == "R$92,233,720,368,547,758.07"
+    assert fmt.format_money(-(2**63), "BRL", "en_US") == "-R$92,233,720,368,547,758.08"
+
+
+@pytest.mark.parametrize("minor", [2**63, -(2**63) - 1, 10**30])
+def test_format_money_and_amount_reject_out_of_range_ints(minor: int) -> None:
+    for lang in LANGUAGES:
+        with pytest.raises(FormatError) as info:
+            fmt.format_amount(minor, "BRL", lang)
+        assert info.value.code == "TOO_LARGE"
+        with pytest.raises(FormatError) as info:
+            fmt.format_money(minor, "BRL", lang)
+        assert info.value.code == "TOO_LARGE"
+
+
+def test_format_number_rejects_a_value_that_rounds_out_of_range() -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.format_number(Decimal("9223372036854775807.6"), "en_US", decimals=0)
+    assert info.value.code == "TOO_LARGE"
+    assert fmt.format_number(Decimal("9223372036854775807.6"), "en_US") == (
+        "9,223,372,036,854,775,807.6"
+    )
+
+
+@pytest.mark.parametrize("value", [2**63, -(2**63), 10**30, Decimal("1E+30"), 1e30])
+def test_format_number_rejects_out_of_range(value: float | Decimal) -> None:
+    for lang in LANGUAGES:
+        with pytest.raises(FormatError) as info:
+            fmt.format_number(value, lang, decimals=0)
+        assert info.value.code == "TOO_LARGE"
+    with pytest.raises(FormatError) as info:
+        fmt.format_number(value, "en_US")
+    assert info.value.code == "TOO_LARGE"
+
+
+def test_format_number_and_percent_accept_the_largest_magnitude() -> None:
+    assert fmt.format_number(INT64_MAX, "en_US") == "9,223,372,036,854,775,807"
+    assert fmt.format_number(-INT64_MAX, "pt_BR") == "-9.223.372.036.854.775.807"
+    assert fmt.format_number(Decimal("0E+100"), "en_US", decimals=0) == "0"
+    with pytest.raises(FormatError) as info:
+        fmt.format_percent(10**30, "en_US")
+    assert info.value.code == "TOO_LARGE"
 
 
 # ---------------------------------------------------------------------------- parsing numbers
@@ -407,7 +480,23 @@ def test_parse_amount(lang: str, currency: str, text: str, expected: int) -> Non
 @pytest.mark.parametrize("currency", ["BRL", "EUR", "USD"])
 @pytest.mark.parametrize(
     "minor",
-    [0, 1, 5, 99, 100, 999, 1000, 123456, 99999, 100000, 123450, 1234567, 123456789, 2**53 + 1],
+    [
+        0,
+        1,
+        5,
+        99,
+        100,
+        999,
+        1000,
+        123456,
+        99999,
+        100000,
+        123450,
+        1234567,
+        123456789,
+        2**53 + 1,
+        2**63 - 1,
+    ],
 )
 def test_amount_round_trips(lang: str, currency: str, minor: int) -> None:
     assert fmt.parse_amount(fmt.format_amount(minor, currency, lang), currency, lang) == minor
@@ -499,6 +588,156 @@ def test_parse_amount_too_many_decimals(lang: str, text: str) -> None:
     with pytest.raises(FormatError) as info:
         fmt.parse_amount(text, "BRL", lang)
     assert info.value.code == "TOO_MANY_DECIMALS"
+
+
+# ---------------------------------------------------------------------------- upper bounds
+
+_AT_LIMIT = {
+    "en_US": "92,233,720,368,547,758.07",
+    "pt_BR": "92.233.720.368.547.758,07",
+    "es_ES": "92.233.720.368.547.758,07",
+}
+_OVER_LIMIT = {
+    "en_US": "92,233,720,368,547,758.08",
+    "pt_BR": "92.233.720.368.547.758,08",
+    "es_ES": "92.233.720.368.547.758,08",
+}
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_parse_amount_boundary(lang: str) -> None:
+    assert fmt.parse_amount(_AT_LIMIT[lang], "BRL", lang) == 2**63 - 1
+    assert fmt.parse_amount(f"R$ {_AT_LIMIT[lang]}", "BRL", lang) == 2**63 - 1
+    with pytest.raises(FormatError) as info:
+        fmt.parse_amount(_OVER_LIMIT[lang], "BRL", lang)
+    assert info.value.code == "TOO_LARGE"
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+@pytest.mark.parametrize("text", ["99999999999999999999", "9" * 5000, "1" + "0" * 30 + "00"])
+def test_parse_amount_too_large(lang: str, text: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_amount(text, "BRL", lang)
+    assert info.value.code == "TOO_LARGE"
+
+
+def test_parse_amount_leading_zeros_do_not_count() -> None:
+    assert fmt.parse_amount("0" * 40 + "1,00", "BRL", "pt_BR") == 100
+    assert fmt.parse_amount("0" * 40, "BRL", "pt_BR") == 0
+
+
+def test_parse_amount_negative_wins_over_too_large() -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_amount("-99999999999999999999", "BRL", "pt_BR")
+    assert info.value.code == "NEGATIVE_AMOUNT"
+
+
+@pytest.mark.parametrize(
+    ("lang", "text", "expected"),
+    [
+        ("en_US", "999999999999999999", 10**18 - 1),
+        ("en_US", "999,999,999,999,999,999.5", Decimal("999999999999999999.5")),
+        ("pt_BR", "999.999.999.999.999.999,25", Decimal("999999999999999999.25")),
+        ("es_ES", "-999999999999999999", -(10**18 - 1)),
+        ("pt_BR", "0" * 30 + "7", 7),
+    ],
+)
+def test_parse_number_below_the_bound(lang: str, text: str, expected: int | Decimal) -> None:
+    assert fmt.parse_number(text, lang) == expected
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+@pytest.mark.parametrize("text", ["1" + "0" * 18, "-" + "1" + "0" * 18, "9" * 5000])
+def test_parse_number_too_large(lang: str, text: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_number(text, lang)
+    assert info.value.code == "TOO_LARGE"
+
+
+def test_parse_number_too_large_with_grouping() -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_number("1,000,000,000,000,000,000", "en_US")
+    assert info.value.code == "TOO_LARGE"
+    with pytest.raises(FormatError) as info:
+        fmt.parse_number("1.000.000.000.000.000.000,5", "pt_BR")
+    assert info.value.code == "TOO_LARGE"
+
+
+# ---------------------------------------------------------------------------- separator rule
+
+
+@pytest.mark.parametrize(
+    ("lang", "text", "value"),
+    [("pt_BR", "1.234", 1234), ("en_US", "1,234", 1234), ("es_ES", "1.234", 1234)],
+)
+def test_locale_group_separator_without_decimals_is_an_integer(
+    lang: str, text: str, value: int
+) -> None:
+    # By design (P1B-19): the locale's own separators are authoritative.
+    assert fmt.parse_number(text, lang) == value
+    assert fmt.parse_amount(text, "BRL", lang) == value * 100
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"), [("pt_BR", "1.23"), ("es_ES", "1.23"), ("en_US", "1,23"), ("en_US", "1,5")]
+)
+def test_text_valid_only_in_the_other_convention_is_rejected(lang: str, text: str) -> None:
+    for call in (
+        lambda: fmt.parse_number(text, lang),
+        lambda: fmt.parse_amount(text, "BRL", lang),
+    ):
+        with pytest.raises(FormatError) as info:
+            call()
+        assert info.value.code == "AMBIGUOUS_NUMBER"
+
+
+@pytest.mark.parametrize(
+    ("lang", "text", "expected"),
+    [
+        ("pt_BR", "1.234", "1.234"),
+        ("pt_BR", "1,234", "1234"),
+        ("pt_BR", "-1.234", "-1.234"),
+        ("pt_BR", "  1.000  ", "1.000"),
+        ("pt_BR", "12.345", "12.345"),
+        ("pt_BR", "1.234,56", None),
+        ("pt_BR", "1234", None),
+        ("pt_BR", "1234,56", None),
+        ("pt_BR", "12.345.678", None),
+        ("pt_BR", "1.23", None),
+        ("pt_BR", "0,5", None),
+        ("pt_BR", "abc", None),
+        ("pt_BR", "", None),
+        ("pt_BR", "-", None),
+        ("en_US", "1,234", "1.234"),
+        ("en_US", "1.234", "1234"),
+        ("en_US", "-1,234", "-1.234"),
+        ("en_US", "1,234.56", None),
+        ("en_US", "1234.56", None),
+        ("en_US", "1,234,567", None),
+        ("en_US", "1,23", None),
+        ("en_US", "7", None),
+        ("es_ES", "1.234", "1.234"),
+        ("es_ES", "1,234", "1234"),
+        ("es_ES", "1.234,56", None),
+        ("es_ES", "1234,56", None),
+        ("es_ES", "1234", None),
+        ("es_ES", "", None),
+    ],
+)
+def test_other_convention_value(lang: str, text: str, expected: str | None) -> None:
+    result = fmt.other_convention_value(text, lang)
+    if expected is None:
+        assert result is None
+    else:
+        assert isinstance(result, Decimal)
+        assert str(result) == str(Decimal(expected))
+
+
+def test_other_convention_value_does_not_change_parsing() -> None:
+    assert fmt.parse_number("1.234", "pt_BR") == 1234
+    assert fmt.other_convention_value("1.234", "pt_BR") == Decimal("1.234")
+    with pytest.raises(UnknownLanguageError):
+        fmt.other_convention_value("1.234", "fr_FR")
 
 
 # ---------------------------------------------------------------------------- widgets
