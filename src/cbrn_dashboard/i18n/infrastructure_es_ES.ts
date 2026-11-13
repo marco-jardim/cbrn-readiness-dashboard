@@ -236,7 +236,7 @@
     </message>
     <message>
         <source>Not set</source>
-        <extracomment>A missing value in a cell (data, not a translatable text).</extracomment>
+        <extracomment>A missing value in a cell (data, not a translatable text). The icon shape and palette colour of an asset status (D23): the look of the dashboard status it matches, so one vocabulary of shapes and colours is used everywhere.</extracomment>
         <translation type="unfinished">Sin definir</translation>
     </message>
     <message numerus="yes">
@@ -485,6 +485,10 @@
     <message>
         <source>Delete history entry</source>
         <translation type="unfinished">Eliminar registro del historial</translation>
+    </message>
+    <message>
+        <source>Assets</source>
+        <translation type="unfinished">Activos</translation>
     </message>
     <message>
         <source>Retire asset %1 as of %2? It stays in the database with its history.</source>

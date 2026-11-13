@@ -111,7 +111,9 @@ def _clear(layout: QLayout) -> None:
         item = layout.takeAt(0)
         widget = None if item is None else item.widget()
         if widget is not None:
-            widget.setParent(None)
+            # Hidden and deleted where it is: setParent(None) would first make it a window of
+            # its own, and Qt then moves it out of the Tab chain the page has set.
+            widget.hide()
             widget.deleteLater()
 
 
@@ -460,7 +462,8 @@ class DashboardPage(QWidget):
         keys = [spec.key for spec in specs]
         for key in [key for key in self._panels if key not in keys]:
             gone = self._panels.pop(key)
-            gone.setParent(None)
+            self.charts_layout.removeWidget(gone)
+            gone.hide()  # deleted in place, as in _clear
             gone.deleteLater()
         for kept in self._panels.values():
             self.charts_layout.removeWidget(kept)

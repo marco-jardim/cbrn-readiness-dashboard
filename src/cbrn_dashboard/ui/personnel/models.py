@@ -11,7 +11,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from PySide6.QtCore import QCoreApplication
+from PySide6.QtGui import QIcon
 
+from cbrn_dashboard.domain.indicators import IndicatorStatus
 from cbrn_dashboard.domain.personnel import CertStatus, PpeLevel
 from cbrn_dashboard.services.personnel import (
     CertificateView,
@@ -20,6 +22,7 @@ from cbrn_dashboard.services.personnel import (
     TrainingView,
     course_label,
 )
+from cbrn_dashboard.ui.dashboard.labels import status_pixmap
 from cbrn_dashboard.ui.personnel.labels import (
     cert_status_label,
     degree_level_label,
@@ -31,6 +34,7 @@ from cbrn_dashboard.ui.shell.formatting import format_date, format_number
 from cbrn_dashboard.ui.shell.widgets import Column, ModuleTableModel
 
 __all__ = [
+    "CERT_STATUS_LOOK",
     "CertificatesModel",
     "CoursesModel",
     "DegreesModel",
@@ -79,6 +83,23 @@ def _status_text(row: StaffRow, level: PpeLevel) -> str:
     return NOT_RECORDED if status is None else cert_status_label(status.value)
 
 
+#: The icon shape and palette colour of a certificate status (D23): the look of the dashboard
+#: status it matches, so each of the five statuses has its own shape and colour.
+CERT_STATUS_LOOK: dict[CertStatus, IndicatorStatus] = {
+    CertStatus.VALID: IndicatorStatus.OK,
+    CertStatus.EXPIRING: IndicatorStatus.WARNING,
+    CertStatus.EXPIRED: IndicatorStatus.CRITICAL,
+    CertStatus.NO_RENEWAL: IndicatorStatus.NO_TARGET,
+    CertStatus.NONE: IndicatorStatus.NO_DATA,
+}
+
+
+def _status_icon(row: StaffRow, level: PpeLevel) -> QIcon | None:
+    """The icon of the status at ``level``; none for a person with no status (not active)."""
+    status = row.statuses.get(level)
+    return None if status is None else QIcon(status_pixmap(CERT_STATUS_LOOK[status].value))
+
+
 class StaffModel(ModuleTableModel):
     """The staff: identifier, label, category, active period and the status per level."""
 
@@ -112,16 +133,19 @@ class StaffModel(ModuleTableModel):
             "level_a",
             lambda: _level_header(PpeLevel.A),
             lambda row, lang: _status_text(row, PpeLevel.A),
+            icon=lambda row: _status_icon(row, PpeLevel.A),
         ),
         Column[Any](
             "level_b",
             lambda: _level_header(PpeLevel.B),
             lambda row, lang: _status_text(row, PpeLevel.B),
+            icon=lambda row: _status_icon(row, PpeLevel.B),
         ),
         Column[Any](
             "level_c",
             lambda: _level_header(PpeLevel.C),
             lambda row, lang: _status_text(row, PpeLevel.C),
+            icon=lambda row: _status_icon(row, PpeLevel.C),
         ),
     )
 

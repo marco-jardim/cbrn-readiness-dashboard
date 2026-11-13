@@ -272,6 +272,10 @@
         <translation>Delete result</translation>
     </message>
     <message>
+        <source>Editions</source>
+        <translation>Editions</translation>
+    </message>
+    <message>
         <source>Delete edition %1 together with its countries and results?</source>
         <translation>Delete edition %1 together with its countries and results?</translation>
     </message>

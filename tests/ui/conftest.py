@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
 
@@ -135,6 +136,9 @@ def started_app(
     yield make
     for handle in reversed(handles):
         handle.close()
+    # pytest-qt only schedules the deletion of the windows (deleteLater). Delete them now: a window
+    # left pending would receive the language change of the next test's start-up.
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
     if state["expect_errors"]:
         return
     for used, before in watched:

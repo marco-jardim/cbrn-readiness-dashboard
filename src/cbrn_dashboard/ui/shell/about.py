@@ -170,6 +170,7 @@ class AboutDialog(QDialog):
         mark_data(self.components_list)  # component names and licence ids are data
         for component in self._components:
             self.components_list.addItem(QListWidgetItem(component_line(component)))
+        self.components_caption.setBuddy(self.components_list)
         self.components_list.setVisible(bool(self._components))
         self.components_status.setVisible(not self._components)
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)

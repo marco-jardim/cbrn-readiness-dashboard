@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Any
 
-from PySide6.QtCore import QCoreApplication, QModelIndex, QPersistentModelIndex, Qt
+from PySide6.QtCore import QCoreApplication
 
 from cbrn_dashboard.domain.alerts import Alert, SubjectKind
 from cbrn_dashboard.domain.indicators import Module
@@ -64,6 +64,7 @@ class AlertsModel(ModuleTableModel):
             "severity",
             lambda: QCoreApplication.translate("Alerts", "Severity"),
             lambda row, lang: severity_label(row.severity.value),
+            icon=lambda row: severity_icon(row.severity.value),
         ),
         Column[Any](
             "module",
@@ -89,13 +90,3 @@ class AlertsModel(ModuleTableModel):
 
     def set_alerts(self, alerts: Sequence[Alert]) -> None:
         self.set_rows(alerts)
-
-    def data(
-        self,
-        index: QModelIndex | QPersistentModelIndex,
-        role: int = Qt.ItemDataRole.DisplayRole,
-    ) -> Any:
-        if role == Qt.ItemDataRole.DecorationRole and index.column() == SEVERITY_COLUMN:
-            row = self.row_at(index)
-            return None if row is None else severity_icon(row.severity.value)
-        return super().data(index, role)

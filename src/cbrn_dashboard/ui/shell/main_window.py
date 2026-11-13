@@ -58,10 +58,25 @@ from cbrn_dashboard.ui.shell.folders import open_local_folder
 from cbrn_dashboard.ui.shell.formatting import apply_locale, from_qdate, to_qdate
 from cbrn_dashboard.ui.shell.help import HelpDialog
 from cbrn_dashboard.ui.shell.i18n import app_display_name, language_display_name
+from cbrn_dashboard.ui.shell.widgets import apply_tab_order
 
 _PAGE_KEY_ROLE = Qt.ItemDataRole.UserRole
 #: The registry key of the Alerts page (the button of the start-up summary opens it).
 ALERTS_PAGE_KEY = "alerts"
+#: The smallest window: it still fits a 960 x 540 logical screen (a 1920 x 1080 display at 200%).
+MINIMUM_WIDTH = 800
+MINIMUM_HEIGHT = 500
+#: Keyboard shortcuts of the actions that have no mnemonic (the menu entries and the toolbar button
+#: whose texts are translated names). The standard keys (Quit, Help) stay as they are. None of
+#: these is used by a text field or by the date editor; the accessibility test checks that every
+#: shortcut of the window is unique.
+SHORTCUT_QUIT = "Ctrl+Q"
+SHORTCUT_BACKUP = "Ctrl+B"
+SHORTCUT_RESTORE = "Ctrl+Shift+R"
+SHORTCUT_OPEN_FOLDER = "Ctrl+Shift+O"
+SHORTCUT_TODAY = "Ctrl+T"
+#: Language ``n`` (1, 2, 3 in the order of ``i18n.LANGUAGES``) has the shortcut Ctrl+Shift+n.
+SHORTCUT_LANGUAGE = "Ctrl+Shift+{n}"
 
 
 class MainWindow(QMainWindow):
@@ -72,6 +87,7 @@ class MainWindow(QMainWindow):
         self._context = context
         self._manager = context.translator_manager
         self.setObjectName("main_window")
+        self.setMinimumSize(MINIMUM_WIDTH, MINIMUM_HEIGHT)
 
         self.banners = BannerArea()
         self.navigation = QListWidget()
@@ -101,6 +117,11 @@ class MainWindow(QMainWindow):
         self.backup_actions.backup_action.setObjectName("action_file_backup")
         self.backup_actions.restore_action.setObjectName("action_file_restore")
         self.backup_actions.open_folder_action.setObjectName("action_file_open_data_folder")
+        # Shortcuts are set here only: the Backup settings section has its own copies of these
+        # actions, and two actions with one shortcut would both stop working.
+        self.backup_actions.backup_action.setShortcut(QKeySequence(SHORTCUT_BACKUP))
+        self.backup_actions.restore_action.setShortcut(QKeySequence(SHORTCUT_RESTORE))
+        self.backup_actions.open_folder_action.setShortcut(QKeySequence(SHORTCUT_OPEN_FOLDER))
         self.file_menu.addAction(self.backup_actions.backup_action)
         self.file_menu.addAction(self.backup_actions.restore_action)
         self.file_menu.addAction(self.backup_actions.open_folder_action)
@@ -108,6 +129,8 @@ class MainWindow(QMainWindow):
         self.quit_action = QAction(self)
         self.quit_action.setObjectName("action_quit")
         self.quit_action.setShortcuts(QKeySequence.StandardKey.Quit)
+        if not self.quit_action.shortcuts():  # Windows has no standard Quit key
+            self.quit_action.setShortcut(QKeySequence(SHORTCUT_QUIT))
         self.quit_action.triggered.connect(self.close)
         self.file_menu.addAction(self.quit_action)
 
@@ -116,10 +139,11 @@ class MainWindow(QMainWindow):
         self._language_group = QActionGroup(self)
         self._language_group.setExclusive(True)
         self.language_actions: dict[str, QAction] = {}
-        for code in i18n.LANGUAGES:
+        for number, code in enumerate(i18n.LANGUAGES, start=1):
             action = QAction(self)
             action.setObjectName(f"action_language_{code}")
             action.setCheckable(True)
+            action.setShortcut(QKeySequence(SHORTCUT_LANGUAGE.format(n=number)))
             action.triggered.connect(partial(self._select_language, code))
             self._language_group.addAction(action)
             self.language_menu.addAction(action)
@@ -154,6 +178,7 @@ class MainWindow(QMainWindow):
         self.as_of_label.setBuddy(self.as_of_edit)
         self.today_action = QAction(self)
         self.today_action.setObjectName("action_today")
+        self.today_action.setShortcut(QKeySequence(SHORTCUT_TODAY))
         self.toolbar.addWidget(self.as_of_label)
         self.toolbar.addWidget(self.as_of_edit)
         self.toolbar.addAction(self.today_action)
@@ -212,6 +237,11 @@ class MainWindow(QMainWindow):
             item.setData(_PAGE_KEY_ROLE, spec.key)
             self.navigation.addItem(item)
             self._page_keys.append(spec.key)
+        # Tab follows what is on screen, top to bottom, not the order the widgets were created in.
+        for index in range(self.pages.count()):
+            page = self.pages.widget(index)
+            if page is not None:
+                apply_tab_order(page)
         self.navigation.currentRowChanged.connect(self._on_row_changed)
         if self._page_keys:
             self.navigation.setCurrentRow(0)

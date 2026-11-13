@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
-from PySide6.QtCore import QCoreApplication, QEvent, Qt, Signal
+from PySide6.QtCore import QCoreApplication, QEvent, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from cbrn_dashboard.ui.shell.widgets import device_pixel_ratio
 
 __all__ = ["AlertCounts", "BannerArea", "BannerCode", "alert_badge_text", "alert_summary_text"]
 
@@ -107,14 +109,20 @@ class BannerCode(StrEnum):
 # Banners that carry an informational icon; every other banner carries a warning icon.
 _INFORMATION = frozenset({BannerCode.DEMO, BannerCode.PRELIMINARY})
 
-_STYLE_INFORMATION = (
-    "QFrame {background-color: #e8f1fb; border: 1px solid #1f4e8c;} "
-    "QLabel {color: #000000; border: none; background: transparent;}"
+# The banners keep their own light colours whatever the system palette is (a dark system theme
+# would otherwise give the labels and the action button light text on the light background), so
+# every colour of text, button and focus mark is set here and none comes from the palette.
+_TEXT_STYLE = (
+    "QLabel {color: #000000; border: none; background: transparent;} "
+    "QPushButton, QToolButton {color: #000000; background-color: #ffffff; "
+    "border: 1px solid #595959; padding: 2px 10px;} "
+    "QPushButton:hover, QToolButton:hover {background-color: #e6e6e6;} "
+    "QPushButton:pressed, QToolButton:pressed {background-color: #cccccc;} "
+    "QPushButton:focus, QToolButton:focus {border: 2px solid #000000;} "
+    "QPushButton:disabled, QToolButton:disabled {color: #595959; background-color: #f0f0f0;}"
 )
-_STYLE_WARNING = (
-    "QFrame {background-color: #fff4d6; border: 1px solid #8a5a00;} "
-    "QLabel {color: #000000; border: none; background: transparent;}"
-)
+_STYLE_INFORMATION = "QFrame {background-color: #e8f1fb; border: 1px solid #1f4e8c;} " + _TEXT_STYLE
+_STYLE_WARNING = "QFrame {background-color: #fff4d6; border: 1px solid #8a5a00;} " + _TEXT_STYLE
 
 
 def banner_text(code: BannerCode) -> str:
@@ -192,6 +200,7 @@ class BannerArea(QWidget):
         self._shown: set[BannerCode] = set()
         self._permanent: set[BannerCode] = {BannerCode.PRELIMINARY}
         style = self.style()
+        ratio = device_pixel_ratio()
         for code in BannerCode:
             frame = QFrame(self)
             frame.setObjectName(f"banner_{code.value}")
@@ -205,7 +214,7 @@ class BannerArea(QWidget):
                 if code in _INFORMATION
                 else QStyle.StandardPixmap.SP_MessageBoxWarning
             )
-            icon.setPixmap(style.standardIcon(icon_kind).pixmap(ICON_SIZE, ICON_SIZE))
+            icon.setPixmap(style.standardIcon(icon_kind).pixmap(QSize(ICON_SIZE, ICON_SIZE), ratio))
             icon.setFixedSize(ICON_SIZE, ICON_SIZE)
             text = QLabel(frame)
             text.setObjectName(f"banner_text_{code.value}")

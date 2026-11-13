@@ -272,6 +272,10 @@
         <translation type="unfinished">Excluir resultado</translation>
     </message>
     <message>
+        <source>Editions</source>
+        <translation type="unfinished">Edições</translation>
+    </message>
+    <message>
         <source>Delete edition %1 together with its countries and results?</source>
         <translation type="unfinished">Excluir a edição %1 junto com seus países e resultados?</translation>
     </message>

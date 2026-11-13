@@ -146,6 +146,10 @@ class IntervalEditor(QWidget):
         self.mode_combo.setItemText(
             _MODE_DAYS, QCoreApplication.translate("Infrastructure", "Every number of days")
         )
+        # The combo box is named by the form label of the row; the number needs a name of its own.
+        self.days_spin.setAccessibleName(
+            QCoreApplication.translate("Infrastructure", "Every number of days")
+        )
         self._update_suffix()
         apply_locale(self.days_spin, current_language(self.context))
 

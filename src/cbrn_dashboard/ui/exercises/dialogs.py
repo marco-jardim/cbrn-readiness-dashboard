@@ -225,6 +225,11 @@ class CountryPicker(QWidget):
         self.filter_edit.setPlaceholderText(
             QCoreApplication.translate("Exercises", "Search countries")
         )
+        # The form label "Countries" names the search box (the first input of the picker).
+        self.filter_edit.setAccessibleName(
+            QCoreApplication.translate("Exercises", "Search countries")
+        )
+        self.list_widget.setAccessibleName(QCoreApplication.translate("Exercises", "Countries"))
         lang = current_language(self.context)
         if lang != self._language:
             self._language = lang

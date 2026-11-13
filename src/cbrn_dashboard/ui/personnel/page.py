@@ -122,6 +122,7 @@ class PersonnelPage(QWidget):
         self.level_combo = QComboBox(self)
         self.level_combo.setObjectName("level_filter")
         mark_data(self.level_combo)
+        self.level_caption.setBuddy(self.level_combo)
         self.level_combo.addItem("", None)
         for level in PpeLevel:
             self.level_combo.addItem(ppe_level_label(level.value), level.value)
@@ -132,6 +133,7 @@ class PersonnelPage(QWidget):
         self.summary_view = make_table_view(self.summary_model, self)
         self.summary_view.setObjectName("summary_view")
         self.summary_view.setMaximumHeight(120)
+        self.summary_caption.setBuddy(self.summary_view)
         self.staff_view = make_table_view(self.staff_model, self)
         self.staff_view.setObjectName("staff_view")
         self.detail_caption = QLabel(self)
@@ -297,6 +299,13 @@ class PersonnelPage(QWidget):
         self.tabs.setTabText(0, QCoreApplication.translate("Personnel", "Certificates"))
         self.tabs.setTabText(1, QCoreApplication.translate("Personnel", "Training"))
         self.tabs.setTabText(2, QCoreApplication.translate("Personnel", "Degrees"))
+        # The tables without a caption of their own are named like their tab.
+        self.staff_view.setAccessibleName(QCoreApplication.translate("Personnel", "Staff"))
+        self.certificates_view.setAccessibleName(
+            QCoreApplication.translate("Personnel", "Certificates")
+        )
+        self.training_view.setAccessibleName(QCoreApplication.translate("Personnel", "Training"))
+        self.degrees_view.setAccessibleName(QCoreApplication.translate("Personnel", "Degrees"))
         for action in self._actions:
             action.retranslate()
         lang = current_language(self.context)
@@ -762,6 +771,7 @@ class PersonnelSettingsSection(QWidget):
         for edit in self.months_edits.values():
             edit.setPlaceholderText(QCoreApplication.translate("Personnel", "Not set"))
         self.courses_box.setTitle(QCoreApplication.translate("Personnel", "Courses"))
+        self.courses_view.setAccessibleName(QCoreApplication.translate("Personnel", "Courses"))
         badge = QCoreApplication.translate("Personnel", "Placeholder - to be confirmed")
         self.a02_badge.setText(badge)
         self.a04_badge.setText(badge)

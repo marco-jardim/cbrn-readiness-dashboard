@@ -99,6 +99,7 @@ class ReportsPage(QWidget):
         self.show_withdrawn.setObjectName("show_withdrawn")
         self.snapshots_view = make_table_view(self.snapshots_model, self)
         self.snapshots_view.setObjectName("snapshots_view")
+        self.snapshots_caption.setBuddy(self.snapshots_view)
 
         # Not edit actions: a report and the exports only read (they stay available read-only).
         self.report_action = EditAction(
@@ -354,6 +355,8 @@ class _SettingsSection(QWidget):
         confirm.setVisible(False)
         row = _Row(field, editor, badge, confirm)
         row.caption = caption
+        if caption is not None:
+            caption.setBuddy(editor)  # the caption names the input (a screen reader, Alt+key)
         for target in (editor, confirm):
             self.context.register_edit_action(target)
         confirm.clicked.connect(lambda: self._confirm(row))

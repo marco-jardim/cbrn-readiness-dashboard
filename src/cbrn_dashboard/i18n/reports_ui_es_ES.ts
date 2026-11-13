@@ -474,6 +474,10 @@
         <translation type="unfinished">Importar archivo CSV</translation>
     </message>
     <message>
+        <source>Problems found in the file</source>
+        <translation type="unfinished">Problemas encontrados en el archivo</translation>
+    </message>
+    <message>
         <source>Choose a file to check it before anything is imported.</source>
         <translation type="unfinished">Elija un archivo para comprobarlo antes de importar nada.</translation>
     </message>

@@ -51,7 +51,7 @@ from cbrn_dashboard.ui.personnel.labels import (
 )
 from cbrn_dashboard.ui.shell.charts import PALETTE, ChartData, ChartKind, ChartSeries
 from cbrn_dashboard.ui.shell.formatting import format_date
-from cbrn_dashboard.ui.shell.widgets import label_for
+from cbrn_dashboard.ui.shell.widgets import device_pixel_ratio, label_for
 
 __all__ = [
     "ALL_ERROR_CODES",
@@ -343,7 +343,9 @@ def status_pixmap(status: str) -> QPixmap:
     key = str(status)
     shape, filled = _STATUS_SHAPES.get(key, ("diamond", False))
     colour = QColor(STATUS_COLOURS.get(key, PALETTE[7]))
-    pixmap = QPixmap(_ICON_SIZE, _ICON_SIZE)
+    ratio = device_pixel_ratio()
+    pixmap = QPixmap(round(_ICON_SIZE * ratio), round(_ICON_SIZE * ratio))
+    pixmap.setDevicePixelRatio(ratio)  # the drawing below stays in logical coordinates
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     try:

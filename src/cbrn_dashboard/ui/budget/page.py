@@ -97,15 +97,19 @@ class BudgetPage(QWidget):
         self.year_spin.setObjectName("year_spin")
         self.year_spin.setRange(_MIN_YEAR, _MAX_YEAR)
         self.year_spin.setValue(fiscal_year_of(context.as_of))
+        self.year_caption.setBuddy(self.year_spin)
         self.summary_caption = QLabel(self)
         self.summary_view = make_table_view(self.summary_model, self)
         self.summary_view.setObjectName("summary_view")
+        self.summary_caption.setBuddy(self.summary_view)
         self.entries_caption = QLabel(self)
         self.entries_view = make_table_view(self.entries_model, self)
         self.entries_view.setObjectName("entries_view")
+        self.entries_caption.setBuddy(self.entries_view)
         self.executions_caption = QLabel(self)
         self.executions_view = make_table_view(self.executions_model, self)
         self.executions_view.setObjectName("executions_view")
+        self.executions_caption.setBuddy(self.executions_view)
 
         self.add_entry_action = make_edit_action(
             context,
@@ -393,6 +397,7 @@ class BudgetSettingsSection(QWidget):
         self.view = make_table_view(self.model, self)
         self.view.setObjectName("sources_view")
         self.sources_caption = QLabel(self)
+        self.sources_caption.setBuddy(self.view)
         self.add_action = make_edit_action(
             context,
             self,
@@ -432,6 +437,7 @@ class BudgetSettingsSection(QWidget):
         self.currency_combo = QComboBox(self)
         self.currency_combo.setObjectName("default_currency_combo")
         mark_data(self.currency_combo)
+        self.currency_caption.setBuddy(self.currency_combo)
         for code in CURRENCY_DECIMALS:
             self.currency_combo.addItem(code, code)
         self.currency_badge = QLabel(self)

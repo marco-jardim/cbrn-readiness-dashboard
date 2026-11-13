@@ -127,7 +127,7 @@
     </message>
     <message>
         <source>%1 (%2)</source>
-        <extracomment>The icon of each severity: the shapes differ (never colour alone, D23). Every severity, module and alert-kind code (for the completeness tests).</extracomment>
+        <extracomment>Every severity, module and alert-kind code (for the completeness tests).</extracomment>
         <translation type="unfinished">%1 (%2)</translation>
     </message>
 </context>

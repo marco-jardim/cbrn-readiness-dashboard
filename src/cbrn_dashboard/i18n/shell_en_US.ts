@@ -28,7 +28,7 @@
     </message>
     <message>
         <source>Alerts on the as-of date</source>
-        <extracomment>The registry key of the Alerts page (the button of the start-up summary opens it).</extracomment>
+        <extracomment>The registry key of the Alerts page (the button of the start-up summary opens it). The smallest window: it still fits a 960 x 540 logical screen (a 1920 x 1080 display at 200%). Keyboard shortcuts of the actions that have no mnemonic (the menu entries and the toolbar button whose texts are translated names). The standard keys (Quit, Help) stay as they are. None of these is used by a text field or by the date editor; the accessibility test checks that every shortcut of the window is unique. Language ``n`` (1, 2, 3 in the order of ``i18n.LANGUAGES``) has the shortcut Ctrl+Shift+n.</extracomment>
         <translation>Alerts on the as-of date</translation>
     </message>
     <message>
@@ -280,7 +280,7 @@
     </message>
     <message>
         <source>Cannot save</source>
-        <extracomment>Dynamic property that exempts a widget&apos;s own texts from the pseudo-locale walk (user data).</extracomment>
+        <extracomment>Dynamic property that exempts a widget&apos;s own texts from the pseudo-locale walk (user data). The focus policies that put a widget in the Tab chain.</extracomment>
         <translation>Cannot save</translation>
     </message>
     <message>

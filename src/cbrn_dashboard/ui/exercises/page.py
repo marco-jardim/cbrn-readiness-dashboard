@@ -63,6 +63,7 @@ class ExercisesPage(QWidget):
         self.kind_caption = QLabel(self)
         self.kind_combo = QComboBox(self)
         mark_data(self.kind_combo)
+        self.kind_caption.setBuddy(self.kind_combo)
         self.kind_combo.addItem("", None)
         for kind in ExerciseKind:
             self.kind_combo.addItem("", kind.value)
@@ -71,6 +72,7 @@ class ExercisesPage(QWidget):
         self.results_caption = QLabel(self)
         self.results_view = make_table_view(self.results_model, self)
         self.results_view.setObjectName("results_view")
+        self.results_caption.setBuddy(self.results_view)
 
         self.add_action = make_edit_action(
             context,
@@ -150,6 +152,7 @@ class ExercisesPage(QWidget):
     def retranslate(self) -> None:
         """Re-apply every text of the page in the current language."""
         self.kind_caption.setText(QCoreApplication.translate("Exercises", "Kind"))
+        self.editions_view.setAccessibleName(QCoreApplication.translate("Exercises", "Editions"))
         self.results_caption.setText(
             QCoreApplication.translate("Exercises", "Evaluation results of the selected edition")
         )
@@ -336,6 +339,7 @@ class MetricsSettingsSection(QWidget):
         self.refresh()
 
     def retranslate(self) -> None:
+        self.view.setAccessibleName(QCoreApplication.translate("Exercises", "Evaluation metrics"))
         for action in self._actions:
             action.retranslate()
         self.model.set_language(current_language(self.context))

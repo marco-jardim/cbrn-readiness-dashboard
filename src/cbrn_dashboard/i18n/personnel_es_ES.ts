@@ -222,6 +222,7 @@
     </message>
     <message>
         <source>Identifier</source>
+        <extracomment>The icon shape and palette colour of a certificate status (D23): the look of the dashboard status it matches, so each of the five statuses has its own shape and colour.</extracomment>
         <translation type="unfinished">Identificador</translation>
     </message>
     <message>
@@ -448,6 +449,10 @@
     <message>
         <source>Degrees</source>
         <translation type="unfinished">Títulos</translation>
+    </message>
+    <message>
+        <source>Staff</source>
+        <translation type="unfinished">Plantilla</translation>
     </message>
     <message>
         <source>Deactivate person %1 as of %2?</source>

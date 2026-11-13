@@ -582,6 +582,9 @@ class ImportDialog(FormDialog):
             name = str(self.entity_combo.itemData(index))
             self.entity_combo.setItemText(index, entity_label(name))
         self.choose_button.setText(QCoreApplication.translate("ReportsUi", "Choose file..."))
+        self.issues_view.setAccessibleName(
+            QCoreApplication.translate("ReportsUi", "Problems found in the file")
+        )
         self.issues_model.set_language(self.language)
         self._show_summary()
 

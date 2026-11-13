@@ -106,6 +106,7 @@ class InfrastructurePage(QWidget):
         self.type_caption = QLabel(self)
         self.type_combo = QComboBox(self)
         mark_data(self.type_combo)
+        self.type_caption.setBuddy(self.type_combo)
         self.type_combo.addItem("", None)
         self.assets_view = make_table_view(self.assets_model, self)
         self.assets_view.setObjectName("assets_view")
@@ -114,9 +115,11 @@ class InfrastructurePage(QWidget):
         self.availability_note = QLabel(self)
         self.availability_view = make_table_view(self.availability_model, self)
         self.availability_view.setObjectName("availability_view")
+        self.availability_caption.setBuddy(self.availability_view)
         self.history_caption = QLabel(self)
         self.history_view = make_table_view(self.history_model, self)
         self.history_view.setObjectName("history_view")
+        self.history_caption.setBuddy(self.history_view)
 
         def action(text_fn: Any, slot: Any) -> EditAction:
             return make_edit_action(context, self, text_fn, slot)
@@ -208,6 +211,7 @@ class InfrastructurePage(QWidget):
     def retranslate(self) -> None:
         """Re-apply every text of the page in the current language."""
         self.type_caption.setText(QCoreApplication.translate("Infrastructure", "Type"))
+        self.assets_view.setAccessibleName(QCoreApplication.translate("Infrastructure", "Assets"))
         self.availability_caption.setText(
             QCoreApplication.translate("Infrastructure", "Availability by type at the as-of date")
         )
@@ -457,6 +461,7 @@ class InfrastructureSettingsSection(QWidget):
         self.types_caption = QLabel(self)
         self.view = make_table_view(self.model, self)
         self.view.setObjectName("types_view")
+        self.types_caption.setBuddy(self.view)
         self.add_action = make_edit_action(
             context,
             self,

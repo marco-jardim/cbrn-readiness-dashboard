@@ -474,6 +474,10 @@
         <translation>Import CSV file</translation>
     </message>
     <message>
+        <source>Problems found in the file</source>
+        <translation>Problems found in the file</translation>
+    </message>
+    <message>
         <source>Choose a file to check it before anything is imported.</source>
         <translation>Choose a file to check it before anything is imported.</translation>
     </message>

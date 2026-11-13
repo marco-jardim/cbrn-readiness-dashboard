@@ -331,6 +331,16 @@ def collect_texts(root: QWidget) -> list[TextItem]:
     return [item for item in found if has_letters(item.text)]
 
 
+def visible_widgets(root: QWidget) -> Iterator[QWidget]:
+    """``root`` and its visible descendants (the walker's own rule), without spin-box internals."""
+    yield from _walk_widgets(root, root)
+
+
+def describe(widget: QWidget, root: QWidget) -> str:
+    """``Class#objectName > ...`` from ``root`` down to ``widget``, for failure messages."""
+    return _describe(widget, root)
+
+
 def find_untranslated(root: QWidget, lang: str | None = None) -> list[TextItem]:
     """The visible non-data texts under ``root`` that lack the ``⟦ ⟧`` markers.
 

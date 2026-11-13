@@ -147,6 +147,7 @@ class BackupSettingsSection(QWidget):
         badge.setVisible(False)
         confirm.setVisible(False)
         row = _Row(field, QLabel(self), spin, badge, confirm)
+        row.caption.setBuddy(spin)
         for target in (spin, confirm):
             self.context.register_edit_action(target)
         confirm.clicked.connect(lambda: self._confirm(row))

@@ -11,14 +11,17 @@ from datetime import date
 from typing import Any
 
 from PySide6.QtCore import QCoreApplication
+from PySide6.QtGui import QIcon
 
-from cbrn_dashboard.domain.infrastructure import AssetRow
+from cbrn_dashboard.domain.indicators import IndicatorStatus
+from cbrn_dashboard.domain.infrastructure import AssetRow, AssetStatus
 from cbrn_dashboard.services.infrastructure import (
     AssetTypeView,
     AssetView,
     MaintenanceView,
     StatusEventView,
 )
+from cbrn_dashboard.ui.dashboard.labels import status_pixmap
 from cbrn_dashboard.ui.infrastructure.labels import (
     basis_label,
     code_label,
@@ -32,6 +35,7 @@ from cbrn_dashboard.ui.shell.formatting import format_date, format_number
 from cbrn_dashboard.ui.shell.widgets import Column, ModuleTableModel
 
 __all__ = [
+    "ASSET_STATUS_LOOK",
     "AssetTableRow",
     "AssetsModel",
     "AvailabilityModel",
@@ -44,6 +48,20 @@ __all__ = [
 
 #: A missing value in a cell (data, not a translatable text).
 NOT_RECORDED = "-"
+
+#: The icon shape and palette colour of an asset status (D23): the look of the dashboard status
+#: it matches, so one vocabulary of shapes and colours is used everywhere.
+ASSET_STATUS_LOOK: dict[AssetStatus, IndicatorStatus] = {
+    AssetStatus.OPERATIONAL: IndicatorStatus.OK,
+    AssetStatus.DEGRADED: IndicatorStatus.WARNING,
+    AssetStatus.OUT_OF_SERVICE: IndicatorStatus.CRITICAL,
+    AssetStatus.UNKNOWN: IndicatorStatus.NO_DATA,
+}
+
+
+def _asset_status_icon(row: "AssetTableRow") -> QIcon | None:
+    look = ASSET_STATUS_LOOK.get(row.row.status)
+    return None if look is None else QIcon(status_pixmap(look.value))
 
 
 def _date_text(value: date | None, lang: str) -> str:
@@ -95,6 +113,7 @@ class AssetsModel(ModuleTableModel):
             "status",
             lambda: QCoreApplication.translate("Infrastructure", "Status"),
             lambda row, lang: status_label(row.row.status.value),
+            icon=_asset_status_icon,
         ),
         Column[Any](
             "last_maintenance",

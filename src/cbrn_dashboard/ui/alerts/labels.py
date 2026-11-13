@@ -15,7 +15,6 @@ from functools import cache
 
 from PySide6.QtCore import QCoreApplication
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QStyle
 
 from cbrn_dashboard.domain.alerts import Alert, AlertKind, Severity, SubjectKind
 from cbrn_dashboard.domain.indicators import (
@@ -26,7 +25,12 @@ from cbrn_dashboard.domain.indicators import (
 )
 from cbrn_dashboard.domain.registry import build_registry
 from cbrn_dashboard.services.config import CORRUPT_SETTING
-from cbrn_dashboard.ui.dashboard.labels import DisplayNames, dimension_text, indicator_name
+from cbrn_dashboard.ui.dashboard.labels import (
+    DisplayNames,
+    dimension_text,
+    indicator_name,
+    severity_pixmap,
+)
 from cbrn_dashboard.ui.shell.formatting import FormatError, format_number, format_percent
 from cbrn_dashboard.ui.shell.widgets import label_for
 
@@ -61,13 +65,6 @@ _MODULE_LABELS: dict[str, Callable[[], str]] = {
     Module.BUDGET.value: lambda: QCoreApplication.translate("Alerts", "Budget"),
 }
 
-#: The icon of each severity: the shapes differ (never colour alone, D23).
-_SEVERITY_ICONS: dict[str, QStyle.StandardPixmap] = {
-    Severity.CRITICAL.value: QStyle.StandardPixmap.SP_MessageBoxCritical,
-    Severity.WARNING.value: QStyle.StandardPixmap.SP_MessageBoxWarning,
-    Severity.INFO.value: QStyle.StandardPixmap.SP_MessageBoxInformation,
-}
-
 #: Every severity, module and alert-kind code (for the completeness tests).
 ALL_SEVERITY_CODES: tuple[str, ...] = tuple(_SEVERITY_LABELS)
 ALL_MODULE_CODES: tuple[str, ...] = tuple(_MODULE_LABELS)
@@ -84,11 +81,14 @@ def module_label(code: str) -> str:
 
 
 def severity_icon(code: str) -> QIcon:
-    """The icon of a severity code (an empty icon when unknown); needs a ``QApplication``."""
-    pixmap = _SEVERITY_ICONS.get(str(code))
-    if pixmap is None:
+    """The icon of a severity code (an empty icon when unknown); needs a ``QApplication``.
+
+    The shape differs per severity and the colour comes from the colour-blind-safe palette of the
+    dashboard status icons (D23): never colour alone, never a colour outside the palette.
+    """
+    if str(code) not in _SEVERITY_LABELS:
         return QIcon()
-    return QApplication.style().standardIcon(pixmap)
+    return QIcon(severity_pixmap(str(code)))
 
 
 # --------------------------------------------------------------------------- message pieces

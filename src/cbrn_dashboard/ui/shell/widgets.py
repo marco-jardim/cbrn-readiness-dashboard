@@ -16,6 +16,7 @@ from ``changeEvent`` on ``QEvent.Type.LanguageChange``.
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Any
 
 from PySide6.QtCore import (
@@ -27,15 +28,22 @@ from PySide6.QtCore import (
     QPersistentModelIndex,
     Qt,
 )
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QGuiApplication, QIcon, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QAbstractSpinBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
+    QScrollArea,
+    QSplitter,
+    QStackedWidget,
     QTableView,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -53,10 +61,13 @@ __all__ = [
     "ModuleTableModel",
     "action_row",
     "apply_change",
+    "apply_tab_order",
     "current_language",
+    "device_pixel_ratio",
     "follow_language",
     "guarded",
     "label_for",
+    "layout_tab_order",
     "make_edit_action",
     "make_table_view",
     "mark_data",
@@ -82,6 +93,16 @@ def follow_language(context: AppContext, retranslate: Callable[[], None]) -> Non
     context.translator_manager.language_changed.connect(retranslate)
 
 
+def device_pixel_ratio() -> float:
+    """The device-pixel ratio of the primary screen (1.0 without a screen).
+
+    Icons drawn by the application are made this many times larger in device pixels and tagged
+    with the ratio, so they stay sharp under the OS or ``QT_SCALE_FACTOR`` scaling.
+    """
+    screen = QGuiApplication.primaryScreen()
+    return 1.0 if screen is None else max(1.0, float(screen.devicePixelRatio()))
+
+
 def label_for(mapping: Mapping[str, Callable[[], str]], code: str) -> str:
     """The translated label of ``code``; the code itself when unknown. Never raises."""
     label = mapping.get(code)
@@ -91,6 +112,138 @@ def label_for(mapping: Mapping[str, Callable[[], str]], code: str) -> str:
 def mark_data(obj: QObject) -> None:
     """Flag a widget (or action) whose texts are user data, not UI text."""
     obj.setProperty(DATA_PROPERTY, True)
+
+
+# --------------------------------------------------------------------------- keyboard focus
+
+#: The focus policies that put a widget in the Tab chain.
+_TAB_POLICIES = (
+    Qt.FocusPolicy.TabFocus,
+    Qt.FocusPolicy.StrongFocus,
+    Qt.FocusPolicy.WheelFocus,
+)
+
+
+def _tab_target(widget: QWidget) -> QWidget | None:
+    """The widget that really takes the Tab focus for ``widget``, or ``None`` when none does.
+
+    A spin box and a tab widget hand their focus to an inner widget (their focus proxy);
+    ``QWidget.setTabOrder`` does the same, so the chain is built over these targets.
+    """
+    if widget.focusPolicy() not in _TAB_POLICIES:
+        return None
+    target = widget
+    proxy = target.focusProxy()
+    while proxy is not None:
+        target = proxy
+        proxy = target.focusProxy()
+    return target
+
+
+def _inside_opaque(widget: QWidget, root: QWidget) -> bool:
+    """Whether ``widget`` lies inside a spin box or a combo box below ``root`` (Qt internals)."""
+    node = widget.parentWidget()
+    while node is not None and node is not root:
+        if isinstance(node, QAbstractSpinBox | QComboBox):
+            return True
+        node = node.parentWidget()
+    return False
+
+
+def _collect_widget(
+    widget: QWidget | None, found: list[QWidget], owners: list[QWidget] | None = None
+) -> None:
+    if widget is None:  # ``QTabWidget.widget`` and its kin give ``None`` for a missing page
+        return
+    target = _tab_target(widget)
+    if target is not None and target not in found:
+        found.append(target)
+        if owners is not None:
+            owners.append(widget)
+    if isinstance(widget, QAbstractSpinBox | QComboBox):
+        return
+    if isinstance(widget, QTabWidget | QStackedWidget | QSplitter):
+        for index in range(widget.count()):
+            _collect_widget(widget.widget(index), found, owners)
+        return
+    if isinstance(widget, QScrollArea):
+        inner = widget.widget()
+        if inner is not None:
+            _collect_widget(inner, found, owners)
+        return
+    layout = widget.layout()
+    if layout is not None:
+        _collect_layout(layout, found, owners)
+
+
+def _collect_layout(
+    layout: QLayout, found: list[QWidget], owners: list[QWidget] | None = None
+) -> None:
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        if item is None:
+            continue
+        child_layout = item.layout()
+        if child_layout is not None:
+            _collect_layout(child_layout, found, owners)
+            continue
+        child = item.widget()
+        if child is not None:
+            _collect_widget(child, found, owners)
+
+
+def layout_tab_order(root: QWidget) -> list[QWidget]:
+    """The widgets of ``root`` that take the Tab focus, in the order the layouts show them.
+
+    That is the order a person reads the page in: layouts are walked depth-first, the pages of a
+    tab widget, a stack, a splitter and a scroll area in turn. ``root`` itself is not included.
+    """
+    found: list[QWidget] = []
+    layout = root.layout()
+    if layout is not None:
+        _collect_layout(layout, found)
+    return found
+
+
+def apply_tab_order(root: QWidget) -> None:
+    """Make the Tab chain of ``root`` follow :func:`layout_tab_order`.
+
+    Qt builds the chain in the order the widgets were created, which differs from the layout order
+    wherever a page creates its widgets in another order than it lays them out.
+
+    The chain is set over the widgets as laid out, never over their focus proxies: moving the
+    inner widget of a spin box or a tab widget on its own detaches it from its owner and leaves a
+    broken focus chain behind (a crash when the window is deleted). A widget is never ordered
+    against one that contains it.
+    """
+    owners: list[QWidget] = []
+    layout = root.layout()
+    if layout is not None:
+        _collect_layout(layout, [], owners)
+    for first, second in pairwise(owners):
+        if first.isAncestorOf(second) or second.isAncestorOf(first):
+            continue
+        QWidget.setTabOrder(first, second)
+
+
+def _has_tab_children(widget: QWidget) -> bool:
+    """Whether a widget below ``widget`` takes the Tab focus (``widget`` is a container)."""
+    if isinstance(widget, QAbstractSpinBox | QComboBox):
+        return False
+    return any(
+        child.focusPolicy() in _TAB_POLICIES and child is not widget.focusProxy()
+        for child in widget.findChildren(QWidget)
+    )
+
+
+def _label_target(widget: QWidget) -> QWidget:
+    """The widget a field label should name: ``widget``, or the first input of a container."""
+    if widget.focusPolicy() != Qt.FocusPolicy.NoFocus:
+        return widget
+    for child in widget.findChildren(QWidget):
+        if child.focusPolicy() in _TAB_POLICIES and not _inside_opaque(child, widget):
+            return child
+    return widget
 
 
 # --------------------------------------------------------------------------- errors
@@ -144,12 +297,17 @@ def apply_change(
 
 @dataclass(frozen=True)
 class Column[Row]:
-    """One table column: ``header()`` is the translated title, ``value(row, lang)`` a cell text."""
+    """One table column: ``header()`` is the translated title, ``value(row, lang)`` a cell text.
+
+    A column that shows a STATUS gives ``icon(row)`` too (D23): the cell then holds the text AND an
+    icon whose shape and palette colour belong to the status (``None``: no status, no icon).
+    """
 
     key: str
     header: Callable[[], str]
     value: Callable[[Row, str], str]
     align_right: bool = False
+    icon: Callable[[Row], QIcon | None] | None = None
 
 
 class ModuleTableModel(QAbstractTableModel):
@@ -215,6 +373,8 @@ class ModuleTableModel(QAbstractTableModel):
             return column.value(row, self._lang)
         if role == Qt.ItemDataRole.TextAlignmentRole and column.align_right:
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        if role == Qt.ItemDataRole.DecorationRole and column.icon is not None:
+            return column.icon(row)
         return None
 
     def headerData(
@@ -319,7 +479,8 @@ class FormDialog(QDialog):
         """Add a form row; the label text comes from ``label_fn`` and follows the language."""
         label = QLabel(self)
         label.setText(label_fn())
-        label.setBuddy(widget)
+        # A row made of several widgets (a text field and its button) names its first input.
+        label.setBuddy(_label_target(widget))
         self._fields.append((label, label_fn))
         self.form.addRow(label, widget)
         return label
@@ -336,6 +497,11 @@ class FormDialog(QDialog):
     def accept(self) -> None:
         if self.submit():
             super().accept()
+
+    def showEvent(self, event: QShowEvent) -> None:
+        # The fields are all there once the dialog is shown: Tab follows the form, top to bottom.
+        apply_tab_order(self)
+        super().showEvent(event)
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
