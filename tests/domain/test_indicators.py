@@ -544,10 +544,15 @@ def test_build_registry_with_no_providers_is_empty() -> None:
     assert len(build_registry([])) == 0
 
 
-def test_real_providers_are_listed_and_build_an_empty_registry_for_now() -> None:
+def test_real_providers_build_a_registry_with_unique_codes_in_stable_order() -> None:
     assert isinstance(registry_module.PROVIDERS, tuple)
-    assert registry_module.PROVIDERS == ()
-    assert len(build_registry()) == 0
+    first = build_registry()
+    second = build_registry()
+    codes = first.codes()
+    assert len(set(codes)) == len(codes)
+    assert [d.code for d in first] == list(codes)
+    assert second.codes() == codes
+    assert [d.code for d in second] == [d.code for d in first]
 
 
 # --------------------------------------------------------------------------------------------

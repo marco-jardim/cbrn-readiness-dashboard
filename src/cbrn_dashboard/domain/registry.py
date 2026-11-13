@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 
+from cbrn_dashboard.domain import budget, exercises
 from cbrn_dashboard.domain.indicators import IndicatorDefinition, IndicatorRegistry
 
 IndicatorProvider = Callable[[], Sequence[IndicatorDefinition]]
@@ -16,7 +17,10 @@ IndicatorProvider = Callable[[], Sequence[IndicatorDefinition]]
 # One provider per line, in display order. T2.2, T3.2, T4.3 and T5.2 each add exactly one line
 # here importing their module's ``indicator_definitions`` function (import at the top of the file,
 # entry below). Empty until those tasks land.
-PROVIDERS: tuple[IndicatorProvider, ...] = ()
+PROVIDERS: tuple[IndicatorProvider, ...] = (
+    exercises.indicator_definitions,
+    budget.indicator_definitions,
+)
 
 
 def build_registry(providers: Iterable[IndicatorProvider] = PROVIDERS) -> IndicatorRegistry:
