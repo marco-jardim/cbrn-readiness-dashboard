@@ -94,13 +94,13 @@ The Budget page shows entries for the current fiscal year and the three before i
 built-in funding sources and the user-defined source `DEMO-SRC-A`. Each entry has several dated
 execution rows; in the current year one row is dated after today and does not count yet. The one
 exception is a demo database created on 31 December: a row must stay inside its fiscal year, so no
-row can be dated after that day. The OPCW trust fund has entries in BRL and in USD, which are never
+row can be dated after that day. The COMAER source (Air Force Command) has entries in BRL and in USD, which are never
 added together.
 
 - `DEMO - pending allocation` is a USD entry of `DEMO-SRC-A` with execution rows but no allocated
   amount, so its execution rate reads "No data".
-- The other entries are `DEMO - DIRSA annual allocation`, `DEMO - local counterpart`,
-  `DEMO - trust fund contribution`, `DEMO - equipment` and `DEMO - training`.
+- The other entries are `DEMO - DIRSA annual allocation`, `DEMO - COMAER allocation`,
+  `DEMO - COMAER foreign purchases`, `DEMO - equipment` and `DEMO - training`.
 
 ## Dashboard
 
@@ -126,7 +126,7 @@ a standard).
 | `EX_DAYS_SINCE_LAST` | CBRAMED | OK |
 | `EX_DAYS_SINCE_LAST` | OTHER | Critical |
 | `BUD_EXEC_RATE` | BRL, DIRSA | Critical |
-| `BUD_EXEC_RATE` | USD, OPCW_TRUST_FUND | OK |
+| `BUD_EXEC_RATE` | USD, COMAER | OK |
 
 Two readings read "No data" whatever the targets: `EX_LAST_PARTICIPANTS` for EXBRAMED (see
 `DEMO-EX-06`) and `BUD_EXEC_RATE` for USD and `DEMO-SRC-A`. Readings such as `PERS_DEGREE` have

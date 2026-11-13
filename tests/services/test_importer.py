@@ -533,7 +533,7 @@ def test_executions_are_matched_to_their_entries_by_key(
         (2024, "DIRSA", "BRL", 'DEMO line; "A"', "2024-02-01", 100000),
         (2024, "DIRSA", "BRL", 'DEMO line; "A"', "2024-03-01", 23456),
         (2024, "DIRSA", "USD", "", "2024-04-01", 7),
-        (2025, "OPCW_TRUST_FUND", "EUR", "", "2025-01-15", 250),
+        (2025, "COMAER", "EUR", "", "2025-01-15", 250),
     }
 
 

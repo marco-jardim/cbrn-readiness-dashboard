@@ -20,7 +20,7 @@ the configured default currency (A08). Corrections are made by editing a row (ev
 ``change_log``), not by negative amounts.
 
 Funding sources are list entries (D16): only the pt-BR label is mandatory, and only for
-USER-DEFINED sources. The built-in sources (``DIRSA``, ``OPCW_TRUST_FUND``) keep empty labels (their
+USER-DEFINED sources. The built-in sources (``DIRSA``, ``COMAER``) keep empty labels (their
 names come from the UI), can be deactivated but never deleted, and their code cannot change.
 """
 

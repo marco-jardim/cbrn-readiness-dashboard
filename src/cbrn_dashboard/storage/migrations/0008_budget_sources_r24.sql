@@ -1,0 +1,27 @@
+-- 0008_budget_sources_r24.sql: built-in funding sources follow the revised requirement R24
+-- (PLAN.md section 3, thesis appendix line L80, thesis commit f8b1d65, 2026-11-13).
+-- R24 now reads: annual financial execution per source (Comando da Aeronautica, DIRSA). The
+-- built-in sources are therefore DIRSA and COMAER. The OPCW Trust Fund item of the earlier
+-- wording is the contribution of Brazil to the OPCW, not hospital revenue, so OPCW_TRUST_FUND is no
+-- longer built in.
+--
+-- OPCW_TRUST_FUND is deleted when no budget entry uses it. Otherwise it is kept, with its
+-- entries and their execution rows, as an INACTIVE user-defined source whose former names become
+-- its labels, so no recorded amount is lost. A source COMAER that a user already created is
+-- promoted to built-in and active. This migration changes rows only, not tables, and does not
+-- touch migration 0005.
+
+DELETE FROM funding_source
+WHERE code = 'OPCW_TRUST_FUND'
+  AND NOT EXISTS (SELECT 1 FROM budget_entry WHERE budget_entry.source_id = funding_source.id);
+
+UPDATE funding_source
+SET built_in = 0,
+    active = 0,
+    label_pt_br = 'Trust Fund da OPAQ',
+    label_en_us = 'OPCW Trust Fund',
+    label_es_es = 'Fondo Fiduciario de la OPAQ'
+WHERE code = 'OPCW_TRUST_FUND';
+
+INSERT INTO funding_source (code, built_in, active) VALUES ('COMAER', 1, 1)
+ON CONFLICT (code) DO UPDATE SET built_in = 1, active = 1;

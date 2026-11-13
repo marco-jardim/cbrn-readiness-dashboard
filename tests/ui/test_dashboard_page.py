@@ -87,7 +87,7 @@ def _seed(context: AppContext) -> int:
     (operational, interval 30, never maintained, so overdue). Exercises: EX-24 (40 participants,
     3 countries), EX-25 (no participant count, 2 countries), EX-27 in the future. Budget FY2026
     in minor units: DIRSA/BRL 100 000 (25 000 on 2026-01-10, 40 000 on 2026-04-10),
-    OPCW_TRUST_FUND/BRL 50 000 (10 000 on 2026-02-01), DIRSA/USD 20 000 (5 000 on 2026-03-01);
+    COMAER/BRL 50 000 (10 000 on 2026-02-01), DIRSA/USD 20 000 (5 000 on 2026-03-01);
     FY2025 DIRSA/BRL 80 000 (60 000 and 10 000 executed). Targets: B certificates 2 / 1,
     type A overdue 1 / 2, DIRSA/BRL execution rate 0.9 / 0.6 (year-end values).
     """
@@ -144,7 +144,7 @@ def _seed(context: AppContext) -> int:
 
     budget = _need(context.services.budget)
     dirsa = _need(budget.get_source_by_code("DIRSA")).id
-    opcw = _need(budget.get_source_by_code("OPCW_TRUST_FUND")).id
+    comaer = _need(budget.get_source_by_code("COMAER")).id
     last_year = budget.create_entry(
         EntryInput(fiscal_year=2025, source_id=dirsa, allocated_minor=80_000, currency="BRL")
     )
@@ -156,7 +156,7 @@ def _seed(context: AppContext) -> int:
     budget.add_execution(brl_dirsa, "2026-01-10", 25_000)
     budget.add_execution(brl_dirsa, "2026-04-10", 40_000)
     other = budget.create_entry(
-        EntryInput(fiscal_year=2026, source_id=opcw, allocated_minor=50_000, currency="BRL")
+        EntryInput(fiscal_year=2026, source_id=comaer, allocated_minor=50_000, currency="BRL")
     )
     budget.add_execution(other, "2026-02-01", 10_000)
     dollars = budget.create_entry(
@@ -287,8 +287,8 @@ EXPECTED_TILES: list[TileRow] = [
     ("EX_DAYS_SINCE_LAST", "kind=CBRAMED", "181", NT),
     ("EX_DAYS_SINCE_LAST", "kind=EXBRAMED", "-", ND),
     ("EX_DAYS_SINCE_LAST", "kind=OTHER", "-", ND),
+    ("BUD_EXEC_RATE", "currency=BRL;source=COMAER", "20.0%", NT),
     ("BUD_EXEC_RATE", "currency=BRL;source=DIRSA", "25.0%", OK),
-    ("BUD_EXEC_RATE", "currency=BRL;source=OPCW_TRUST_FUND", "20.0%", NT),
     ("BUD_EXEC_RATE", "currency=USD;source=DIRSA", "25.0%", NT),
 ]
 
@@ -342,8 +342,8 @@ CHARTS_AS_OF: dict[str, ExpectedChart] = {
         "BRL",
         ChartKind.GROUPED_BAR,
         ["Funding source", "Allocated", "Executed"],
-        [["DIRSA", "R$1,000.00", "R$250.00"], ["OPCW Trust Fund", "R$500.00", "R$100.00"]],
-        ((1000.0, 500.0), (250.0, 100.0)),
+        [["Air Force Command", "R$500.00", "R$100.00"], ["DIRSA", "R$1,000.00", "R$250.00"]],
+        ((500.0, 1000.0), (100.0, 250.0)),
     ),
     "budget_USD": ExpectedChart(
         "Allocated and executed by funding source, USD, fiscal year 2026",
@@ -421,8 +421,8 @@ def test_tiles_name_unit_dimension_thresholds_and_context(
     # the year-end 0.9 / 0.6 scaled by day 64 of 365 (P08), as a percentage
     assert rate.thresholds_label.text() == "Thresholds in force: warning 15.8%, critical 10.5%"
     assert rate.context_label.text() == "Executed R$250.00 of R$1,000.00 allocated"
-    other = _tile(page, "BUD_EXEC_RATE", "currency=BRL;source=OPCW_TRUST_FUND")
-    assert other.dimension_label.text() == "Currency BRL, Source OPCW Trust Fund"
+    other = _tile(page, "BUD_EXEC_RATE", "currency=BRL;source=COMAER")
+    assert other.dimension_label.text() == "Currency BRL, Source Air Force Command"
 
 
 def test_tiles_are_grouped_by_module_and_no_score_is_shown(
@@ -618,18 +618,18 @@ def test_a_data_change_is_shown_and_nothing_is_cached(
 ) -> None:
     entry = _seed(app_context)
     page = _page(app_context, qtbot)
-    assert _cells(_panel(page, "budget_BRL"))[0] == ["DIRSA", "R$1,000.00", "R$250.00"]
+    assert _cells(_panel(page, "budget_BRL"))[1] == ["DIRSA", "R$1,000.00", "R$250.00"]
 
     _need(app_context.services.budget).add_execution(entry, "2026-03-01", 5_000)
     app_context.notify_data_changed()
-    assert _cells(_panel(page, "budget_BRL"))[0] == ["DIRSA", "R$1,000.00", "R$300.00"]
+    assert _cells(_panel(page, "budget_BRL"))[1] == ["DIRSA", "R$1,000.00", "R$300.00"]
     rate = _tile(page, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA")
     assert rate.value_label.text() == "30.0%"
     assert rate.context_label.text() == "Executed R$300.00 of R$1,000.00 allocated"
 
     _need(app_context.services.budget).add_execution(entry, "2026-03-02", 5_000)
     page.refresh()  # a direct refresh reads again as well
-    assert _cells(_panel(page, "budget_BRL"))[0][2] == "R$350.00"
+    assert _cells(_panel(page, "budget_BRL"))[1][2] == "R$350.00"
 
 
 # --------------------------------------------------------------------------- languages
@@ -651,7 +651,7 @@ def test_texts_and_numbers_follow_a_language_switch(app_context: AppContext, qtb
     assert _tile(page, "PERS_CERT_VALID", "level=A").status_label.text() == "Sem meta"
     assert _tile(page, "EX_LAST_PARTICIPANTS", "kind=CBRAMED").status_label.text() == "Sem dados"
     budget = _panel(page, "budget_BRL")
-    assert _cells(budget)[0] == ["DIRSA", f"R${NBSP}1.000,00", f"R${NBSP}250,00"]
+    assert _cells(budget)[1] == ["DIRSA", f"R${NBSP}1.000,00", f"R${NBSP}250,00"]
     assert budget.table_model.headerData(0, horizontal) == "Fonte de recursos"
     assert budget.toggle.text() == "Mostrar como tabela"
     assert page.alert_labels[Severity.CRITICAL].text() == "Alertas cr\u00edticos: 3"
@@ -663,14 +663,14 @@ def test_texts_and_numbers_follow_a_language_switch(app_context: AppContext, qtb
         f"25,0{NBSP}%"
     )
     expected_row = ["DIRSA", f"1000,00{NBSP}R$", f"250,00{NBSP}R$"]
-    assert _cells(_panel(page, "budget_BRL"))[0] == expected_row
+    assert _cells(_panel(page, "budget_BRL"))[1] == expected_row
     assert _panel(page, "budget_BRL").data().title == (
         "Asignado y ejecutado por fuente de financiaci\u00f3n, BRL, ejercicio 2026"
     )
 
     manager.set_language("en_US")
     qtbot.waitUntil(lambda: page.as_of_label.text() == "Readiness as of 03/05/2026")
-    assert _cells(_panel(page, "budget_BRL"))[0] == ["DIRSA", "R$1,000.00", "R$250.00"]
+    assert _cells(_panel(page, "budget_BRL"))[1] == ["DIRSA", "R$1,000.00", "R$250.00"]
     assert page.snapshot_action.text() == "Record snapshot"
 
 

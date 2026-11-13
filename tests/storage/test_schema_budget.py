@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Schema tests of migration 0005 (budget; PLAN.md task T5.1, A08, D15, D16, D27)."""
+"""Schema tests of migrations 0005 and 0008 (budget; PLAN.md T5.1, A08, D15, D16, D27, R24)."""
 
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
-from cbrn_dashboard.storage.db import DatabaseConnection
+from cbrn_dashboard.storage.db import DatabaseConnection, open_database
+from cbrn_dashboard.storage.migrate import load_migrations, migrate
 
 BIG_AMOUNT = 9_007_199_254_740_993  # 2**53 + 1: not exactly representable as a float
 
@@ -107,8 +110,8 @@ def test_built_in_sources_are_seeded(migrated_db: DatabaseConnection) -> None:
         "FROM funding_source ORDER BY code"
     ).fetchall()
     assert [tuple(row) for row in rows] == [
+        ("COMAER", 1, None, None, None, 1),
         ("DIRSA", 1, None, None, None, 1),
-        ("OPCW_TRUST_FUND", 1, None, None, None, 1),
     ]
 
 
@@ -157,7 +160,7 @@ def test_database_does_not_protect_unused_built_in_sources(
     migrated_db: DatabaseConnection,
 ) -> None:
     """Protecting built-in sources is a service rule (task T5.3), not a database rule."""
-    migrated_db.execute("DELETE FROM funding_source WHERE code = 'OPCW_TRUST_FUND'")
+    migrated_db.execute("DELETE FROM funding_source WHERE code = 'COMAER'")
     codes = [row[0] for row in migrated_db.execute("SELECT code FROM funding_source")]
     assert codes == ["DIRSA"]
 
@@ -383,3 +386,103 @@ def test_foreign_key_check_is_clean(migrated_db: DatabaseConnection) -> None:
     entry_id = _add_entry(migrated_db)
     _add_execution(migrated_db, entry_id)
     assert migrated_db.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+# --------------------------------------------------------------------------- migration 0008 (R24)
+
+
+@pytest.fixture
+def at_seven(tmp_path: Path) -> Iterator[DatabaseConnection]:
+    """A database migrated only up to 0007: the Trust Fund is still a built-in source."""
+    conn = open_database(tmp_path / "before-0008.sqlite3")
+    try:
+        migrate(conn, migrations=load_migrations()[:7])
+        yield conn
+    finally:
+        conn.close()
+
+
+def _sources(db: DatabaseConnection) -> list[tuple[object, ...]]:
+    rows = db.execute(
+        "SELECT code, built_in, active, label_pt_br, label_en_us, label_es_es "
+        "FROM funding_source ORDER BY code"
+    ).fetchall()
+    return [tuple(row) for row in rows]
+
+
+def _migrate_to_latest(db: DatabaseConnection) -> None:
+    result = migrate(db)
+    assert result.applied == (8,)
+
+
+def test_before_0008_the_trust_fund_is_a_built_in_source(at_seven: DatabaseConnection) -> None:
+    assert _sources(at_seven) == [
+        ("DIRSA", 1, 1, None, None, None),
+        ("OPCW_TRUST_FUND", 1, 1, None, None, None),
+    ]
+
+
+def test_0008_deletes_an_unused_trust_fund_and_adds_comaer(at_seven: DatabaseConnection) -> None:
+    dirsa_entry = _add_entry(at_seven, source_id=_source_id(at_seven, "DIRSA"))
+    _migrate_to_latest(at_seven)
+
+    assert _sources(at_seven) == [
+        ("COMAER", 1, 1, None, None, None),
+        ("DIRSA", 1, 1, None, None, None),
+    ]
+    assert _count(at_seven, "budget_entry") == 1
+    assert at_seven.execute("SELECT id FROM budget_entry").fetchone()[0] == dirsa_entry
+    assert at_seven.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_0008_keeps_a_used_trust_fund_as_an_inactive_user_source(
+    at_seven: DatabaseConnection,
+) -> None:
+    trust_fund = _source_id(at_seven, "OPCW_TRUST_FUND")
+    entry_id = _add_entry(at_seven, source_id=trust_fund, description="Contribution")
+    execution_id = _add_execution(at_seven, entry_id, amount_minor=7_000)
+    _migrate_to_latest(at_seven)
+
+    assert _sources(at_seven) == [
+        ("COMAER", 1, 1, None, None, None),
+        ("DIRSA", 1, 1, None, None, None),
+        (
+            "OPCW_TRUST_FUND",
+            0,
+            0,
+            "Trust Fund da OPAQ",
+            "OPCW Trust Fund",
+            "Fondo Fiduciario de la OPAQ",
+        ),
+    ]
+    assert _source_id(at_seven, "OPCW_TRUST_FUND") == trust_fund
+    entry = at_seven.execute(
+        "SELECT source_id, description FROM budget_entry WHERE id = ?", (entry_id,)
+    ).fetchone()
+    assert tuple(entry) == (trust_fund, "Contribution")
+    execution = at_seven.execute(
+        "SELECT entry_id, amount_minor FROM budget_execution WHERE id = ?", (execution_id,)
+    ).fetchone()
+    assert tuple(execution) == (entry_id, 7_000)
+    assert at_seven.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_0008_promotes_an_existing_user_source_comaer(at_seven: DatabaseConnection) -> None:
+    at_seven.execute(
+        "INSERT INTO funding_source (code, built_in, active, label_pt_br) "
+        "VALUES ('COMAER', 0, 0, 'Meu COMAER')"
+    )
+    comaer = _source_id(at_seven, "COMAER")
+    entry_id = _add_entry(at_seven, source_id=comaer)
+    _migrate_to_latest(at_seven)
+
+    assert _sources(at_seven) == [
+        ("COMAER", 1, 1, "Meu COMAER", None, None),
+        ("DIRSA", 1, 1, None, None, None),
+    ]
+    assert _source_id(at_seven, "COMAER") == comaer
+    row = at_seven.execute(
+        "SELECT source_id FROM budget_entry WHERE id = ?", (entry_id,)
+    ).fetchone()
+    assert row[0] == comaer
+    assert at_seven.execute("PRAGMA foreign_key_check").fetchall() == []

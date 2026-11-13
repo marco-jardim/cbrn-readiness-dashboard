@@ -536,13 +536,13 @@ def test_the_page_opens_its_dialogs_without_blocking(app_context: AppContext, qt
     page.add_entry()
     dialog = _open_dialog(page, EntryDialog)
     assert dialog.year_spin.value() == 2025
-    _pick_source(dialog, app_context, "OPCW_TRUST_FUND")
+    _pick_source(dialog, app_context, "COMAER")
     dialog.allocated_edit.setText("1.00")
     dialog.currency_combo.setCurrentIndex(dialog.currency_combo.findData("EUR"))
     dialog.accept()
     (entry,) = _service(app_context).list_entries(2025)
-    assert (entry.source_code, entry.currency) == ("OPCW_TRUST_FUND", "EUR")
-    assert page.entries_model.index(0, 0).data() == "OPCW Trust Fund"
+    assert (entry.source_code, entry.currency) == ("COMAER", "EUR")
+    assert page.entries_model.index(0, 0).data() == "Air Force Command"
 
 
 def test_deleting_an_entry_asks_for_confirmation(
@@ -690,14 +690,14 @@ def test_the_source_editor_adds_edits_deactivates_and_deletes(
 ) -> None:
     section = BudgetSettingsSection(app_context)
     qtbot.addWidget(section)
-    assert [row.code for row in section.model.rows()] == ["DIRSA", "OPCW_TRUST_FUND"]
-    assert _cells(section.model, 0, 4) == ["DIRSA", "DIRSA", "Built-in", "Active"]
-    assert _cells(section.model, 1, 4) == [
-        "OPCW_TRUST_FUND",
-        "OPCW Trust Fund",
+    assert [row.code for row in section.model.rows()] == ["COMAER", "DIRSA"]
+    assert _cells(section.model, 0, 4) == [
+        "COMAER",
+        "Air Force Command",
         "Built-in",
         "Active",
     ]
+    assert _cells(section.model, 1, 4) == ["DIRSA", "DIRSA", "Built-in", "Active"]
 
     dialog = SourceDialog(app_context)
     qtbot.addWidget(dialog)
@@ -705,8 +705,8 @@ def test_the_source_editor_adds_edits_deactivates_and_deletes(
     dialog.label_pt_edit.setText("Fonte X")
     dialog.label_en_edit.setText("Source X")
     dialog.accept()
-    assert [row.code for row in section.model.rows()] == ["DIRSA", "FUNDX", "OPCW_TRUST_FUND"]
-    assert _cells(section.model, 1, 4) == ["FUNDX", "Source X", "User-defined", "Active"]
+    assert [row.code for row in section.model.rows()] == ["COMAER", "DIRSA", "FUNDX"]
+    assert _cells(section.model, 2, 4) == ["FUNDX", "Source X", "User-defined", "Active"]
 
     _select_source(section, "FUNDX")
     section.edit_source()
@@ -714,20 +714,20 @@ def test_the_source_editor_adds_edits_deactivates_and_deletes(
     assert edit_dialog.label_en_edit.text() == "Source X"
     edit_dialog.label_en_edit.setText("Source Y")
     edit_dialog.accept()
-    assert section.model.index(1, 1).data() == "Source Y"
+    assert section.model.index(2, 1).data() == "Source Y"
     app_context.translator_manager.set_language("es_ES")
-    assert section.model.index(1, 1).data() == "Fonte X"  # no Spanish label: pt-BR first
+    assert section.model.index(2, 1).data() == "Fonte X"  # no Spanish label: pt-BR first
 
     app_context.translator_manager.set_language("en_US")
     assert section.deactivate_action.isEnabled()
     section.deactivate_action.trigger()
-    assert section.model.index(1, 3).data() == "Inactive"
+    assert section.model.index(2, 3).data() == "Inactive"
     assert not section.deactivate_action.isEnabled()
-    assert [s.code for s in _service(app_context).list_sources()] == ["DIRSA", "OPCW_TRUST_FUND"]
+    assert [s.code for s in _service(app_context).list_sources()] == ["COMAER", "DIRSA"]
 
     fake_prompts.script("confirm", True)
     section.delete_action.trigger()
-    assert [row.code for row in section.model.rows()] == ["DIRSA", "OPCW_TRUST_FUND"]
+    assert [row.code for row in section.model.rows()] == ["COMAER", "DIRSA"]
 
 
 def test_built_in_sources_cannot_be_deleted(
@@ -745,7 +745,7 @@ def test_built_in_sources_cannot_be_deleted(
     assert section.model.rowCount() == 2
 
     app_context.translator_manager.set_language("pt_BR")
-    _select_source(section, "OPCW_TRUST_FUND")
+    _select_source(section, "COMAER")
     fake_prompts.script("confirm", True)
     section.delete_action.trigger()
     assert _warnings(fake_prompts)[-1] == error_label("BUILT_IN_SOURCE")
@@ -773,7 +773,7 @@ def test_a_source_used_by_an_entry_cannot_be_deleted(
 def test_the_dialog_of_a_built_in_source_keeps_its_code_and_labels(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
-    source = _service(app_context).get_source_by_code("OPCW_TRUST_FUND")
+    source = _service(app_context).get_source_by_code("COMAER")
     assert source is not None
     dialog = SourceDialog(app_context, None, source)
     qtbot.addWidget(dialog)
@@ -786,7 +786,7 @@ def test_the_dialog_of_a_built_in_source_keeps_its_code_and_labels(
         assert edit.isReadOnly()
     dialog.active_check.setChecked(False)
     dialog.accept()
-    stored = _service(app_context).get_source_by_code("OPCW_TRUST_FUND")
+    stored = _service(app_context).get_source_by_code("COMAER")
     assert stored is not None
     assert not stored.active
     assert stored.label_pt_br is None
@@ -1199,16 +1199,16 @@ def test_every_built_in_source_and_error_code_has_a_label_in_all_languages(
             for code in BUILT_IN_SOURCE_CODES
         }
         errors[lang] = {code: error_label(code) for code in ALL_ERROR_CODES}
-    assert set(BUILT_IN_SOURCE_CODES) == {"DIRSA", "OPCW_TRUST_FUND"}
+    assert set(BUILT_IN_SOURCE_CODES) == {"DIRSA", "COMAER"}
     for lang in LANGUAGES:
         assert all(text.strip() for text in names[lang].values())
         for code, text in errors[lang].items():
             assert text.strip(), (lang, code)
             assert text != code, (lang, code)
         assert names[lang]["DIRSA"] == "DIRSA"
-    assert names["en_US"]["OPCW_TRUST_FUND"] == "OPCW Trust Fund"
-    assert names["pt_BR"]["OPCW_TRUST_FUND"] == "Trust Fund da OPAQ"
-    assert names["es_ES"]["OPCW_TRUST_FUND"] == "Fondo Fiduciario de la OPAQ"
+    assert names["en_US"]["COMAER"] == "Air Force Command"
+    assert names["pt_BR"]["COMAER"] == "Comando da Aeronáutica"
+    assert names["es_ES"]["COMAER"] == "Comando de la Aeronáutica"
     for code, english in errors["en_US"].items():
         assert errors["pt_BR"][code] != english, code
         assert errors["es_ES"][code] != english, code

@@ -33,7 +33,7 @@ from cbrn_dashboard.domain.registry import build_registry
 
 SRC_A = "DEMO-SRC-A"
 DIRSA = "DIRSA"
-OPCW = "OPCW_TRUST_FUND"
+COMAER = "COMAER"
 
 
 def entry(
@@ -155,17 +155,17 @@ def test_two_currencies_are_kept_apart() -> None:
 
 def test_sources_are_grouped_and_sorted() -> None:
     entries = [
-        entry(1, source=OPCW, allocated=100),
+        entry(1, source=COMAER, allocated=100),
         entry(2, source=DIRSA, allocated=200),
         entry(3, source=SRC_A, allocated=300),
         entry(4, source=DIRSA, currency="EUR", allocated=400),
     ]
     result = budget.totals(entries, [], date(2026, 1, 1))
     assert [(r.source_code, r.currency) for r in result] == [
+        (COMAER, "BRL"),
         (SRC_A, "BRL"),
         (DIRSA, "BRL"),
         (DIRSA, "EUR"),
-        (OPCW, "BRL"),
     ]
 
 
@@ -204,15 +204,15 @@ def test_orphan_executions_are_ignored_and_reported() -> None:
 def test_multi_year_table_is_sorted_by_year_source_currency() -> None:
     entries = [
         entry(1, year=2027, source=SRC_A),
-        entry(2, year=2025, source=OPCW),
+        entry(2, year=2025, source=COMAER),
         entry(3, year=2026, source=DIRSA, currency="USD"),
         entry(4, year=2025, source=DIRSA),
         entry(5, year=2026, source=DIRSA, currency="BRL"),
     ]
     table = budget.multi_year_table(entries, [], date(2026, 6, 1))
     assert [(r.fiscal_year, r.source_code, r.currency) for r in table] == [
+        (2025, COMAER, "BRL"),
         (2025, DIRSA, "BRL"),
-        (2025, OPCW, "BRL"),
         (2026, DIRSA, "BRL"),
         (2026, DIRSA, "USD"),
         (2027, SRC_A, "BRL"),
@@ -500,7 +500,7 @@ def test_definition_is_registered_in_the_real_registry() -> None:
 
 def test_indicator_values_context_dimension_and_order() -> None:
     entries = [
-        entry(1, source=OPCW, allocated=400),
+        entry(1, source=COMAER, allocated=400),
         entry(2, source=DIRSA, allocated=None),
         entry(3, source=DIRSA, currency="USD", allocated=0),
         entry(4, source=DIRSA, currency="EUR", allocated=1000),
@@ -508,13 +508,13 @@ def test_indicator_values_context_dimension_and_order() -> None:
     executions = [spent(1, date(2026, 3, 1), 100), spent(4, date(2026, 3, 1), 250)]
     values = budget.indicator_values(entries, executions, date(2026, 6, 1))
     assert [(v.code, v.dimension, v.value) for v in values] == [
+        ("BUD_EXEC_RATE", "currency=BRL;source=COMAER", 0.25),
         ("BUD_EXEC_RATE", "currency=BRL;source=DIRSA", None),
-        ("BUD_EXEC_RATE", "currency=BRL;source=OPCW_TRUST_FUND", 0.25),
         ("BUD_EXEC_RATE", "currency=EUR;source=DIRSA", 0.25),
         ("BUD_EXEC_RATE", "currency=USD;source=DIRSA", None),
     ]
-    assert values[0].context is None
-    assert values[1].context == {"allocated_minor": 400.0, "executed_minor": 100.0}
+    assert values[0].context == {"allocated_minor": 400.0, "executed_minor": 100.0}
+    assert values[1].context is None
     assert values[3].context == {"allocated_minor": 0.0, "executed_minor": 0.0}
     for value in values:
         build_registry().get("BUD_EXEC_RATE").validate_dimension(value.dimension)

@@ -267,7 +267,7 @@ def _seed_exercises(conn: DatabaseConnection) -> None:
 def _seed_budget(conn: DatabaseConnection) -> None:
     budget = BudgetService(conn, CLOCK)
     dirsa = _source_id(conn, "DIRSA")
-    opcw = _source_id(conn, "OPCW_TRUST_FUND")
+    comaer = _source_id(conn, "COMAER")
     custom = budget.create_source(SourceInput(code="DEMO-SRC", label_pt_br="Fonte DEMO"))
     en1 = budget.create_entry(
         EntryInput(
@@ -283,7 +283,7 @@ def _seed_budget(conn: DatabaseConnection) -> None:
         EntryInput(fiscal_year=2024, source_id=dirsa, currency="USD", allocated_minor=2000)
     )
     en3 = budget.create_entry(
-        EntryInput(fiscal_year=2025, source_id=opcw, currency="EUR", allocated_minor=None)
+        EntryInput(fiscal_year=2025, source_id=comaer, currency="EUR", allocated_minor=None)
     )
     # The service refuses amounts above 2**53 - 1; the exporter must still keep them exact.
     budget_repo.insert_entry(

@@ -79,7 +79,7 @@ ASSET_TYPE_KEYS: Final[dict[str, MessageKey]] = {
 
 #: The built-in funding sources that have a translated name (``DIRSA`` is a proper name).
 FUNDING_SOURCE_KEYS: Final[dict[str, MessageKey]] = {
-    "OPCW_TRUST_FUND": ("Budget", "OPCW Trust Fund"),
+    "COMAER": ("Budget", "Air Force Command"),
 }
 
 

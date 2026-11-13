@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Translated labels of the codes the budget UI can show (PLAN.md section 6, T5.4).
 
-``DIRSA`` is a proper name, shown unchanged (data). ``OPCW_TRUST_FUND`` is named in each language.
-User-defined sources show their own labels (``source_label`` of the service: the language asked
-for, then pt-BR, then en-US, then the code). Every error code of the budget service, of the shared
-service errors, of the configuration service and every ``FormatError`` code has one explicit
-entry; an unknown code is shown as itself, never as an exception.
+``DIRSA`` is a proper name, shown unchanged (data). ``COMAER`` (Air Force Command) is named in
+each language. User-defined sources show their own labels (``source_label`` of the service: the
+language asked for, then pt-BR, then en-US, then the code). Every error code of the budget service,
+of the shared service errors, of the configuration service and every ``FormatError`` code has one
+explicit entry; an unknown code is shown as itself, never as an exception.
 """
 
 import re
@@ -76,7 +76,7 @@ def fill_placeholders(text: str, *values: str) -> str:
 
 _SOURCE_LABELS: dict[str, Callable[[], str]] = {
     "DIRSA": lambda: "DIRSA",
-    "OPCW_TRUST_FUND": lambda: QCoreApplication.translate("Budget", "OPCW Trust Fund"),
+    "COMAER": lambda: QCoreApplication.translate("Budget", "Air Force Command"),
 }
 
 #: The codes of the built-in funding sources (their names come from this module).

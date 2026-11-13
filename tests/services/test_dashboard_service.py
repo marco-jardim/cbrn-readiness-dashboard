@@ -127,7 +127,7 @@ def _seed(stack: Stack, conn: DatabaseConnection) -> None:
 
     Budget: FY2025 DIRSA/BRL 80 000 allocated, 60 000 executed on 2025-03-01 and 10 000 on
     2025-09-01; FY2026 DIRSA/BRL 100 000 (25 000 on 2026-01-10 and 40 000 on 2026-04-10),
-    OPCW_TRUST_FUND/BRL 50 000 (10 000 on 2026-02-01) and DIRSA/USD 20 000 (5 000 on 2026-03-01).
+    COMAER/BRL 50 000 (10 000 on 2026-02-01) and DIRSA/USD 20 000 (5 000 on 2026-03-01).
     All amounts in minor units.
     """
     people = stack.personnel
@@ -197,7 +197,7 @@ def _seed(stack: Stack, conn: DatabaseConnection) -> None:
 
     budget = stack.budget
     dirsa = _source_id(conn, "DIRSA")
-    opcw = _source_id(conn, "OPCW_TRUST_FUND")
+    comaer = _source_id(conn, "COMAER")
     last_year = budget.create_entry(
         EntryInput(fiscal_year=2025, source_id=dirsa, allocated_minor=80_000, currency="BRL")
     )
@@ -209,7 +209,7 @@ def _seed(stack: Stack, conn: DatabaseConnection) -> None:
     budget.add_execution(stack.brl_dirsa_entry, "2026-01-10", 25_000)
     budget.add_execution(stack.brl_dirsa_entry, "2026-04-10", 40_000)
     other = budget.create_entry(
-        EntryInput(fiscal_year=2026, source_id=opcw, allocated_minor=50_000, currency="BRL")
+        EntryInput(fiscal_year=2026, source_id=comaer, allocated_minor=50_000, currency="BRL")
     )
     budget.add_execution(other, "2026-02-01", 10_000)
     dollars = budget.create_entry(
@@ -282,8 +282,8 @@ EXPECTED_ROWS_AS_OF: list[Row] = [
     ("EX_DAYS_SINCE_LAST", "kind=CBRAMED", 181.0, NT),
     ("EX_DAYS_SINCE_LAST", "kind=EXBRAMED", None, ND),
     ("EX_DAYS_SINCE_LAST", "kind=OTHER", None, ND),
+    ("BUD_EXEC_RATE", "currency=BRL;source=COMAER", 0.2, NT),
     ("BUD_EXEC_RATE", "currency=BRL;source=DIRSA", 0.25, OK),
-    ("BUD_EXEC_RATE", "currency=BRL;source=OPCW_TRUST_FUND", 0.2, NT),
     ("BUD_EXEC_RATE", "currency=USD;source=DIRSA", 0.25, NT),
 ]
 
@@ -345,10 +345,10 @@ CHARTS_AS_OF: list[ChartSpec] = [
     ),
     ChartSpec(
         key="budget_BRL",
-        categories=("DIRSA", "OPCW_TRUST_FUND"),
+        categories=("COMAER", "DIRSA"),
         series=(
-            SeriesSpec("allocated", (1000.0, 500.0)),
-            SeriesSpec("executed", (250.0, 100.0)),
+            SeriesSpec("allocated", (500.0, 1000.0)),
+            SeriesSpec("executed", (100.0, 250.0)),
         ),
         unit=UnitKind.CURRENCY,
         parameters={"currency": "BRL", "fiscal_year": "2026"},
@@ -527,7 +527,7 @@ def test_budget_tiles_keep_the_exact_minor_units_in_their_context(stack: Stack) 
     contexts = {t.dimension: dict(t.context) for t in data.tiles if t.code == "BUD_EXEC_RATE"}
     assert contexts == {
         "currency=BRL;source=DIRSA": {"allocated_minor": 100_000.0, "executed_minor": 25_000.0},
-        "currency=BRL;source=OPCW_TRUST_FUND": {
+        "currency=BRL;source=COMAER": {
             "allocated_minor": 50_000.0,
             "executed_minor": 10_000.0,
         },
@@ -568,7 +568,7 @@ def test_budget_charts_are_one_per_currency_and_as_of_the_date(stack: Stack) -> 
         assert chart.parameters["currency"] == currency
         assert chart.unit is UnitKind.CURRENCY
     # the 40 000 executed on 2026-04-10 (after AS_OF) is not in the DIRSA / BRL bar: 250.00 only
-    assert charts["budget_BRL"].series[1] == SeriesSpec("executed", (250.0, 100.0))
+    assert charts["budget_BRL"].series[1] == SeriesSpec("executed", (100.0, 250.0))
     # no USD entry in 2025: no USD chart then
     assert "budget_USD" not in {c.key for c in stack.dashboard.data(EARLIER).charts}
 
@@ -637,7 +637,7 @@ def test_nothing_is_cached_a_new_record_shows_on_the_next_call(stack: Stack) -> 
     after = stack.dashboard.data(AS_OF)
     assert after != before
     [chart] = [c for c in after.charts if c.key == "budget_BRL"]
-    assert chart.series[1] == SeriesSpec("executed", (300.0, 100.0))
+    assert chart.series[1] == SeriesSpec("executed", (100.0, 300.0))
     assert _tile(after, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA").value == pytest.approx(0.3)
 
 

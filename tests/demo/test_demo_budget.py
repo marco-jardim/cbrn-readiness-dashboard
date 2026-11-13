@@ -99,7 +99,7 @@ def _dimension(source: str, currency: str) -> str:
 
 def test_entries_exist_for_four_fiscal_years_for_both_built_in_sources(opener: Opener) -> None:
     entries = _entries(opener())
-    for source in ("DIRSA", "OPCW_TRUST_FUND"):
+    for source in ("DIRSA", "COMAER"):
         years = {entry.fiscal_year for entry in entries if entry.source_code == source}
         assert years == {2023, 2024, 2025, 2026}
     demo_years = {
@@ -138,8 +138,8 @@ def test_exactly_one_user_defined_source_with_a_demo_code_and_labels(opener: Ope
         assert label is not None
         assert label.startswith("DEMO")
     assert {s.code for s in service.list_sources(include_inactive=True) if s.built_in} == {
+        "COMAER",
         "DIRSA",
-        "OPCW_TRUST_FUND",
     }
 
 
@@ -162,14 +162,12 @@ def test_a_second_currency_is_kept_apart_by_the_totals(opener: Opener) -> None:
     rows = [
         total
         for total in service.totals(YEAR_END)
-        if total.source_code == "OPCW_TRUST_FUND" and total.fiscal_year == 2025
+        if total.source_code == "COMAER" and total.fiscal_year == 2025
     ]
     assert sorted(total.currency for total in rows) == ["BRL", "USD"]
     by_currency = {total.currency: total for total in rows}
     brl_entries = [
-        e
-        for e in service.list_entries(2025)
-        if e.source_code == "OPCW_TRUST_FUND" and e.currency == "BRL"
+        e for e in service.list_entries(2025) if e.source_code == "COMAER" and e.currency == "BRL"
     ]
     assert by_currency["BRL"].allocated_minor == sum(e.allocated_minor or 0 for e in brl_entries)
 

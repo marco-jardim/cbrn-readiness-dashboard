@@ -112,7 +112,7 @@ EXPECTED_STATUSES: tuple[tuple[str, str, IndicatorStatus], ...] = (
     ("EX_LAST_PARTICIPANTS", "kind=OTHER", WARN),
     ("EX_DAYS_SINCE_LAST", "kind=CBRAMED", OK),
     ("EX_DAYS_SINCE_LAST", "kind=OTHER", CRIT),
-    ("BUD_EXEC_RATE", "currency=USD;source=OPCW_TRUST_FUND", OK),
+    ("BUD_EXEC_RATE", "currency=USD;source=COMAER", OK),
     # No target (P03): the application invents no standard.
     ("PERS_CERT_EXPIRING", "level=B", NO_TARGET),
     ("INFRA_AVAILABLE", "type=neg_pressure_filtration", NO_TARGET),
@@ -275,7 +275,7 @@ def test_there_are_exactly_the_planned_targets_and_all_are_enabled(demo: Demo) -
 
 
 def test_a_stored_budget_target_is_a_year_end_ratio_within_zero_and_one(demo: Demo) -> None:
-    for dimension in (DIRSA[1], "currency=USD;source=OPCW_TRUST_FUND"):
+    for dimension in (DIRSA[1], "currency=USD;source=COMAER"):
         target = demo.indicators.get_target("BUD_EXEC_RATE", dimension)
         assert target.warning_value is not None
         assert target.critical_value is not None
@@ -690,7 +690,7 @@ def test_every_code_quoted_in_the_walkthrough_is_a_known_code(demo: Demo) -> Non
         if re.fullmatch(r"[A-Z][A-Z0-9]*_[A-Z0-9_]+", token)
     ]
     assert codes
-    assert [code for code in codes if code not in known and code != "OPCW_TRUST_FUND"] == []
+    assert [code for code in codes if code not in known] == []
 
 
 # The two tables of the walkthrough are tied to the dataset: they are parsed and compared with the

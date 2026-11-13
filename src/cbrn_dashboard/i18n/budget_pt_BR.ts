@@ -4,8 +4,8 @@
 <context>
     <name>Budget</name>
     <message>
-        <source>OPCW Trust Fund</source>
-        <translation type="unfinished">Trust Fund da OPAQ</translation>
+        <source>Air Force Command</source>
+        <translation type="unfinished">Comando da Aeronáutica</translation>
     </message>
     <message>
         <source>This code is already in use.</source>

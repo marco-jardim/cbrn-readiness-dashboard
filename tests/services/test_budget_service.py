@@ -119,8 +119,9 @@ def _entities(rows: list[dict[str, object]]) -> Counter[tuple[object, object]]:
 
 def test_built_in_sources_exist_without_labels(service: BudgetService) -> None:
     sources = {source.code: source for source in service.list_sources(include_inactive=True)}
-    assert {"DIRSA", "OPCW_TRUST_FUND"} <= set(sources)
-    for code in ("DIRSA", "OPCW_TRUST_FUND"):
+    assert {"DIRSA", "COMAER"} <= set(sources)
+    assert "OPCW_TRUST_FUND" not in sources
+    for code in ("DIRSA", "COMAER"):
         source = sources[code]
         assert source.built_in
         assert source.active
@@ -219,20 +220,20 @@ def test_built_in_source_can_be_deactivated_but_not_deleted(
 def test_built_in_source_code_cannot_change_and_labels_stay_empty(
     service: BudgetService, db: DatabaseConnection, change_log_rows: ChangeLogRows
 ) -> None:
-    opcw = _sid(service, "OPCW_TRUST_FUND")
+    comaer = _sid(service, "COMAER")
     state = _state(db, change_log_rows)
-    error = _error(lambda: service.update_source(opcw, SourceInput("OPCW_RENAMED", "Nome")))
+    error = _error(lambda: service.update_source(comaer, SourceInput("COMAER_RENAMED", "Nome")))
     assert (error.code, error.field) == (BUILT_IN_SOURCE, "code")
     assert _state(db, change_log_rows) == state
 
     # labels sent for a built-in source are ignored: nothing changes, nothing is logged
-    service.update_source(opcw, SourceInput("OPCW_TRUST_FUND", "Nome", "Name", "Nombre"))
+    service.update_source(comaer, SourceInput("COMAER", "Nome", "Name", "Nombre"))
     assert _state(db, change_log_rows) == state
     # the active flag can change, in both directions
-    service.update_source(opcw, SourceInput("OPCW_TRUST_FUND", active=False))
-    assert not service.get_source(opcw).active
-    service.update_source(opcw, SourceInput("OPCW_TRUST_FUND", active=True))
-    source = service.get_source(opcw)
+    service.update_source(comaer, SourceInput("COMAER", active=False))
+    assert not service.get_source(comaer).active
+    service.update_source(comaer, SourceInput("COMAER", active=True))
+    source = service.get_source(comaer)
     assert source.active
     assert source.built_in
     assert source.label_pt_br is None
@@ -458,7 +459,7 @@ def test_duplicate_entry_is_refused(
     # any part of the key differs: allowed
     _new_entry(service, source_id, description="Custeio", currency="USD")
     _new_entry(service, source_id, description="Custeio", fiscal_year=2027)
-    _new_entry(service, _sid(service, "OPCW_TRUST_FUND"), description="Custeio")
+    _new_entry(service, _sid(service, "COMAER"), description="Custeio")
     _new_entry(service, source_id, description="Capital")
 
     # an update may not collide with another entry, but may keep its own key
@@ -528,10 +529,10 @@ def test_delete_entry_logs_the_entry_and_each_execution_row(
 
 def test_list_entries_filters_by_year_and_orders_them(service: BudgetService) -> None:
     dirsa = _sid(service, "DIRSA")
-    opcw = _sid(service, "OPCW_TRUST_FUND")
-    late = _new_entry(service, opcw, fiscal_year=2027)
-    second = _new_entry(service, opcw, fiscal_year=2026, currency="USD")
-    first = _new_entry(service, dirsa, fiscal_year=2026)
+    comaer = _sid(service, "COMAER")
+    late = _new_entry(service, comaer, fiscal_year=2027)
+    second = _new_entry(service, dirsa, fiscal_year=2026, currency="USD")
+    first = _new_entry(service, comaer, fiscal_year=2026)
     service.add_execution(first, "2026-05-01", 10)
     service.add_execution(first, "2026-01-01", 20)
     assert [e.id for e in service.list_entries()] == [first, second, late]
@@ -889,14 +890,14 @@ def _build_fixture(service: BudgetService) -> _Fixture:
     Returns the same data as DOMAIN objects, written by hand from the specification below.
     """
     _demo_source(service)
-    dirsa, opcw, demo = (_sid(service, code) for code in ("DIRSA", "OPCW_TRUST_FUND", SRC_A))
+    dirsa, comaer, demo = (_sid(service, code) for code in ("DIRSA", "COMAER", SRC_A))
     # (year, source id, source code, currency, allocated, description)
     specs: list[tuple[int, int, str, str, int | None, str]] = [
         (2025, dirsa, "DIRSA", "BRL", 1_000_000, ""),
         (2026, dirsa, "DIRSA", "BRL", 5_000_000, "Custeio"),
         (2026, dirsa, "DIRSA", "BRL", 2_500_000, "Capital"),
         (2026, demo, SRC_A, "USD", None, ""),
-        (2026, opcw, "OPCW_TRUST_FUND", "USD", 800_000, ""),
+        (2026, comaer, "COMAER", "USD", 800_000, ""),
         (2027, demo, SRC_A, "EUR", 300_000, ""),
         (2026, demo, SRC_A, "BRL", 0, ""),
     ]
@@ -959,7 +960,7 @@ def test_fixture_results_are_not_trivial(service: BudgetService) -> None:
     zero = groups[(2026, SRC_A, "BRL")]
     assert (zero.allocated_minor, zero.rate) == (0, None)
     assert groups[(2027, SRC_A, "EUR")].executed_minor == 0  # dated after AS_OF
-    assert groups[(2026, "OPCW_TRUST_FUND", "USD")].executed_minor == 200_000
+    assert groups[(2026, "COMAER", "USD")].executed_minor == 200_000
     # currencies are never added together
     assert {t.currency for t in service.totals_for_year(2026, AS_OF)} == {"BRL", "USD"}
     values = service.indicator_values(AS_OF)

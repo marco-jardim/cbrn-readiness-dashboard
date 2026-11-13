@@ -5,7 +5,7 @@
 | Repository | `marco-jardim/cbrn-readiness-dashboard` (public) |
 | Licence | GPL-3.0-or-later |
 | Plan status | Draft for review by the project owner and the hospital's CBRN defence committee. No code yet. |
-| Requirements source | Appendix A of the thesis, product "PTT 2" (appendix source lines 55–95, in Portuguese). `Lnn` = line *nn* of that source. The source is not in this repository, so the R01–R36 quotes and the `Lnn` references cannot be checked from the repository alone (Q18). |
+| Requirements source | Appendix A of the thesis, product "PTT 2" (appendix source lines 55–95, in Portuguese). `Lnn` = line *nn* of that source. The source is not in this repository (the thesis is unpublished), so the R01–R36 quotes and the `Lnn` references cannot be checked from the repository alone. They were checked against `postextual/apendice-a.tex` of the private thesis repository, commit `f8b1d65a76b53019573fb789c09d3d938dbffb59` (2026-11-13), SHA-256 `fbe30bc40ff6ab5ebace449dd3309e2dc2ff8f216d4ad9048c77a83b9c6661c1` (Q18). |
 | Date | 2026-11-12 |
 
 Contents: 1 Summary · 2 Scope and non-goals · 3 Requirements · 4 Architecture and stack decisions · 5 Data model · 6 Internationalisation · 7 Security and privacy · 8 Packaging and distribution · 9 Testing strategy · 10 Phases and tasks · 11 Risks and mitigations · 12 Open questions for the author · 13 Definition of done for version 1.0
@@ -76,7 +76,8 @@ Labels used in this plan:
 | EPI / PPE levels A, B, C | Protection levels named in L74. The app records them; it does not define them. |
 | CBRAMED, EXBRAMED | The course and exercise series whose history the exercises module records (L78). |
 | DIRSA | The Air Force health directorate. It is both a report recipient and a funding source (L65, L80). |
-| OPAQ / OPCW | Organisation for the Prohibition of Chemical Weapons. Its Trust Fund is a funding source (L80); its Technical Secretariat receives anonymised reports (L69). |
+| OPAQ / OPCW | Organisation for the Prohibition of Chemical Weapons. Its Trust Fund receives the contribution of Brazil; it is not a funding source of the hospital. Its Technical Secretariat receives anonymised reports (L69). |
+| COMAER | Comando da Aeronáutica (Air Force Command), a built-in funding source together with DIRSA (L80). |
 | QBRN | Portuguese and Spanish for CBRN. |
 | Today | The local calendar date on the workstation, defined in `clock.py`. Day and month boundaries (daily backup, monthly snapshot) use it; stored timestamps stay UTC. |
 | As-of date | The date for which every indicator and alert is computed. Defaults to today (D13). |
@@ -87,7 +88,7 @@ Labels used in this plan:
 
 ### 3.1 Explicit requirements from Appendix A (PTT 2) and traceability
 
-The appendix defines **five modules**: personnel (L74), infrastructure (L76), exercises (L78), budget (L80) and alerts (L82). Phases are listed in §10; "—" means the item is not a software feature. The Phase column of this table is authoritative; the phase introductions in §10.3 list only the primary requirements of each phase. The appendix source is not in the repository, so the quotes and `Lnn` references below cannot be verified from the repository alone; Q18 asks the author to publish the excerpt or record the source version and hash.
+The appendix defines **five modules**: personnel (L74), infrastructure (L76), exercises (L78), budget (L80) and alerts (L82). Phases are listed in §10; "—" means the item is not a software feature. The Phase column of this table is authoritative; the phase introductions in §10.3 list only the primary requirements of each phase. The appendix source is not in the repository, so the quotes and `Lnn` references below cannot be verified from the repository alone; the source version and hash are recorded in the header and in Q18.
 
 | ID | Appendix statement (line) | Feature in this plan | Phase |
 |---|---|---|---|
@@ -114,7 +115,7 @@ The appendix defines **five modules**: personnel (L74), infrastructure (L76), ex
 | R21 | "histórico do CBRAMED e do EXBRAMED" (L78) | Register of editions | P4 |
 | R22 | "número de participantes e países representados" (L78) | Participant count and country list per edition | P4 |
 | R23 | "resultados agregados de avaliação" (L78) | Aggregated evaluation results per edition (configurable metrics) | P4 |
-| R24 | "execução financeira anual por fonte (DIRSA, Trust Fund da OPAQ)" (L80) | Annual budget entries per source; execution rate | P5 |
+| R24 | "execução financeira anual por fonte (Comando da Aeronáutica, DIRSA)" (L80; revised in thesis commit f8b1d65, 2026-11-13) | Annual budget entries per source; execution rate | P5 |
 | R25 | "certificações a vencer" (L82) | Certificate expiry alerts | P6 |
 | R26 | "manutenções pendentes" (L82) | Maintenance due and overdue alerts | P6 |
 | R27 | "indicadores fora do padrão esperado de prontidão" (L82) | Configurable indicator targets; out-of-target alerts | P6 |
@@ -601,7 +602,7 @@ CREATE TABLE evaluation_result (
 
 -- 0005_budget.sql
 CREATE TABLE funding_source (
-  id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE,   -- seeded: DIRSA, OPCW_TRUST_FUND (L80)
+  id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE,   -- seeded: DIRSA, COMAER (0005 + 0008) (L80)
   built_in INTEGER NOT NULL DEFAULT 0,
   label_pt_br TEXT, label_en_us TEXT, label_es_es TEXT, active INTEGER NOT NULL DEFAULT 1
 ) STRICT;
@@ -1461,7 +1462,7 @@ This phase covers R10, R24 and R36.
 - Files: `storage/migrations/0005_budget.sql`, `tests/storage/test_schema_budget.py`.
 - Work:
   - Create the tables `funding_source`, `budget_entry` and `budget_execution` as in §5.2.
-  - Seed the built-in sources `DIRSA` and `OPCW_TRUST_FUND`, as named in L80 (D16). They have `built_in = 1` and empty label columns (their names come from `labels.py`).
+  - Seed the built-in sources `DIRSA` and `OPCW_TRUST_FUND`, as named in L80 (D16). They have `built_in = 1` and empty label columns (their names come from `labels.py`). Note: the `OPCW_TRUST_FUND` seed is superseded by migration 0008 (`0008_budget_sources_r24.sql`, R24 revised in thesis commit f8b1d65): the built-in sources are now `DIRSA` and `COMAER`, and an `OPCW_TRUST_FUND` that has entries is kept as an inactive user-defined source.
 - Accept:
   - both built-in sources exist after the migration;
   - a `currency` whose length is not 3 is rejected;
@@ -2326,7 +2327,7 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Confirms: A07, A13 and the country list (T4.2). Breakdowns would be deferred item X10.
 - Until answered: the metric list is empty and user-defined, the kinds are CBRAMED, EXBRAMED and other, and only a total count is recorded.
 
-**Q8 — Budget.** Which execution stages should be tracked? In which currencies are the DIRSA and OPCW Trust Fund amounts recorded, and is conversion needed? Is the fiscal year the calendar year? Are there other funding sources? Should the execution target be pro-rated over the fiscal year (the working default, P08), and are BRL, USD and EUR enough as currencies?
+**Q8 — Budget.** Which execution stages should be tracked? In which currencies are the Comando da Aeronáutica (COMAER) and DIRSA amounts recorded, and is conversion needed? Is the fiscal year the calendar year? Are there other funding sources? Should the execution target be pro-rated over the fiscal year (the working default, P08), and are BRL, USD and EUR enough as currencies?
 - Answered by: the committee.
 - Confirms: A08, P08 and the currency allow-list (D15). More stages or currency conversion would need new tasks.
 - Until answered: an allocated amount and dated execution rows are tracked, the default currency is BRL, currencies are never mixed or converted, the fiscal year is the calendar year, and the execution target is pro-rated linearly.
@@ -2340,7 +2341,7 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Answered by: the committee.
 - Confirms: A11 (threshold 5) and the report sections. XLSX would be deferred item X3.
 - Until answered: the two PDF variants of T8.5 and T8.6 are produced in the chosen UI language, personnel-derived counts below 5 (zeros included) are suppressed with secondary suppression, and differencing is a documented residual risk.
-- Also recorded as residual (QA findings P8-01, P8-16): the anonymised variant prints the operator-entered codes as they are (funding-source, asset-type and edition codes), and the built-in source `DIRSA` by its code, as a proper name; and the undeclared relation `active_staff - valid:<level>` can reveal a hidden expired count (T8.5).
+- Also recorded as residual (QA findings P8-01, P8-16): the anonymised variant prints the operator-entered codes as they are (funding-source, asset-type and edition codes), and the built-in source `DIRSA` by its code, as a proper name (the built-in source `COMAER` is printed by its translated name); and the undeclared relation `active_staff - valid:<level>` can reveal a hidden expired count (T8.5).
 
 **Q11 — Information security (L91).** Which institutional rules apply to this data? In particular: is encryption of the database file itself required, in addition to full-disk encryption of the workstation? Where may backups be stored? Is there a passphrase policy? Is Argon2id required instead of scrypt for the backup key? After how many days should the reminder for an old encrypted backup appear (P09)? Gates the entry of real data, together with Q19, Q4 and Q13.
 - Answered by: the committee.
@@ -2378,6 +2379,7 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Until answered: the names are empty, and the header shows only the report title, the as-of date and the app version.
 
 **Q18 — Requirements source.** The appendix source is not in the repository, so the R01–R36 quotes and the `Lnn` references of §3.1 cannot be checked from the repository. Should the author either publish the L55–L95 excerpt as `docs/requirements-source.pt-BR.md`, or record the thesis version and the SHA-256 of the source in the header of this plan?
+- Status: Answered and applied: the source is `postextual/apendice-a.tex` of the private thesis repository, commit `f8b1d65a76b53019573fb789c09d3d938dbffb59` (2026-11-13), SHA-256 `fbe30bc40ff6ab5ebace449dd3309e2dc2ff8f216d4ad9048c77a83b9c6661c1`; the excerpt is not copied into this repository because the thesis is unpublished; all 36 quotes R01–R36 and their line numbers were checked against it.
 - Answered by: the thesis author.
 - Confirms: the traceability table of §3.1.
 - Until answered: the quotes and line references are unverifiable from the repository; the application is not affected.

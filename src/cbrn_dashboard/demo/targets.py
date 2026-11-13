@@ -102,7 +102,7 @@ TARGET_PLAN: tuple[TargetWish, ...] = (
     # The two groups with a low executed share (the budget generator's first band, 4 to 12 %).
     # DIRSA is CRITICAL only while that share is at or below the elapsed fraction of the year.
     TargetWish("BUD_EXEC_RATE", "currency=BRL;source=DIRSA", _CRITICAL),
-    TargetWish("BUD_EXEC_RATE", "currency=USD;source=OPCW_TRUST_FUND", _OK),
+    TargetWish("BUD_EXEC_RATE", "currency=USD;source=COMAER", _OK),
 )
 
 

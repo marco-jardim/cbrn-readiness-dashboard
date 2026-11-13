@@ -263,6 +263,7 @@ The schema is a sequence of numbered SQL files in `storage/migrations/`, loaded 
 | `0005_budget.sql` | budget tables |
 | `0006_indicator_targets.sql` | indicator targets |
 | `0007_snapshots.sql` | readiness snapshots |
+| `0008_budget_sources_r24.sql` | built-in funding sources of the revised R24: COMAER and DIRSA; the OPCW Trust Fund source is no longer built in |
 
 The rules (from `storage/migrate.py` and `storage/migrations/README.md`):
 

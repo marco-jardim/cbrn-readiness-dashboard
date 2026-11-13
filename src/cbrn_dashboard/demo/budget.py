@@ -11,7 +11,7 @@ validated and written to the change log with the operator label ``DEMO``):
 
 * one user-defined funding source, ``DEMO-SRC-A``, next to the two built-in ones;
 * budget entries for the current fiscal year of ``ctx.today`` and the three before it, for both
-  built-in sources and the DEMO source; the OPCW trust fund has entries in BRL AND in USD, so the
+  built-in sources and the DEMO source; COMAER has entries in BRL AND in USD, so the
   totals keep two currencies apart for the same source and year (D15);
 * several DATED execution rows per entry, spread over its fiscal year. In the current fiscal year
   all but one row are dated on or before ``ctx.today``; the last one is dated after it, so a reading
@@ -70,8 +70,8 @@ class _Plan:
 # The order is the creation order. Descriptions are unique within (source, currency).
 _PLAN: tuple[_Plan, ...] = (
     _Plan("DIRSA", "BRL", "DEMO - DIRSA annual allocation"),
-    _Plan("OPCW_TRUST_FUND", "BRL", "DEMO - local counterpart"),
-    _Plan("OPCW_TRUST_FUND", "USD", "DEMO - trust fund contribution"),
+    _Plan("COMAER", "BRL", "DEMO - COMAER allocation"),
+    _Plan("COMAER", "USD", "DEMO - COMAER foreign purchases"),
     _Plan(DEMO_SOURCE_CODE, "BRL", "DEMO - equipment"),
     _Plan(DEMO_SOURCE_CODE, "BRL", "DEMO - training"),
     _Plan(
@@ -130,7 +130,7 @@ def generate(ctx: DemoContext) -> None:
         )
     )
     source_ids: dict[str, int] = {}
-    for code in ("DIRSA", "OPCW_TRUST_FUND", DEMO_SOURCE_CODE):
+    for code in ("DIRSA", "COMAER", DEMO_SOURCE_CODE):
         source = service.get_source_by_code(code)
         if source is None:  # pragma: no cover - the built-in sources exist after migration
             msg = f"funding source {code} is missing"

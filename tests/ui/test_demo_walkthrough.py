@@ -74,7 +74,7 @@ TILES = (
     ("PERS_CERT_VALID", "level=C", IndicatorStatus.CRITICAL),
     ("INFRA_MAINT_OVERDUE", "type=bed", IndicatorStatus.CRITICAL),
     ("BUD_EXEC_RATE", "currency=BRL;source=DIRSA", IndicatorStatus.CRITICAL),
-    ("BUD_EXEC_RATE", "currency=USD;source=OPCW_TRUST_FUND", IndicatorStatus.OK),
+    ("BUD_EXEC_RATE", "currency=USD;source=COMAER", IndicatorStatus.OK),
     ("PERS_CERT_EXPIRING", "level=B", IndicatorStatus.NO_TARGET),
     ("EX_LAST_PARTICIPANTS", "kind=EXBRAMED", IndicatorStatus.NO_DATA),
 )
