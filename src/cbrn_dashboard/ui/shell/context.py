@@ -4,7 +4,8 @@
 It holds the open database connection, the clock, the data location, the prompts interface, the
 preferences, the translator manager and the module services; the mode flags (read-only, demo,
 suspect clock); the as-of date with its change signal (D13); a ``data_changed`` signal for pages
-that must refresh; and the registry of edit actions that read-only mode disables.
+that must refresh; the backup-reminder flag with its change signal (T7.5); and the registry of
+edit actions that read-only mode disables.
 
 ``is_demo`` is read from ``app_meta.is_demo`` of the OPEN database, never from the command line
 (D25). ``ui/`` does not import ``sqlite3``: the connection is typed through
@@ -32,6 +33,8 @@ from cbrn_dashboard.services.exercises import ExercisesService
 from cbrn_dashboard.services.indicators import IndicatorService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
+from cbrn_dashboard.services.snapshots import SnapshotService
+from cbrn_dashboard.services.validation_export import ValidationExportService
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
@@ -58,6 +61,8 @@ class Services:
     alerts: AlertService | None = None
     config: ConfigService | None = None
     dashboard: DashboardService | None = None
+    snapshots: SnapshotService | None = None
+    validation_export: ValidationExportService | None = None
 
 
 def build_services(
@@ -91,6 +96,12 @@ def build_services(
         exercises=exercises,
         budget=budget,
     )
+    snapshots = SnapshotService(
+        conn, clock, operator, indicators=indicators, infrastructure=infrastructure
+    )
+    validation_export = ValidationExportService(
+        conn, clock, snapshots=snapshots, exercises=exercises, indicators=indicators
+    )
     return Services(
         personnel=personnel,
         infrastructure=infrastructure,
@@ -100,6 +111,8 @@ def build_services(
         alerts=alerts,
         config=ConfigService(conn, clock, operator),
         dashboard=dashboard,
+        snapshots=snapshots,
+        validation_export=validation_export,
     )
 
 
@@ -123,6 +136,8 @@ class AppContext(QObject):
     as_of_changed = Signal(object)
     #: Emitted by :meth:`notify_data_changed` after a page stored a change.
     data_changed = Signal()
+    #: Emitted with the new value of :attr:`backup_reminder_due` whenever it changes (T7.5).
+    backup_reminder_changed = Signal(bool)
 
     def __init__(
         self,
@@ -147,6 +162,7 @@ class AppContext(QObject):
         self.read_only: bool = read_only or (conn is not None and conn.read_only)
         self.is_demo: bool = conn is not None and app_meta.read_is_demo(conn)
         self.clock_suspect: bool = clock_suspect
+        self.backup_reminder_due: bool = False
         self._operator_label = ""
         # D13: the as-of date defaults to today at start-up and then stays PINNED until changed
         # (so the context and the toolbar selector cannot disagree after midnight).
@@ -155,6 +171,21 @@ class AppContext(QObject):
         self._enforcing = False
         self._read_only_guard = _ReadOnlyGuard(self)
         self.services: Services = build_services(conn, clock, self.operator_label)
+
+    # ------------------------------------------------------------------ connection
+
+    @property
+    def conn(self) -> DatabaseConnection | None:
+        """The open database connection; ``None`` once it was closed."""
+        return self._conn
+
+    @conn.setter
+    def conn(self, value: DatabaseConnection | None) -> None:
+        self._conn = value
+        if value is None:
+            # The services work over the old connection: after it is closed they would raise on
+            # every read (a page re-reading on a posted language change, for one).
+            self.services = Services()
 
     # ------------------------------------------------------------------ operator label
 
@@ -197,6 +228,15 @@ class AppContext(QObject):
     def notify_data_changed(self) -> None:
         """Tell the pages that stored data changed."""
         self.data_changed.emit()
+
+    # ------------------------------------------------------------------ backup reminder
+
+    def set_backup_reminder(self, due: bool) -> None:
+        """Say whether the last encrypted backup is older than P09; emits only on a change."""
+        if due == self.backup_reminder_due:
+            return
+        self.backup_reminder_due = due
+        self.backup_reminder_changed.emit(due)
 
     # ------------------------------------------------------------------ edit actions
 

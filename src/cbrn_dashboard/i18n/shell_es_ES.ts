@@ -83,6 +83,10 @@
         <translation type="unfinished">El reloj del equipo parece incorrecto: se omiten las instantáneas y la rotación de copias de seguridad.</translation>
     </message>
     <message>
+        <source>The last encrypted backup is old or missing: make a new one and keep it on separate media.</source>
+        <translation type="unfinished">La última copia de seguridad cifrada es antigua o no existe: haga una nueva y guárdela en un medio separado.</translation>
+    </message>
+    <message>
         <source>The saved preferences could not be read and were reset to their defaults.</source>
         <translation type="unfinished">No se pudieron leer las preferencias guardadas y se restablecieron a sus valores predeterminados.</translation>
     </message>
@@ -125,6 +129,22 @@
     <message>
         <source>The data folder is not writable, so the demo database cannot be created.</source>
         <translation type="unfinished">La carpeta de datos no se puede escribir, por lo que no se puede crear la base de datos de demostración.</translation>
+    </message>
+    <message>
+        <source>Choose the data folder</source>
+        <translation type="unfinished">Elegir la carpeta de datos</translation>
+    </message>
+    <message>
+        <source>Do you want to choose another folder for the data? The choice is remembered in your user profile for the next start.</source>
+        <translation type="unfinished">¿Desea elegir otra carpeta para los datos? La elección se recuerda en su perfil de usuario para el próximo inicio.</translation>
+    </message>
+    <message>
+        <source>The chosen folder is not writable and has no database. Choose another one.</source>
+        <translation type="unfinished">La carpeta elegida no se puede escribir y no tiene base de datos. Elija otra.</translation>
+    </message>
+    <message>
+        <source>The choice could not be remembered, so it is used for this session only.</source>
+        <translation type="unfinished">No se pudo recordar la elección, por lo que se usa solo en esta sesión.</translation>
     </message>
     <message>
         <source>Another instance is already using this data folder. Close it and start again.</source>
@@ -195,6 +215,30 @@
         <source>Cannot save</source>
         <extracomment>Dynamic property that exempts a widget&apos;s own texts from the pseudo-locale walk (user data).</extracomment>
         <translation type="unfinished">No se puede guardar</translation>
+    </message>
+    <message>
+        <source>Data protection notice</source>
+        <translation type="unfinished">Aviso de protección de datos</translation>
+    </message>
+    <message>
+        <source>Your data is stored only on this computer, in this folder: %1</source>
+        <translation type="unfinished">Sus datos se almacenan solo en este equipo, en esta carpeta: %1</translation>
+    </message>
+    <message>
+        <source>Disk encryption: the documentation requires full-disk encryption of this computer (for example BitLocker). This application cannot check whether it is on, and it does not protect files that you export or copy to removable media.</source>
+        <translation type="unfinished">Cifrado de disco: la documentación exige el cifrado completo del disco de este equipo (por ejemplo, BitLocker). Esta aplicación no puede comprobar si está activado y no protege los archivos que usted exporta o copia a medios extraíbles.</translation>
+    </message>
+    <message>
+        <source>Backups: a plain copy of the database is made automatically once a day in the backups folder of the data folder. Encrypted backups are made by hand to a place that you choose; keep them on separate media. A lost passphrase cannot be recovered.</source>
+        <translation type="unfinished">Copias de seguridad: cada día se hace automáticamente una copia simple de la base de datos en la carpeta backups de la carpeta de datos. Las copias cifradas se hacen manualmente en el lugar que usted elija; guárdelas en un medio separado. Una contraseña perdida no se puede recuperar.</translation>
+    </message>
+    <message>
+        <source>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification. Do not enter real data until the classification question (Q19) and the questions Q4, Q11 and Q13 have been answered. Until then use only demo data.</source>
+        <translation type="unfinished">Clasificación: &quot;sensible&quot; es solo una etiqueta de trabajo para datos que permanecen en este equipo; no es una clasificación formal. No introduzca datos reales hasta que se hayan respondido la cuestión de la clasificación (Q19) y las cuestiones Q4, Q11 y Q13. Hasta entonces, use solo datos de demostración.</translation>
+    </message>
+    <message>
+        <source>Shared computer: several people can take turns on one computer only with one shared Windows account, or with --data-dir pointing to a local folder restricted to the committee. With separate Windows accounts each person gets a separate database.</source>
+        <translation type="unfinished">Equipo compartido: varias personas pueden turnarse en un equipo solo con una cuenta de Windows compartida, o con --data-dir apuntando a una carpeta local restringida al comité. Con cuentas de Windows separadas, cada persona tiene una base de datos separada.</translation>
     </message>
 </context>
 </TS>

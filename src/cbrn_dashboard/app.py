@@ -11,7 +11,10 @@ The sequence, in order:
    ``main``: it never opens the real database, takes no lock and writes only ``selftest.json``);
 2. the mode is decided: a writable folder means read-write; a folder that is not writable (or a
    database file that is not) with an existing database means READ-ONLY (D02); a folder that is
-   not writable with no database is explained and ends with exit code 1;
+   not writable with no database is explained and the user is offered another folder through the
+   prompts (T7.5): a usable choice is remembered in the profile pointer file ``location.json`` and
+   the sequence starts again with it, otherwise the start ends with exit code 1 (so does the demo
+   case and a missing profile folder, which are only explained);
 3. the application, the translators and the preferences are set up (``--lang`` for this run only,
    else the saved language, else Brazilian Portuguese; later menu switches are saved);
 4. logging is configured in memory and the crash hook is wired to a translated dialog that shows
@@ -27,18 +30,20 @@ The sequence, in order:
 7. the clock sanity check: a clock earlier than the newest ``change_log`` row or than the build
    timestamp marks the session ``clock_suspect``;
 8. ``AppContext`` and the main window (with its banners) are built;
-9. the registered start-up hooks run once, in order.
+9. the registered start-up hooks run once, in order (the first-run notice and the backup reminder
+   of T7.5 are the last two).
 
 Whether the database is a demo database comes from ``app_meta.is_demo`` of the OPEN database,
 never from the command line (D25).
 """
 
 import json
+import logging
 import sqlite3
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import ExitStack, suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum, auto
 from functools import partial
@@ -64,9 +69,11 @@ from cbrn_dashboard.logging_setup import (
 )
 from cbrn_dashboard.paths import (
     DataLocation,
+    LocationSource,
     LocationWarning,
     is_file_writable,
     resolve_data_location,
+    write_location_pointer,
 )
 from cbrn_dashboard.prefs import PreferencesStore
 from cbrn_dashboard.services.backup import daily_backup_startup
@@ -86,6 +93,7 @@ from cbrn_dashboard.storage.migrate import (
     open_and_migrate,
 )
 from cbrn_dashboard.ui.shell.context import AppContext
+from cbrn_dashboard.ui.shell.first_run import backup_reminder_startup, first_run_startup
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from cbrn_dashboard.ui.shell.instance_lock import InstanceLock, LockReason
 from cbrn_dashboard.ui.shell.main_window import MainWindow
@@ -116,9 +124,12 @@ class StartupHook:
 
 
 # The registered start-up hooks, one entry each, run in this order: T7.3 (tmp clean-up), T7.1
-# (daily backup), T8.1 (monthly snapshot). None runs in read-only mode (nothing may be written or
-# deleted in the data folder). The daily backup does not need a trusted clock because only its
-# rotation is skipped for a suspect clock (inside the service); the automatic snapshot does.
+# (daily backup), T8.1 (monthly snapshot), T7.5 (backup reminder, first-run notice). The first
+# three do not run in read-only mode (nothing may be written or deleted in the data folder). The
+# two T7.5 hooks write nothing to the data folder (the reminder only reads; the notice keeps its
+# flag in memory when the folder is read-only), so they run in read-only mode, and not with a demo
+# database. The daily backup does not need a trusted clock because only its rotation is skipped
+# for a suspect clock (inside the service); the automatic snapshot does.
 STARTUP_HOOKS: tuple[StartupHook, ...] = (
     StartupHook(
         "tmp-cleanup",
@@ -140,6 +151,20 @@ STARTUP_HOOKS: tuple[StartupHook, ...] = (
         runs_read_only=False,
         runs_in_demo=False,
         needs_trusted_clock=True,
+    ),
+    StartupHook(
+        "backup-reminder",
+        backup_reminder_startup,
+        runs_read_only=True,
+        runs_in_demo=False,
+        needs_trusted_clock=False,
+    ),
+    StartupHook(
+        "first-run-notice",
+        first_run_startup,
+        runs_read_only=True,
+        runs_in_demo=False,
+        needs_trusted_clock=False,
     ),
 )
 
@@ -400,6 +425,30 @@ def _text_no_profile_folder() -> str:
     )
 
 
+def _title_choose_folder() -> str:
+    return QCoreApplication.translate("Shell", "Choose the data folder")
+
+
+def _text_offer_other_folder() -> str:
+    return QCoreApplication.translate(
+        "Shell",
+        "Do you want to choose another folder for the data? The choice is remembered in your "
+        "user profile for the next start.",
+    )
+
+
+def _text_chosen_folder_unusable() -> str:
+    return QCoreApplication.translate(
+        "Shell", "The chosen folder is not writable and has no database. Choose another one."
+    )
+
+
+def _text_choice_not_remembered() -> str:
+    return QCoreApplication.translate(
+        "Shell", "The choice could not be remembered, so it is used for this session only."
+    )
+
+
 def _text_locked() -> str:
     return QCoreApplication.translate(
         "Shell",
@@ -522,6 +571,35 @@ def _report_main_failure(exc: Exception, prompts: Prompts | None) -> int:
     return EXIT_FAILED
 
 
+def _offer_other_folder(
+    prompts: Prompts, explanation: str, environ: Mapping[str, str] | None
+) -> DataLocation | None:
+    """D02, T7.5: explain an unusable folder and let the user choose another one.
+
+    Every interaction goes through ``prompts``. The chosen folder must be writable or already hold
+    a database; it is remembered in the pointer file of the user profile (never in the unusable
+    folder) and returned as the new location. ``None`` when the user declines or cancels. When the
+    pointer cannot be written the folder is still used, for this session only, and the user is
+    told so.
+    """
+    prompts.error(None, _title_cannot_start(), explanation)
+    while prompts.confirm(None, _title_cannot_start(), _text_offer_other_folder()):
+        folder = prompts.choose_folder(None, _title_choose_folder())
+        if folder is None:
+            return None
+        chosen = resolve_data_location(cli_data_dir=folder, environ=environ)
+        if not (chosen.writable or chosen.database_exists):
+            prompts.error(None, _title_choose_folder(), _text_chosen_folder_unusable())
+            continue
+        if write_location_pointer(chosen.path, environ=environ):
+            log_event("APP.LOCATION_REMEMBERED")
+        else:
+            log_event("APP.LOCATION_NOT_REMEMBERED", level=logging.WARNING)
+            prompts.warning(None, _title_choose_folder(), _text_choice_not_remembered())
+        return replace(chosen, source=LocationSource.POINTER)
+    return None
+
+
 def _fail(stack: ExitStack, prompts: Prompts, text: str) -> int:
     """Explain the problem through the prompts, undo what was set up, give the exit code."""
     prompts.error(None, _title_cannot_start(), text)
@@ -542,13 +620,15 @@ def start(
     hooks: Sequence[StartupHook] | None = None,
     lock_factory: Callable[[Path], InstanceLock] = InstanceLock,
     build_timestamp: Callable[[], datetime | None] = read_build_timestamp,
+    environ: Mapping[str, str] | None = None,
 ) -> AppHandle | int:
     """Run the start-up sequence (see the module docstring) without entering the event loop.
 
     Returns the :class:`AppHandle`, or the exit code 1 after explaining the problem through
     ``prompts``. The window is not shown. ``clock`` defaults to the system clock, ``prompts`` to
     the real dialogs, ``hooks`` to :data:`STARTUP_HOOKS` and ``qm_dir`` to the package's own
-    ``i18n`` folder.
+    ``i18n`` folder. ``environ`` (default ``os.environ``) names the user profile whose pointer
+    file remembers a folder chosen after an unusable one (tests inject it).
     """
     active_clock: Clock = SystemClock() if clock is None else clock
     active_prompts: Prompts = QtPrompts() if prompts is None else prompts
@@ -589,15 +669,27 @@ def start(
         log_event("APP.START")
 
         if mode is _Mode.UNUSABLE:
-            # Choosing another folder is the read-only flow of T7.5; here the user is only told.
             log_event("APP.NO_DATABASE")
             if no_profile:
-                unusable_text = _text_no_profile_folder()
-            elif options.demo:
-                unusable_text = _text_no_demo_database()
-            else:
-                unusable_text = _text_no_database()
-            return _fail(stack, active_prompts, unusable_text)
+                return _fail(stack, active_prompts, _text_no_profile_folder())
+            if options.demo:
+                return _fail(stack, active_prompts, _text_no_demo_database())
+            # D02, T7.5: explain, then offer another folder (remembered in the profile pointer).
+            chosen = _offer_other_folder(active_prompts, _text_no_database(), environ)
+            stack.close()
+            if chosen is None:
+                return EXIT_FAILED
+            return start(
+                options,
+                chosen,
+                clock=active_clock,
+                prompts=active_prompts,
+                qm_dir=qm_dir,
+                hooks=active_hooks,
+                lock_factory=lock_factory,
+                build_timestamp=build_timestamp,
+                environ=environ,
+            )
 
         lock: InstanceLock | None = None
         if mode is _Mode.READ_WRITE:

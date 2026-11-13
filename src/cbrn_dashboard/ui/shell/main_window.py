@@ -5,7 +5,7 @@
 The window is built from an :class:`~cbrn_dashboard.ui.shell.context.AppContext`. The navigation
 and the page stack are filled from the page registry; the toolbar holds the as-of date selector
 (D13), bound both ways to ``context.as_of``; the banner area shows the demo, read-only, location,
-clock and translation banners and the permanent preliminary notice.
+clock, backup-reminder and translation banners and the permanent preliminary notice.
 
 Every user-visible text is applied in :meth:`MainWindow.retranslate`, which runs once on
 construction and again on every ``LanguageChange`` event, so switching the language retitles the
@@ -126,6 +126,7 @@ class MainWindow(QMainWindow):
         self._placeholders: list[QLabel] = []
         self._build_pages()
         self._sync_context_banners()
+        context.backup_reminder_changed.connect(self._on_backup_reminder_changed)
 
         self._manager.language_changed.connect(self._on_language_changed)
         self._sync_language_actions()
@@ -205,8 +206,17 @@ class MainWindow(QMainWindow):
             self.banners.show_banner(BannerCode[warning.name])
         if context.clock_suspect:
             self.banners.show_banner(BannerCode.CLOCK_SUSPECT)
+        if context.backup_reminder_due:
+            self.banners.show_banner(BannerCode.BACKUP_REMINDER)
         if PreferencesWarning.CORRUPT_FILE in context.preferences.warnings:
             self.banners.show_banner(BannerCode.PREFERENCES_RESET)
+
+    def _on_backup_reminder_changed(self, due: bool) -> None:
+        """Show or hide the reminder banner when the start-up hook (or a backup) changes it."""
+        if due:
+            self.banners.show_banner(BannerCode.BACKUP_REMINDER)
+        else:
+            self.banners.hide_banner(BannerCode.BACKUP_REMINDER)
 
     # ------------------------------------------------------------------ as-of date
 

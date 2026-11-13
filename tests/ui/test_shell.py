@@ -33,6 +33,7 @@ from cbrn_dashboard.storage.repository import WriteContext
 from cbrn_dashboard.ui.shell import registry
 from cbrn_dashboard.ui.shell.banners import BannerArea, BannerCode
 from cbrn_dashboard.ui.shell.context import AppContext
+from cbrn_dashboard.ui.shell.first_run import backup_reminder_startup, first_run_startup
 from cbrn_dashboard.ui.shell.formatting import to_qdate
 from cbrn_dashboard.ui.shell.instance_lock import LOCK_FILE_NAME, InstanceLock, LockReason
 from cbrn_dashboard.ui.shell.main_window import MainWindow
@@ -315,10 +316,16 @@ def _daily_files(folder: Path) -> list[Path]:
     return sorted((folder / "backups").glob("daily-*.sqlite3"))
 
 
-def test_the_three_registered_hooks_declare_their_names_order_and_modes() -> None:
+def test_the_registered_hooks_declare_their_names_order_and_modes() -> None:
     hooks = app_module.STARTUP_HOOKS
-    assert [hook.name for hook in hooks] == ["tmp-cleanup", "daily-backup", "monthly-snapshot"]
-    cleanup, backup, snapshot_hook = hooks
+    assert [hook.name for hook in hooks] == [
+        "tmp-cleanup",
+        "daily-backup",
+        "monthly-snapshot",
+        "backup-reminder",
+        "first-run-notice",
+    ]
+    cleanup, backup, snapshot_hook, reminder, notice = hooks
     assert cleanup.run is tmp_cleanup_startup
     assert cleanup.runs_read_only is False
     assert cleanup.runs_in_demo is True
@@ -331,11 +338,26 @@ def test_the_three_registered_hooks_declare_their_names_order_and_modes() -> Non
     assert snapshot_hook.runs_read_only is False
     assert snapshot_hook.runs_in_demo is False
     assert snapshot_hook.needs_trusted_clock is True
+    # T7.5: both write nothing to the data folder, so they run read-only, but not in demo mode.
+    assert reminder.run is backup_reminder_startup
+    assert reminder.runs_read_only is True
+    assert reminder.runs_in_demo is False
+    assert reminder.needs_trusted_clock is False
+    assert notice.run is first_run_startup
+    assert notice.runs_read_only is True
+    assert notice.runs_in_demo is False
+    assert notice.needs_trusted_clock is False
 
 
 def test_a_normal_start_makes_one_daily_backup(started_app: StartApp, tmp_path: Path) -> None:
     handle = expect_handle(started_app(hooks=REAL_HOOKS))
-    assert handle.hooks_run == ("tmp-cleanup", "daily-backup", "monthly-snapshot")
+    assert handle.hooks_run == (
+        "tmp-cleanup",
+        "daily-backup",
+        "monthly-snapshot",
+        "backup-reminder",
+        "first-run-notice",
+    )
     # The database was created and migrated by this very start (so the pre-migration helper had
     # nothing to copy), yet the daily backup is made: it does not skip a database without rows.
     [backup] = _daily_files(tmp_path)
@@ -375,7 +397,8 @@ def test_a_read_only_start_makes_no_daily_backup_and_writes_nothing(
     before = snapshot(tmp_path)
     handle = expect_handle(started_app(writable=False, hooks=REAL_HOOKS))
     assert handle.context.read_only
-    assert handle.hooks_run == ()
+    # Only the two hooks of T7.5 run read-only: neither writes to the data folder.
+    assert handle.hooks_run == ("backup-reminder", "first-run-notice")
     assert not (tmp_path / "backups").exists()
     assert snapshot(tmp_path) == before
     handle.close()
@@ -422,7 +445,12 @@ def test_a_suspect_clock_still_makes_the_daily_backup_but_does_not_rotate(
 
     assert handle.context.clock_suspect
     # The suspect clock skips only the monthly snapshot (it needs a trusted clock).
-    assert handle.hooks_run == ("tmp-cleanup", "daily-backup")
+    assert handle.hooks_run == (
+        "tmp-cleanup",
+        "daily-backup",
+        "backup-reminder",
+        "first-run-notice",
+    )
     files = _daily_files(tmp_path)
     assert len(files) == 10
     assert all(kept in files for kept in old)

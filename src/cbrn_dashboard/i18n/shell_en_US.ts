@@ -83,6 +83,10 @@
         <translation>The computer clock looks wrong: snapshots and backup rotation are skipped.</translation>
     </message>
     <message>
+        <source>The last encrypted backup is old or missing: make a new one and keep it on separate media.</source>
+        <translation>The last encrypted backup is old or missing: make a new one and keep it on separate media.</translation>
+    </message>
+    <message>
         <source>The saved preferences could not be read and were reset to their defaults.</source>
         <translation>The saved preferences could not be read and were reset to their defaults.</translation>
     </message>
@@ -125,6 +129,22 @@
     <message>
         <source>The data folder is not writable, so the demo database cannot be created.</source>
         <translation>The data folder is not writable, so the demo database cannot be created.</translation>
+    </message>
+    <message>
+        <source>Choose the data folder</source>
+        <translation>Choose the data folder</translation>
+    </message>
+    <message>
+        <source>Do you want to choose another folder for the data? The choice is remembered in your user profile for the next start.</source>
+        <translation>Do you want to choose another folder for the data? The choice is remembered in your user profile for the next start.</translation>
+    </message>
+    <message>
+        <source>The chosen folder is not writable and has no database. Choose another one.</source>
+        <translation>The chosen folder is not writable and has no database. Choose another one.</translation>
+    </message>
+    <message>
+        <source>The choice could not be remembered, so it is used for this session only.</source>
+        <translation>The choice could not be remembered, so it is used for this session only.</translation>
     </message>
     <message>
         <source>Another instance is already using this data folder. Close it and start again.</source>
@@ -195,6 +215,30 @@
         <source>Cannot save</source>
         <extracomment>Dynamic property that exempts a widget&apos;s own texts from the pseudo-locale walk (user data).</extracomment>
         <translation>Cannot save</translation>
+    </message>
+    <message>
+        <source>Data protection notice</source>
+        <translation>Data protection notice</translation>
+    </message>
+    <message>
+        <source>Your data is stored only on this computer, in this folder: %1</source>
+        <translation>Your data is stored only on this computer, in this folder: %1</translation>
+    </message>
+    <message>
+        <source>Disk encryption: the documentation requires full-disk encryption of this computer (for example BitLocker). This application cannot check whether it is on, and it does not protect files that you export or copy to removable media.</source>
+        <translation>Disk encryption: the documentation requires full-disk encryption of this computer (for example BitLocker). This application cannot check whether it is on, and it does not protect files that you export or copy to removable media.</translation>
+    </message>
+    <message>
+        <source>Backups: a plain copy of the database is made automatically once a day in the backups folder of the data folder. Encrypted backups are made by hand to a place that you choose; keep them on separate media. A lost passphrase cannot be recovered.</source>
+        <translation>Backups: a plain copy of the database is made automatically once a day in the backups folder of the data folder. Encrypted backups are made by hand to a place that you choose; keep them on separate media. A lost passphrase cannot be recovered.</translation>
+    </message>
+    <message>
+        <source>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification. Do not enter real data until the classification question (Q19) and the questions Q4, Q11 and Q13 have been answered. Until then use only demo data.</source>
+        <translation>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification. Do not enter real data until the classification question (Q19) and the questions Q4, Q11 and Q13 have been answered. Until then use only demo data.</translation>
+    </message>
+    <message>
+        <source>Shared computer: several people can take turns on one computer only with one shared Windows account, or with --data-dir pointing to a local folder restricted to the committee. With separate Windows accounts each person gets a separate database.</source>
+        <translation>Shared computer: several people can take turns on one computer only with one shared Windows account, or with --data-dir pointing to a local folder restricted to the committee. With separate Windows accounts each person gets a separate database.</translation>
     </message>
 </context>
 </TS>

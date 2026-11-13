@@ -27,6 +27,7 @@ class BannerCode(StrEnum):
     POINTER_INVALID = "POINTER_INVALID"
     NO_PROFILE_DIR = "NO_PROFILE_DIR"
     CLOCK_SUSPECT = "CLOCK_SUSPECT"
+    BACKUP_REMINDER = "BACKUP_REMINDER"
     PREFERENCES_RESET = "PREFERENCES_RESET"
     TRANSLATIONS_MISSING = "TRANSLATIONS_MISSING"
     PRELIMINARY = "PRELIMINARY"
@@ -77,6 +78,12 @@ def banner_text(code: BannerCode) -> str:
             return QCoreApplication.translate(
                 "Shell",
                 "The computer clock looks wrong: snapshots and backup rotation are skipped.",
+            )
+        case BannerCode.BACKUP_REMINDER:
+            return QCoreApplication.translate(
+                "Shell",
+                "The last encrypted backup is old or missing: make a new one and keep it on "
+                "separate media.",
             )
         case BannerCode.PREFERENCES_RESET:
             return QCoreApplication.translate(

@@ -23,6 +23,7 @@ real profile, registry or network. Warnings are codes only; the UI translates th
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import stat
@@ -389,6 +390,45 @@ def _build(
 def _prepare(path: Path, probes: Probes) -> bool:
     """Create the folder if missing and probe it; ``False`` if either step fails."""
     return probes.ensure_directory(path) and probes.writable(path)
+
+
+def write_location_pointer(
+    data_dir: str | os.PathLike[str], *, environ: Mapping[str, str] | None = None
+) -> bool:
+    """Remember ``data_dir`` in the pointer file ``location.json`` (D02 step 4, T7.5).
+
+    Returns ``True`` when it was written. The file lives in
+    ``%LOCALAPPDATA%\\cbrn-readiness-dashboard\\``; only that profile folder is written, never the
+    chosen folder. The profile comes from the
+    injected ``environ`` (default ``os.environ``) exactly as in :func:`resolve_data_location`.
+    The file is replaced atomically through a temporary file of the same folder. ``False`` (and no
+    file left behind) when there is no profile folder, the path holds a control character, or the
+    write fails; nothing is raised for those.
+    """
+    env: Mapping[str, str] = os.environ if environ is None else environ
+    profile = _profile_dir(env)
+    if profile is None:
+        return False
+    try:
+        target = Path(os.fspath(data_dir)).absolute()
+    except (OSError, ValueError):
+        return False
+    if _has_control_character(str(target)):
+        return False
+    payload = json.dumps({POINTER_KEY: str(target)}, indent=2) + "\n"
+    temp = profile / f"{POINTER_FILE_NAME}.tmp-{uuid.uuid4().hex}"
+    try:
+        profile.mkdir(parents=True, exist_ok=True)
+        with temp.open("x", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temp.replace(profile / POINTER_FILE_NAME)
+    except (OSError, ValueError):
+        with contextlib.suppress(OSError, ValueError):
+            temp.unlink(missing_ok=True)
+        return False
+    return True
 
 
 def resolve_data_location(
