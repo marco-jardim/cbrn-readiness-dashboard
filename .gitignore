@@ -218,3 +218,34 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# Repository hygiene (T0.3): real data must never enter the repository.
+# Databases, journals, backups, logs, scratch files and compiled catalogues
+# are runtime or generated artefacts. No source folder may use a name matched
+# by a rule below (tests/meta/test_repo_hygiene.py enforces it).
+# ---------------------------------------------------------------------------
+/data/
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.cbrnbak
+*.qm
+portable.ini
+/scratch/
+
+# Journals, restore safety copies, rotated logs and runtime folders
+*.sqlite3-journal
+*.sqlite-journal
+*-journal
+*.before-restore-*
+*.log.*
+backups/
+logs/
+tmp/
+
+# Per-user runtime state
+prefs.json
+selftest.json
+location.json
