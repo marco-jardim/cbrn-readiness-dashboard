@@ -202,6 +202,36 @@ def sets_env(text: str, name: str, value: str) -> bool:
     return any(pattern.match(line) for line in code_lines(text))
 
 
+def job_lines(text: str, job: str) -> list[str]:
+    """Return the comment-free body lines of the job ``job`` (empty when there is no such job)."""
+    entry = top_level_entry(text, "jobs")
+    if entry is None:
+        return []
+    _, body = entry
+    if not body:
+        return []
+    base = min(len(line) - len(line.lstrip()) for line in body)
+    lines: list[str] = []
+    inside = False
+    for line in body:
+        if len(line) - len(line.lstrip()) == base:
+            inside = line.strip() == f"{job}:"
+            continue
+        if inside:
+            lines.append(line)
+    return lines
+
+
+def job_needs(text: str, job: str) -> set[str]:
+    """Return the jobs named by ``needs:`` of ``job`` (scalar or inline-list form)."""
+    for line in job_lines(text, job):
+        match = re.match(r"\s*needs:\s*(?P<value>.+)$", line)
+        if match is not None:
+            items = match.group("value").strip().strip("[]").split(",")
+            return {_unquote(item) for item in items if item.strip()}
+    return set()
+
+
 def has_coverage_gate(text: str) -> bool:
     """Tell whether a 90% coverage gate exists and the three gated packages are measured."""
     lines = code_lines(text)
@@ -269,6 +299,33 @@ def test_ci_cancels_superseded_runs() -> None:
 
 def test_ci_gates_coverage_at_90_percent() -> None:
     assert has_coverage_gate(read_workflow("ci.yml"))
+
+
+def test_ci_has_a_build_job_after_the_tests() -> None:
+    text = read_workflow("ci.yml")
+    assert job_lines(text, "build"), "ci.yml has no 'build' job"
+    assert "test" in job_needs(text, "build")
+
+
+def test_ci_build_job_runs_the_packaging_tests() -> None:
+    lines = [line.strip() for line in job_lines(read_workflow("ci.yml"), "build")]
+    assert any(line.endswith("uv run pytest -m packaging") for line in lines), lines
+
+
+def test_ci_build_job_uploads_the_artefact_for_14_days() -> None:
+    lines = [line.strip() for line in job_lines(read_workflow("ci.yml"), "build")]
+    assert any("uses: actions/upload-artifact@" in line for line in lines), lines
+    assert "retention-days: 14" in lines
+    assert "name: cbrn-dashboard-win-x64" in lines
+
+
+def test_ci_build_job_has_its_own_pinned_runner_and_setup() -> None:
+    raw = job_lines(read_workflow("ci.yml"), "build")
+    lines = [line.strip() for line in raw]
+    assert "runs-on: windows-2025" in lines
+    assert "timeout-minutes: 45" in lines
+    assert any("uv sync" in line and "--locked" in line for line in lines), lines
+    assert sets_env("\n".join(raw), "QT_QPA_PLATFORM", "offscreen")
 
 
 # --------------------------------------------------------------------------------------------
@@ -383,6 +440,26 @@ def test_env_check_requires_offscreen() -> None:
     assert sets_env("env:\n  QT_QPA_PLATFORM: 'offscreen'\n", "QT_QPA_PLATFORM", "offscreen")
     assert not sets_env("env:\n  QT_QPA_PLATFORM: windows\n", "QT_QPA_PLATFORM", "offscreen")
     assert not sets_env("# QT_QPA_PLATFORM: offscreen\n", "QT_QPA_PLATFORM", "offscreen")
+
+
+def test_job_helpers_split_jobs_and_read_needs() -> None:
+    text = (
+        "jobs:\n"
+        "  a:\n"
+        "    runs-on: windows-2025\n"
+        "  b:\n"
+        "    needs: [a, c]\n"
+        "    steps:\n"
+        "      - run: x\n"
+        "  c:\n"
+        "    needs: a\n"
+    )
+    assert job_lines(text, "a") == ["    runs-on: windows-2025"]
+    assert job_needs(text, "b") == {"a", "c"}
+    assert job_needs(text, "c") == {"a"}
+    assert job_needs(text, "a") == set()
+    assert job_lines(text, "missing") == []
+    assert job_lines("name: x\n", "a") == []
 
 
 def test_coverage_gate_check_needs_threshold_and_all_packages() -> None:
