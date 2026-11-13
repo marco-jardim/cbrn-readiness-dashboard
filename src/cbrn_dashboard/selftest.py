@@ -29,6 +29,7 @@ from cbrn_dashboard import __version__
 from cbrn_dashboard.app import ensure_application
 from cbrn_dashboard.i18n import DEFAULT_LANGUAGE, LANGUAGES, to_bcp47
 from cbrn_dashboard.paths import DataLocation
+from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager, app_display_name
 from cbrn_dashboard.ui.shell.main_window import MainWindow
 
@@ -137,6 +138,22 @@ def _check_main_window(context: SelfTestContext) -> None:
     finally:
         manager.clear()
         manager.setParent(None)
+
+
+@register("database")
+def _check_database(context: SelfTestContext) -> None:
+    # Always inside the throwaway folder, never the real database.
+    path = context.workdir / "selftest.sqlite3"
+    conn = open_and_migrate(
+        path, data_dir=context.workdir, identity=DatabaseIdentity.REAL, backup=False
+    )
+    with contextlib.closing(conn):
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        _require(version > 0, "the database has no schema version")
+        tables = conn.execute(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='change_log'"
+        ).fetchone()[0]
+        _require(tables == 1, "the change_log table is missing")
 
 
 # --------------------------------------------------------------------------- the runner

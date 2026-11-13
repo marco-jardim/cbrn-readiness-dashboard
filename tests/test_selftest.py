@@ -23,6 +23,7 @@ EXPECTED_CHECKS = [
     "i18n.en-US",
     "i18n.es-ES",
     "main_window",
+    "database",
 ]
 
 
@@ -142,6 +143,18 @@ def test_unwritable_data_folder_returns_one_without_raising(
     location = DataLocation(path=tmp_path / "ro", source=LocationSource.CLI, writable=False)
     assert selftest.run(location, qm_dir=qm_dir) == 1
     assert not (tmp_path / "ro").exists()
+
+
+def test_database_check_works_inside_the_throwaway_folder(tmp_path: Path) -> None:
+    location = DataLocation(path=tmp_path / "data", source=LocationSource.CLI, writable=True)
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    check = dict(selftest.CHECKS)["database"]
+
+    check(selftest.SelfTestContext(location, workdir, None))
+
+    assert [entry.name for entry in workdir.iterdir()] == ["selftest.sqlite3"]
+    assert not (tmp_path / "data").exists()
 
 
 def test_register_appends_a_check(monkeypatch: pytest.MonkeyPatch) -> None:
