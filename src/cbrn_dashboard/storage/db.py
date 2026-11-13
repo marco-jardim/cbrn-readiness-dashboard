@@ -8,7 +8,8 @@
   explicit ``BEGIN`` (see :func:`transaction`);
 * ``foreign_keys=ON``, ``journal_mode=DELETE`` (never WAL), ``synchronous=FULL``,
   ``secure_delete=ON`` and a busy timeout (read-write connections);
-* read-only connections use a ``mode=ro`` URI built with ``Path.as_uri()``, plus ``foreign_keys``,
+* read-only connections use a ``mode=ro`` URI built by :func:`read_only_uri` (``Path.as_uri()``,
+  or an equivalent URI with an empty authority for a UNC path), plus ``foreign_keys``,
   ``busy_timeout`` and ``query_only``; they issue no pragma that needs a write lock.
 
 Errors carry a stable ``code`` (the UI translates the code, never the message) and their messages
@@ -17,16 +18,19 @@ never contain record contents.
 Writes through a read-only connection surface as :class:`ReadOnlyDatabaseError`. The translation is
 done by :class:`DatabaseConnection` in ``execute``, ``executemany`` and ``executescript``; cursors
 obtained from ``conn.cursor()`` are not translated, so code should call ``conn.execute`` directly.
-The translation applies to any ``SQLITE_READONLY`` error, so it also reports a read-write
-connection whose database file has turned read-only.
+The translation goes by the extended result code (:func:`classify_sqlite_error`):
+``SQLITE_READONLY_ROLLBACK`` is a hot journal, ``SQLITE_READONLY_DBMOVED`` is
+:class:`DatabaseMovedError`, every other ``SQLITE_READONLY*`` is :class:`ReadOnlyDatabaseError`, so
+a read-write connection whose database file has turned read-only is reported as well.
 """
 
 from __future__ import annotations
 
+import itertools
 import sqlite3
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import TYPE_CHECKING
 
 from cbrn_dashboard.paths import is_file_writable
@@ -38,13 +42,17 @@ __all__ = [
     "MIN_SQLITE_VERSION",
     "DatabaseConnection",
     "DatabaseError",
+    "DatabaseMovedError",
     "DatabaseNotFoundError",
     "HotJournalError",
+    "NotADatabaseError",
     "ReadOnlyDatabaseError",
     "SqliteTooOldError",
     "check_sqlite_version",
+    "classify_sqlite_error",
     "database_is_writable",
     "open_database",
+    "read_only_uri",
     "read_pragmas",
     "transaction",
 ]
@@ -52,13 +60,22 @@ __all__ = [
 #: Oldest SQLite that supports ``STRICT`` tables.
 MIN_SQLITE_VERSION: tuple[int, int, int] = (3, 37, 0)
 
-#: Primary result code ``SQLITE_READONLY`` (extended codes keep it in their low byte).
+#: Primary result codes (extended codes keep the primary code in their low byte).
 _SQLITE_READONLY = 8
+_SQLITE_BUSY = 5
+_SQLITE_LOCKED = 6
+_SQLITE_NOTADB = 26
+#: Extended result codes that get their own error.
+_SQLITE_READONLY_ROLLBACK = 776
+_SQLITE_READONLY_DBMOVED = 1032
 _PRIMARY_CODE_MASK = 0xFF
 _JOURNAL_SUFFIX = "-journal"
 _HOT_JOURNAL_MESSAGE = (
     "The database has an unfinished write (hot journal) and cannot be opened read-only."
 )
+_READ_ONLY_MESSAGE = "The database is read-only: the change was not made."
+_MOVED_MESSAGE = "The database file was moved or replaced while it was open."
+_NOT_A_DATABASE_MESSAGE = "The file is not a database."
 
 #: SQL parameters: anything ``sqlite3`` accepts (wider than typeshed's private alias).
 type _Params = SupportsLenAndGetItem[object] | Mapping[str, object]
@@ -97,20 +114,62 @@ class DatabaseNotFoundError(DatabaseError):
     code = "DATABASE_NOT_FOUND"
 
 
+class DatabaseMovedError(DatabaseError):
+    """The database file was moved, renamed or replaced while the connection was open."""
+
+    code = "DATABASE_MOVED"
+
+
+class NotADatabaseError(DatabaseError):
+    """The file exists but is not an SQLite database (or is corrupt at its first page)."""
+
+    code = "NOT_A_DATABASE"
+
+
 # --------------------------------------------------------------------------- connection
 
+_MESSAGES: Mapping[type[DatabaseError], str] = {
+    HotJournalError: _HOT_JOURNAL_MESSAGE,
+    DatabaseMovedError: _MOVED_MESSAGE,
+    ReadOnlyDatabaseError: _READ_ONLY_MESSAGE,
+    NotADatabaseError: _NOT_A_DATABASE_MESSAGE,
+}
 
-def _is_read_only_error(exc: sqlite3.Error) -> bool:
-    """Whether ``exc`` is ``SQLITE_READONLY`` or one of its extended codes."""
-    return (
-        exc.sqlite_errorcode & _PRIMARY_CODE_MASK
-    ) == _SQLITE_READONLY or exc.sqlite_errorname.startswith("SQLITE_READONLY")
+
+def classify_sqlite_error(code: int, name: str) -> type[DatabaseError] | None:
+    """The :class:`DatabaseError` subclass for an SQLite result, or ``None`` when it has none.
+
+    ``code`` is the (extended) result code and ``name`` its symbolic name.
+    ``SQLITE_READONLY_ROLLBACK`` (776) is a hot journal, ``SQLITE_READONLY_DBMOVED`` (1032) is
+    :class:`DatabaseMovedError`, every other ``SQLITE_READONLY*`` is
+    :class:`ReadOnlyDatabaseError` and ``SQLITE_NOTADB`` (26) is :class:`NotADatabaseError`.
+    """
+    if code == _SQLITE_READONLY_ROLLBACK:
+        return HotJournalError
+    if code == _SQLITE_READONLY_DBMOVED:
+        return DatabaseMovedError
+    primary = code & _PRIMARY_CODE_MASK
+    if primary == _SQLITE_READONLY or name.startswith("SQLITE_READONLY"):
+        return ReadOnlyDatabaseError
+    if primary == _SQLITE_NOTADB:
+        return NotADatabaseError
+    return None
+
+
+def _translate(exc: sqlite3.Error) -> DatabaseError | None:
+    """The translated error for ``exc`` (read-only family only), or ``None`` to re-raise as is."""
+    error_class = classify_sqlite_error(exc.sqlite_errorcode, exc.sqlite_errorname)
+    if error_class is None or error_class is NotADatabaseError:
+        # "Not a database" is reported by the read-only open only; elsewhere callers keep seeing
+        # the sqlite3 error.
+        return None
+    return error_class(_MESSAGES[error_class])
 
 
 def _raise_if_read_only(exc: sqlite3.Error) -> None:
-    if _is_read_only_error(exc):
-        msg = "The database is read-only: the change was not made."
-        raise ReadOnlyDatabaseError(msg) from exc
+    translated = _translate(exc)
+    if translated is not None:
+        raise translated from exc
 
 
 class DatabaseConnection(sqlite3.Connection):
@@ -164,6 +223,45 @@ def _journal_path(path: Path) -> Path:
     return path.with_name(path.name + _JOURNAL_SUFFIX)
 
 
+def _journal_has_content(path: Path) -> bool:
+    """Whether a rollback journal beside ``path`` exists and is not empty (empty means stale)."""
+    try:
+        return _journal_path(path).stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _percent_encode(text: str) -> str:
+    """Percent-encode the UTF-8 bytes of ``text``; only ASCII letters, digits and ``-._~/`` stay."""
+    parts: list[str] = []
+    for byte in text.encode("utf-8"):
+        char = chr(byte)
+        if byte < 0x80 and (char.isalnum() or char in "-._~/"):
+            parts.append(char)
+        else:
+            parts.append(f"%{byte:02X}")
+    return "".join(parts)
+
+
+def read_only_uri(path: PurePath) -> str:
+    """The ``file:`` URI with ``?mode=ro`` for ``path``; pure, it never touches the file system.
+
+    ``Path.absolute()`` is used, not ``resolve()``: ``resolve()`` turns a mapped network drive into
+    its UNC form. A drive path keeps ``Path.as_uri()``. SQLite rejects a URI with an authority, so
+    a UNC path (``\\\\server\\share\\...``) becomes ``file:////server/share/...``: an empty
+    authority followed by a path that itself starts with ``//server/share``.
+    """
+    absolute = path.absolute() if isinstance(path, Path) else path
+    drive = absolute.drive
+    if drive.startswith("\\\\"):
+        share = drive.replace("\\", "/")  # //server/share
+        rest = "/".join(absolute.parts[1:])
+        uri = "file:" + "//" + _percent_encode(share) + "/" + _percent_encode(rest)
+    else:
+        uri = absolute.as_uri()
+    return uri + "?mode=ro"
+
+
 def _probe_schema(conn: sqlite3.Connection) -> None:
     """Force a read of the schema: it fails for a non-database file or a hot journal."""
     conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
@@ -189,8 +287,9 @@ def _open_read_only(path: Path, busy_timeout_ms: int) -> DatabaseConnection:
     if not path.is_file():
         msg = "The database file does not exist."
         raise DatabaseNotFoundError(msg)
-    uri = path.resolve().as_uri() + "?mode=ro"
-    conn = sqlite3.connect(uri, uri=True, isolation_level=None, factory=DatabaseConnection)
+    conn = sqlite3.connect(
+        read_only_uri(path), uri=True, isolation_level=None, factory=DatabaseConnection
+    )
     conn.read_only = True
     try:
         conn.row_factory = sqlite3.Row
@@ -199,14 +298,24 @@ def _open_read_only(path: Path, busy_timeout_ms: int) -> DatabaseConnection:
         _probe_schema(conn)
         conn.execute("PRAGMA query_only=ON")
     except ReadOnlyDatabaseError as exc:
-        # Nothing is written while opening, so a read-only failure here means SQLite wanted to
-        # roll a hot journal back (SQLITE_READONLY_ROLLBACK).
+        # Nothing is written while opening, so a read-only failure here with a non-empty journal
+        # beside the file means SQLite wanted to roll a hot journal back.
         conn.close()
-        raise HotJournalError(_HOT_JOURNAL_MESSAGE) from exc
+        if _journal_has_content(path):
+            raise HotJournalError(_HOT_JOURNAL_MESSAGE) from exc
+        raise
+    except DatabaseError:
+        # Already translated by extended code (hot journal, moved database).
+        conn.close()
+        raise
     except sqlite3.Error as exc:
         conn.close()
-        # Any other read failure with a journal beside the file is treated the same way.
-        if _journal_path(path).exists():
+        error_class = classify_sqlite_error(exc.sqlite_errorcode, exc.sqlite_errorname)
+        if error_class is NotADatabaseError:
+            raise NotADatabaseError(_NOT_A_DATABASE_MESSAGE) from exc
+        primary = exc.sqlite_errorcode & _PRIMARY_CODE_MASK
+        # A busy or locked database is not an unfinished write; an empty journal is stale.
+        if primary not in (_SQLITE_BUSY, _SQLITE_LOCKED) and _journal_has_content(path):
             raise HotJournalError(_HOT_JOURNAL_MESSAGE) from exc
         raise
     except BaseException:
@@ -222,8 +331,9 @@ def open_database(
 
     Read-write mode creates the file when it is missing (the parent folder must exist) and applies
     the D06 pragmas. Read-only mode raises :class:`DatabaseNotFoundError` for a missing file and
-    :class:`HotJournalError` for a database with a hot journal. Raises :class:`SqliteTooOldError`
-    when the SQLite library is too old.
+    :class:`HotJournalError` for a database with a hot journal and :class:`NotADatabaseError` for
+    a file that is not a database. Raises :class:`SqliteTooOldError` when the SQLite library is too
+    old.
     """
     check_sqlite_version()
     if busy_timeout_ms < 0:
@@ -237,29 +347,54 @@ def open_database(
 # --------------------------------------------------------------------------- transactions
 
 
+#: Numbers for savepoint names; a name is ``cbrn_sp_<n>``, so it is always a valid identifier.
+_savepoint_numbers = itertools.count(1)
+_ROLLBACK_FAILED_NOTE = "The rollback itself also failed."
+
+
+def _rollback(conn: sqlite3.Connection, *statements: str, original: BaseException) -> None:
+    """Run the rollback ``statements``; if one fails, ``original`` stays the error raised."""
+    try:
+        if conn.in_transaction:
+            for statement in statements:
+                conn.execute(statement)
+    except (sqlite3.Error, DatabaseError):
+        original.add_note(_ROLLBACK_FAILED_NOTE)
+
+
 @contextmanager
 def transaction(
     conn: sqlite3.Connection, *, immediate: bool = True
 ) -> Iterator[sqlite3.Connection]:
     """Explicit transaction: ``BEGIN [IMMEDIATE]``, ``COMMIT`` on success, ``ROLLBACK`` on error.
 
-    Re-entrant: when a transaction is already open the inner block does nothing itself and the
-    outer block owns commit and rollback. A read-only connection raises
-    :class:`ReadOnlyDatabaseError` before any ``BEGIN``.
+    Nesting is real: when a transaction is already open the inner block is a ``SAVEPOINT``. It is
+    released on success; on any exception it is rolled back to the savepoint (the inner block's
+    writes are undone, nothing else) and the exception is re-raised. A caller that catches that
+    exception can carry on and the outer block can still commit; one that lets it propagate makes
+    the outer block roll back everything. The outermost block owns ``COMMIT`` and ``ROLLBACK``.
+    If a rollback statement fails, the original exception is the one raised. A read-only
+    connection raises :class:`ReadOnlyDatabaseError` before any statement.
     """
     if isinstance(conn, DatabaseConnection) and conn.read_only:
         msg = "A transaction cannot be started on a read-only database."
         raise ReadOnlyDatabaseError(msg)
     if conn.in_transaction:
-        yield conn
+        name = f"cbrn_sp_{next(_savepoint_numbers)}"
+        conn.execute(f"SAVEPOINT {name}")
+        try:
+            yield conn
+            conn.execute(f"RELEASE {name}")
+        except BaseException as exc:
+            _rollback(conn, f"ROLLBACK TO {name}", f"RELEASE {name}", original=exc)
+            raise
         return
     conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
     try:
         yield conn
         conn.execute("COMMIT")
-    except BaseException:
-        if conn.in_transaction:
-            conn.execute("ROLLBACK")
+    except BaseException as exc:
+        _rollback(conn, "ROLLBACK", original=exc)
         raise
 
 

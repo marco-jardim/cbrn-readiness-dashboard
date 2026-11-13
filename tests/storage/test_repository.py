@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from cbrn_dashboard.clock import FixedClock
+from cbrn_dashboard.storage import repository as repository_module
 from cbrn_dashboard.storage.db import (
     DatabaseError,
     ReadOnlyDatabaseError,
@@ -25,6 +26,7 @@ from cbrn_dashboard.storage.db import (
 )
 from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
 from cbrn_dashboard.storage.repository import (
+    PSEUDO_ENTITIES,
     REDACTED_COLUMNS,
     ConstraintViolationError,
     ForeignKeyError,
@@ -708,3 +710,383 @@ def test_writes_through_a_read_only_connection_raise(ctx: WriteContext, db_path:
             log_event(read_only_ctx, "database", "restore")
         assert fetch_row(reader, "t_parent", parent) == {"id": parent, "name": "alpha", "qty": 0}
     assert _logs(ctx.conn) == logs
+
+
+# --------------------------------------------------------------------------- caught failures
+
+
+def _fail_next_log_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the next ``change_log`` write fail (after the data change was written), once."""
+    real = repository_module._append_log
+
+    def flaky(
+        ctx: WriteContext,
+        *,
+        entity: str,
+        entity_id: int | None,
+        entity_key_json: str | None,
+        action: str,
+        before_json: str | None,
+        after_json: str | None,
+    ) -> None:
+        monkeypatch.setattr(repository_module, "_append_log", real)  # only once
+        msg = "The log row could not be written."
+        raise RepositoryError(msg, "LOG_FAILED")
+
+    monkeypatch.setattr(repository_module, "_append_log", flaky)
+
+
+def test_caught_insert_failure_leaves_neither_row_nor_log_row(
+    ctx: WriteContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with transaction(ctx.conn):
+        first = _new_parent(ctx, "before")
+        _fail_next_log_row(monkeypatch)
+        with pytest.raises(RepositoryError) as caught:
+            insert(ctx, "t_parent", {"name": "swallowed"})
+        assert caught.value.code == "LOG_FAILED"
+        last = _new_parent(ctx, "after")
+    names = [row["name"] for row in _query(ctx.conn, "SELECT name FROM t_parent ORDER BY id")]
+    assert names == ["before", "after"]
+    assert [(log["action"], log["entity_id"]) for log in _logs(ctx.conn)] == [
+        ("insert", first),
+        ("insert", last),
+    ]
+    assert not ctx.conn.in_transaction
+
+
+def test_caught_update_failure_leaves_neither_change_nor_log_row(
+    ctx: WriteContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kept = _new_parent(ctx, "kept")
+    other = _new_parent(ctx, "other")
+    with transaction(ctx.conn):
+        assert update(ctx, "t_parent", other, {"qty": 2})
+        _fail_next_log_row(monkeypatch)
+        with pytest.raises(RepositoryError):
+            update(ctx, "t_parent", kept, {"qty": 9})
+        assert update(ctx, "t_parent", other, {"qty": 3})
+    assert fetch_row(ctx.conn, "t_parent", kept) == {"id": kept, "name": "kept", "qty": 0}
+    assert fetch_row(ctx.conn, "t_parent", other) == {"id": other, "name": "other", "qty": 3}
+    updates = [log for log in _logs(ctx.conn) if log["action"] == "update"]
+    assert [log["entity_id"] for log in updates] == [other, other]
+
+
+def test_caught_delete_failure_leaves_neither_deletion_nor_log_row(
+    ctx: WriteContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    doomed = _new_parent(ctx, "doomed")
+    survivor = _new_parent(ctx, "survivor")
+    doomed_child = insert(ctx, "t_child", {"parent_id": doomed})
+    survivor_child = insert(ctx, "t_child", {"parent_id": survivor})
+    assert doomed_child is not None
+    assert survivor_child is not None
+    with transaction(ctx.conn):
+        assert delete(ctx, "t_child", survivor_child) == 1
+        _fail_next_log_row(monkeypatch)
+        with pytest.raises(RepositoryError):
+            delete(ctx, "t_parent", doomed)
+        later = _new_parent(ctx, "later")
+    assert fetch_row(ctx.conn, "t_parent", doomed) is not None
+    assert fetch_row(ctx.conn, "t_child", doomed_child) is not None
+    assert fetch_row(ctx.conn, "t_child", survivor_child) is None
+    assert fetch_row(ctx.conn, "t_parent", later) is not None
+    deletes = [log for log in _logs(ctx.conn) if log["action"] == "delete"]
+    assert [(log["entity"], log["entity_id"]) for log in deletes] == [("t_child", survivor_child)]
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_floats_are_rejected_before_any_write(ctx: WriteContext, bad: float) -> None:
+    assert insert(ctx, "t_pair", {"a": 7, "b": "kept", "v": 1.5}) is None
+    logs = _logs(ctx.conn)
+    with transaction(ctx.conn):
+        for call in (
+            lambda: insert(ctx, "t_pair", {"a": 1, "b": "x", "v": bad}),
+            lambda: update(ctx, "t_pair", {"a": 7, "b": "kept"}, {"v": bad}),
+            lambda: delete(ctx, "t_pair", {"a": 7, "b": bad}),
+            lambda: fetch_row(ctx.conn, "t_pair", {"a": bad, "b": "kept"}),
+        ):
+            with pytest.raises(RepositoryError) as caught:
+                call()  # caught by the caller, like the CSV importer does per row
+            assert caught.value.code == "UNSUPPORTED_VALUE"
+    assert _count(ctx.conn, "t_pair") == 1
+    assert fetch_row(ctx.conn, "t_pair", {"a": 7, "b": "kept"}) == {"a": 7, "b": "kept", "v": 1.5}
+    assert _logs(ctx.conn) == logs
+
+
+# --------------------------------------------------------------------------- change_log replace
+
+
+def test_change_log_row_cannot_be_overwritten_by_replace(ctx: WriteContext) -> None:
+    _new_parent(ctx)
+    before = _logs(ctx.conn)
+    for verb in ("INSERT OR REPLACE INTO", "REPLACE INTO"):
+        with pytest.raises(sqlite3.DatabaseError, match="append-only"):
+            ctx.conn.execute(
+                f"{verb} change_log (id, at_utc, operator, entity, action)"
+                " VALUES (?, ?, 'forger', 'x', 'insert')",
+                (before[0]["id"], NOW),
+            )
+    assert _logs(ctx.conn) == before
+    _new_parent(ctx, "next")  # the helpers still append
+    assert len(_logs(ctx.conn)) == 2
+
+
+# --------------------------------------------------------------------------- stored key
+
+
+def test_insert_takes_key_and_after_image_from_the_stored_row(ctx: WriteContext) -> None:
+    ctx.conn.execute(
+        "CREATE TABLE t_target ("
+        " code TEXT NOT NULL, dimension TEXT NOT NULL DEFAULT '', warning REAL,"
+        " PRIMARY KEY (code, dimension)) STRICT"
+    )
+    assert insert(ctx, "t_target", {"code": "X", "warning": 5.0}) is None
+    log = _logs(ctx.conn, "t_target")[0]
+    assert log["entity_key"] == '{"code":"X","dimension":""}'
+    assert log["entity_id"] is None
+    assert _json(log["after_json"]) == {"code": "X", "dimension": "", "warning": 5.0}
+    assert fetch_row(ctx.conn, "t_target", {"code": "X", "dimension": ""}) is not None
+    assert update(ctx, "t_target", {"code": "X", "dimension": ""}, {"warning": 6.0})
+    assert _logs(ctx.conn, "t_target")[1]["entity_key"] == '{"code":"X","dimension":""}'
+
+
+def test_insert_with_an_explicit_id_is_logged_with_that_id(ctx: WriteContext) -> None:
+    assert insert(ctx, "t_parent", {"id": 41, "name": "explicit"}) == 41
+    assert _logs(ctx.conn)[0]["entity_id"] == 41
+
+
+# --------------------------------------------------------------------------- FK actions
+
+UNLOGGED_FK_CLAUSES = (
+    "ON DELETE SET NULL",
+    "ON DELETE SET DEFAULT",
+    "ON UPDATE CASCADE",
+    "ON UPDATE SET NULL",
+    "ON UPDATE SET DEFAULT",
+    "ON DELETE CASCADE ON UPDATE CASCADE",
+)
+
+
+@pytest.mark.parametrize("clause", UNLOGGED_FK_CLAUSES)
+def test_foreign_key_actions_that_change_rows_unlogged_fail_before_any_write(
+    ctx: WriteContext, clause: str
+) -> None:
+    ctx.conn.execute(
+        "CREATE TABLE t_fk_child (id INTEGER PRIMARY KEY,"
+        f" parent_id INTEGER DEFAULT NULL REFERENCES t_parent(id) {clause}) STRICT"
+    )
+    parent = _new_parent(ctx)
+    child = insert(ctx, "t_fk_child", {"parent_id": parent})
+    assert child is not None
+    logs = _logs(ctx.conn)
+    with pytest.raises(RepositoryError) as caught:
+        delete(ctx, "t_parent", parent)
+    assert caught.value.code == "UNSUPPORTED_FK_ACTION"
+    assert fetch_row(ctx.conn, "t_parent", parent) is not None
+    assert fetch_row(ctx.conn, "t_fk_child", child) == {"id": child, "parent_id": parent}
+    assert _logs(ctx.conn) == logs
+    assert not ctx.conn.in_transaction
+    assert delete(ctx, "t_fk_child", child) == 1  # nothing references the child table
+
+
+def test_set_null_below_a_cascade_is_found_transitively(ctx: WriteContext) -> None:
+    ctx.conn.execute(
+        "CREATE TABLE t_deep (id INTEGER PRIMARY KEY,"
+        " child_id INTEGER REFERENCES t_child(id) ON DELETE SET NULL) STRICT"
+    )
+    parent = _new_parent(ctx)
+    child = insert(ctx, "t_child", {"parent_id": parent})
+    grandchild = insert(ctx, "t_grandchild", {"child_id": child})
+    assert child is not None
+    assert grandchild is not None
+    insert(ctx, "t_deep", {"child_id": child})
+    logs = _logs(ctx.conn)
+    for table, key in (("t_parent", parent), ("t_child", child)):
+        with pytest.raises(RepositoryError) as caught:
+            delete(ctx, table, key)
+        assert caught.value.code == "UNSUPPORTED_FK_ACTION"
+    assert _logs(ctx.conn) == logs
+    assert _count(ctx.conn, "t_child") == 1
+    assert delete(ctx, "t_grandchild", grandchild) == 1  # t_deep does not reference it
+
+
+def test_unrelated_foreign_key_actions_do_not_block_deletes(ctx: WriteContext) -> None:
+    ctx.conn.execute("CREATE TABLE t_other_parent (id INTEGER PRIMARY KEY) STRICT")
+    ctx.conn.execute(
+        "CREATE TABLE t_other_child (id INTEGER PRIMARY KEY,"
+        " parent_id INTEGER REFERENCES t_other_parent(id) ON DELETE SET NULL ON UPDATE CASCADE)"
+        " STRICT"
+    )
+    parent = _new_parent(ctx)
+    assert delete(ctx, "t_parent", parent) == 1
+
+
+# --------------------------------------------------------------------------- unusual names
+
+
+def test_a_table_with_an_unusual_name_does_not_break_deletes(ctx: WriteContext) -> None:
+    ctx.conn.execute('CREATE TABLE "Mixed Case" (id INTEGER PRIMARY KEY, x TEXT) STRICT')
+    ctx.conn.execute(
+        'CREATE TABLE "Other One" (id INTEGER PRIMARY KEY,'
+        ' ref INTEGER REFERENCES "Mixed Case"(id)) STRICT'
+    )
+    parent = _new_parent(ctx)
+    child = insert(ctx, "t_child", {"parent_id": parent})
+    assert child is not None
+    assert delete(ctx, "t_parent", parent) == 2
+    assert [log["entity"] for log in _logs(ctx.conn) if log["action"] == "delete"] == [
+        "t_parent",
+        "t_child",
+    ]
+
+
+def test_a_foreign_key_written_with_another_letter_case_still_cascades(ctx: WriteContext) -> None:
+    ctx.conn.execute(
+        "CREATE TABLE t_upper (id INTEGER PRIMARY KEY,"
+        " parent_id INTEGER REFERENCES T_PARENT(ID) ON DELETE CASCADE) STRICT"
+    )
+    parent = _new_parent(ctx)
+    upper = insert(ctx, "t_upper", {"parent_id": parent})
+    assert upper is not None
+    assert delete(ctx, "t_parent", parent) == 2
+    assert fetch_row(ctx.conn, "t_upper", upper) is None
+    assert {log["entity"] for log in _logs(ctx.conn) if log["action"] == "delete"} == {
+        "t_parent",
+        "t_upper",
+    }
+
+
+def test_an_unusual_table_that_references_a_graph_table_is_refused(ctx: WriteContext) -> None:
+    ctx.conn.execute(
+        'CREATE TABLE "Mixed Case" (id INTEGER PRIMARY KEY,'
+        " parent_id INTEGER REFERENCES t_parent(id) ON DELETE CASCADE) STRICT"
+    )
+    parent = _new_parent(ctx)
+    ctx.conn.execute('INSERT INTO "Mixed Case" (parent_id) VALUES (?)', (parent,))
+    logs = _logs(ctx.conn)
+    with pytest.raises(RepositoryError) as caught:
+        delete(ctx, "t_parent", parent)
+    assert caught.value.code == "UNSUPPORTED_SCHEMA"
+    assert fetch_row(ctx.conn, "t_parent", parent) is not None
+    assert _count(ctx.conn, '"Mixed Case"') == 1
+    assert _logs(ctx.conn) == logs
+
+
+# --------------------------------------------------------------------------- log_event entities
+
+
+@pytest.mark.parametrize("field", ["identifier", "label", "reference", "field"])
+@pytest.mark.parametrize("where", ["before", "after", "entity_key"])
+def test_pseudo_entity_events_refuse_redacted_keys(
+    ctx: WriteContext, field: str, where: str
+) -> None:
+    payload: dict[str, object] = {"schema_version": 5, field: IDENT_1}
+    with pytest.raises(RepositoryError) as caught:
+        if where == "before":
+            log_event(ctx, "database", "restore", before=payload)
+        elif where == "after":
+            log_event(ctx, "database", "restore", after=payload)
+        else:
+            log_event(ctx, "database", "restore", entity_key=payload)
+    assert caught.value.code == "REDACTED_KEY_IN_EVENT"
+    assert _logs(ctx.conn) == []
+
+
+def test_pseudo_entity_events_with_other_keys_are_stored(ctx: WriteContext) -> None:
+    assert frozenset({"database"}) == PSEUDO_ENTITIES
+    log_event(ctx, "database", "restore", after={"schema_version": 5, "source": "backup"})
+    assert _json(_logs(ctx.conn)[0]["after_json"]) == {"schema_version": 5, "source": "backup"}
+
+
+@pytest.mark.parametrize(
+    "entity", ["Staff_Member", "STAFF_MEMBER", "nope", "staff_member; x", "x y"]
+)
+def test_log_event_entity_must_be_a_live_table_or_a_pseudo_entity(
+    ctx: WriteContext, entity: str
+) -> None:
+    with pytest.raises(UnknownTableError):
+        log_event(ctx, entity, "restore", after={"identifier": IDENT_1})
+    assert _logs(ctx.conn) == []
+
+
+def test_log_event_for_a_live_table_still_redacts(ctx: WriteContext) -> None:
+    log_event(ctx, "staff_member", "restore", entity_id=1, after={"identifier": IDENT_1})
+    assert _json(_logs(ctx.conn)[0]["after_json"]) == {"identifier": {"redacted": True}}
+
+
+# --------------------------------------------------------------------------- redaction, real schema
+
+REF_1 = "CERT-REF-9915"
+REF_2 = "CERT-REF-9916"
+FIELD_1 = "Zymurgy Quux Studies"
+FIELD_2 = "Zymurgy Quux Advanced"
+
+
+def test_redacted_columns_exist_in_the_migrated_schema(ctx: WriteContext) -> None:
+    for table, columns in REDACTED_COLUMNS.items():
+        existing = {
+            row["name"]
+            for row in _query(ctx.conn, "SELECT name FROM pragma_table_info(?)", (table,))
+        }
+        assert existing, table
+        assert columns <= existing, table
+
+
+def test_cascaded_deletes_of_the_real_personnel_tables_never_log_personal_values(
+    ctx: WriteContext,
+) -> None:
+    staff = insert(
+        ctx,
+        "staff_member",
+        {
+            "identifier": IDENT_1,
+            "label": LABEL_1,
+            "category": "alpha",
+            "active_from": "2026-01-01",
+        },
+    )
+    assert staff is not None
+    cert = insert(
+        ctx,
+        "ppe_certification",
+        {
+            "staff_id": staff,
+            "ppe_level": "A",
+            "issued_on": "2026-01-01",
+            "valid_until": "2027-01-01",
+            "reference": REF_1,
+        },
+    )
+    degree = insert(
+        ctx,
+        "academic_degree",
+        {"staff_id": staff, "level": "master", "year": 2020, "field": FIELD_1},
+    )
+    assert cert is not None
+    assert degree is not None
+    assert update(ctx, "ppe_certification", cert, {"reference": REF_2})
+    assert update(ctx, "academic_degree", degree, {"field": FIELD_2})
+
+    assert delete(ctx, "staff_member", staff) == 3
+
+    needles = (IDENT_1, LABEL_1, REF_1, REF_2, FIELD_1, FIELD_2, "Zymurgy", "CERT-REF")
+    logs = _logs(ctx.conn)
+    assert len(logs) == 8
+    for row in logs:
+        for value in row.values():
+            for needle in needles:
+                assert needle not in str(value)
+
+    deletes = {str(log["entity"]): log for log in logs if log["action"] == "delete"}
+    assert set(deletes) == {"staff_member", "ppe_certification", "academic_degree"}
+    staff_before = _json(deletes["staff_member"]["before_json"])
+    assert staff_before["identifier"] == {"redacted": True}
+    assert staff_before["label"] == {"redacted": True}
+    cert_before = _json(deletes["ppe_certification"]["before_json"])
+    assert cert_before["reference"] == {"redacted": True}
+    assert cert_before["ppe_level"] == "A"
+    degree_before = _json(deletes["academic_degree"]["before_json"])
+    assert degree_before["field"] == {"redacted": True}
+    assert degree_before["level"] == "master"
+    assert all(log["after_json"] is None for log in deletes.values())

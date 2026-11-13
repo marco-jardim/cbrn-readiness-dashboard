@@ -1036,7 +1036,7 @@ What can run in parallel:
 - Files: `src/cbrn_dashboard/storage/db.py`, `tests/storage/test_db.py`.
 - Work:
   - `open_database(path, read_only=False)` applies the D06 settings: explicit transactions, foreign keys on, `journal_mode=DELETE`, `synchronous=FULL`, `secure_delete=ON`, and a busy timeout.
-  - Read-only mode uses a `mode=ro` URI built with `Path.as_uri()`. Before opening, the start-up code tests that the database file itself is writable, not only its folder. A database with a hot journal cannot be opened read-only; this raises `HotJournalError`, which the shell shows as a translated explanation. In read-only mode, no log file and no preference file are written (T1.8, T1.5).
+  - Read-only mode uses a `mode=ro` URI built with `Path.as_uri()`, or, for a UNC path, an equivalent URI with an empty authority (SQLite rejects a URI authority). Before opening, the start-up code tests that the database file itself is writable, not only its folder. A database with a hot journal cannot be opened read-only; this raises `HotJournalError`, which the shell shows as a translated explanation. In read-only mode, no log file and no preference file are written (T1.8, T1.5).
   - A `transaction()` context manager.
   - A start-up check for SQLite 3.37 or later, needed for `STRICT` tables.
 - Accept:

@@ -17,11 +17,30 @@ SQL sketch in the plan is only illustrative.
   never uses `executescript()`, because Python's `sqlite3` commits a pending transaction before
   it runs a script. It splits a file into statements with `sqlite3.complete_statement`, so
   `CREATE TRIGGER ... BEGIN ...; END;` bodies and semicolons inside string literals are fine. A
-  file must end with a complete statement.
+  file must end with a complete statement. Several statements on one line are fine.
+- The extension is compared case-insensitively: a file such as `0003_x.SQL` is a badly named
+  migration and makes the runner refuse to run (`MigrationSequenceError`), it is never skipped.
+- The runner refuses (`MigrationSyntaxError`, code `MIGRATION_SYNTAX`) before the backup and before
+  anything runs:
+  - a migration statement that starts with `BEGIN`, `COMMIT`, `END`, `ROLLBACK`, `SAVEPOINT`,
+    `RELEASE`, `VACUUM`, `ATTACH`, `DETACH` or `PRAGMA`: the runner owns the transaction,
+    `user_version` and `foreign_keys`. (`CREATE TRIGGER ... BEGIN ... END;` is one statement that
+    starts with `CREATE` and is fine.)
+  - a header comment line that looks like the flag but is not exactly `-- migrate: table-rebuild`
+    (for example `--migrate: table-rebuild` or `-- migrate: table-rebuild.`): a misspelled flag is
+    an error, never "no flag".
+  - a statement that starts with `DROP TABLE` in a migration without the flag: with foreign keys
+    on, dropping a parent table is an implicit `DELETE FROM` that cascades into the child tables.
+    (`DROP INDEX`, `DROP TRIGGER` and `DROP VIEW` are fine; the scan looks only at the leading
+    keywords of each statement.)
+- The runner also refuses to start inside an open transaction (`MigrationError`, code
+  `MIGRATION_IN_TRANSACTION`; the caller's transaction is left untouched) and for a negative
+  `user_version` (`MigrationSequenceError`).
 - Tables are `STRICT`, and every write to a data table goes through the repository helpers (D05).
 - `PRAGMA foreign_keys` does nothing inside a transaction. A migration that rebuilds tables
   (create the new table, copy, drop the old one, rename) must carry the header comment line
-  `-- migrate: table-rebuild` in its leading comment block, before the first statement. For such a
+  `-- migrate: table-rebuild` in its leading comment block, before the first statement (only a
+  migration with this flag may use `DROP TABLE`). For such a
   migration the runner turns foreign keys off before `BEGIN`, runs `PRAGMA foreign_key_check`
   before `COMMIT` (any row it returns rolls the migration back) and turns foreign keys back on
   afterwards, also after a failure.

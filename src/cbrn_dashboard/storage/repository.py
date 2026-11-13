@@ -2,10 +2,10 @@
 """Repository helpers with the append-only change log (PLAN.md D05, section 5.1, task T1.4).
 
 Every write goes through :func:`insert`, :func:`update` or :func:`delete`. Each helper runs inside
-:func:`~cbrn_dashboard.storage.db.transaction` (re-entrant), so the data change and its
-``change_log`` rows are committed or rolled back together. The log rows are written only after the
-change itself succeeded, so a failed statement never leaves a log row behind, not even inside an
-outer transaction.
+:func:`~cbrn_dashboard.storage.db.transaction`, which nests as a savepoint, so the data change and
+its ``change_log`` rows are committed or rolled back together: when a helper fails, everything it
+wrote is undone even if the caller catches the error and the outer transaction goes on to commit.
+The log rows are written only after the change itself succeeded.
 
 * One ``change_log`` row per affected row. A delete also logs every row the delete cascades to:
   they are found *before* the delete through ``foreign_key_list`` (the ``pragma_foreign_key_list``
@@ -28,6 +28,7 @@ contents.
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 from collections.abc import Collection, Mapping, Sequence
@@ -39,6 +40,7 @@ from cbrn_dashboard.storage.db import DatabaseConnection, DatabaseError, transac
 
 __all__ = [
     "ACTIONS",
+    "PSEUDO_ENTITIES",
     "REDACTED_COLUMNS",
     "ConstraintViolationError",
     "ForeignKeyError",
@@ -71,6 +73,10 @@ REDACTED_COLUMNS: Mapping[str, frozenset[str]] = {
     "ppe_certification": frozenset({"reference"}),
     "academic_degree": frozenset({"field"}),
 }
+
+#: Log entities that are not tables: ``database`` is the restore event of the restore service
+#: (T7.3). They have no redaction rule of their own, see :func:`log_event`.
+PSEUDO_ENTITIES: frozenset[str] = frozenset({"database"})
 
 #: Tables the helpers refuse to write: the log itself is written only by this module.
 _PROTECTED_TABLES: frozenset[str] = frozenset({"change_log"})
@@ -232,6 +238,10 @@ def _check_columns(info: TableInfo, columns: Collection[str]) -> None:
 def _check_value(value: object) -> None:
     if value is not None and not isinstance(value, str | int | float):
         msg = "Only NULL, integer, real and text values are supported."
+        raise RepositoryError(msg, "UNSUPPORTED_VALUE")
+    if isinstance(value, float) and not math.isfinite(value):
+        # The change log cannot hold NaN or an infinity (JSON); refuse before anything is written.
+        msg = "A non-finite number is not supported."
         raise RepositoryError(msg, "UNSUPPORTED_VALUE")
 
 
@@ -421,13 +431,25 @@ def log_event(
     """Write one ``change_log`` row for an event that is not a single-row write (for example
     the ``restore`` row of the restore service).
 
-    ``entity`` is normally a table name; ``before``, ``after`` and ``entity_key`` are redacted
-    according to it like every other log row.
+    ``entity`` is a live table name (validated like every other table) or one of
+    :data:`PSEUDO_ENTITIES`. For a table, ``before``, ``after`` and ``entity_key`` are redacted
+    according to it like every other log row. A pseudo-entity has no redaction rule, so it refuses
+    (``REDACTED_KEY_IN_EVENT``) any of those mappings that names a redacted column of any table.
     """
     _check_action(action, ACTIONS)
     if not isinstance(entity, str) or not entity:
         msg = "The entity must be a non-empty text."
         raise RepositoryError(msg, "INVALID_ENTITY")
+    if entity in PSEUDO_ENTITIES:
+        redacted_names = frozenset(
+            column for columns in REDACTED_COLUMNS.values() for column in columns
+        )
+        for mapping in (entity_key, before, after):
+            if mapping is not None and not redacted_names.isdisjoint(mapping):
+                msg = "A personal column cannot be recorded in an event of this entity."
+                raise RepositoryError(msg, "REDACTED_KEY_IN_EVENT")
+    else:
+        table_info(ctx.conn, entity)
     if entity_id is not None and (not isinstance(entity_id, int) or isinstance(entity_id, bool)):
         msg = "The entity id must be an integer."
         raise RepositoryError(msg, "INVALID_KEY")
@@ -446,30 +468,14 @@ def log_event(
 # --------------------------------------------------------------------------- insert
 
 
-def _inserted_key(
-    info: TableInfo, values: Mapping[str, object], last_rowid: int | None
-) -> dict[str, object]:
-    if info.has_integer_id:
-        return {_ID_COLUMN: last_rowid}
-    key: dict[str, object] = {}
-    for column in info.primary_key:
-        value = values.get(column)
-        if value is None and info.integer_pk:
-            value = last_rowid
-        if value is None:
-            msg = "The primary key of the new row is unknown."
-            raise RepositoryError(msg, "KEY_MISSING")
-        key[column] = value
-    return key
-
-
 def insert(
     ctx: WriteContext, table: str, values: Mapping[str, object], *, action: str = "insert"
 ) -> int | None:
     """Insert one row and log it; return the new ``id`` (``None`` for tables without an ``id``).
 
-    ``after_json`` holds the full row as stored (defaults included). ``action`` may be
-    ``"insert"`` or ``"import"`` (the CSV importer).
+    ``after_json`` holds the full row as stored (defaults included); both it and the key of the log
+    row come from the row SQLite returns (``RETURNING``), not from the caller's values. ``action``
+    may be ``"insert"`` or ``"import"`` (the CSV importer).
     """
     _check_action(action, _INSERT_ACTIONS)
     with transaction(ctx.conn):
@@ -483,16 +489,20 @@ def insert(
             sql = f"INSERT INTO {_quote(table)} ({names}) VALUES ({marks})"
         else:
             sql = f"INSERT INTO {_quote(table)} DEFAULT VALUES"
+        sql += " RETURNING " + ", ".join(_quote(column) for column in info.columns)
         try:
-            cursor = ctx.conn.execute(sql, list(values.values()))
+            returned = ctx.conn.execute(sql, list(values.values())).fetchall()
         except sqlite3.IntegrityError as exc:
             msg = f"The row violates a database constraint ({exc.sqlite_errorname})."
             raise ConstraintViolationError(msg) from exc
-        key = _inserted_key(info, values, cursor.lastrowid)
-        after = _select_by_key(ctx.conn, info, key)
-        if after is None:
+        if len(returned) != 1:
             msg = "The inserted row could not be read back."
             raise RepositoryError(msg, "INSERT_NOT_FOUND")
+        after = dict(zip(info.columns, tuple(returned[0]), strict=True))
+        key = _row_key(info, after)
+        if any(value is None for value in key.values()):
+            msg = "The primary key of the new row is unknown."
+            raise RepositoryError(msg, "KEY_MISSING")
         _log_row(ctx, info, action, key, before=None, after=after)
         if info.has_integer_id:
             new_id = after[_ID_COLUMN]
@@ -561,41 +571,120 @@ class _CascadeRef:
     pairs: tuple[tuple[str, str], ...]  # (child column, parent column)
 
 
-def _cascade_graph(conn: sqlite3.Connection) -> dict[str, list[_CascadeRef]]:
-    """Foreign keys with ``ON DELETE CASCADE``, grouped by the lower-cased parent table name."""
+@dataclass(frozen=True)
+class _ForeignKey:
+    """A foreign key between two tables of the cascade graph."""
+
+    child: str
+    parent: str
+    pairs: tuple[tuple[str, str], ...]  # (child column, parent column)
+    on_update: str
+    on_delete: str
+
+
+#: ``ON UPDATE`` actions that never change a child row.
+_INERT_UPDATE_ACTIONS: frozenset[str] = frozenset({"NO ACTION", "RESTRICT"})
+#: ``ON DELETE`` actions that change a child row without the helper logging it.
+_UNLOGGED_DELETE_ACTIONS: frozenset[str] = frozenset({"SET NULL", "SET DEFAULT"})
+
+
+def _canonical_column(info: TableInfo, name: str) -> str:
+    """The column of ``info`` called ``name``, compared case-insensitively (as SQLite does)."""
+    for column in info.columns:
+        if column.lower() == name.lower():
+            _check_columns(info, [column])
+            return column
+    msg = "Unknown column."
+    raise UnknownColumnError(msg)
+
+
+def _foreign_key_groups(conn: sqlite3.Connection, table: str) -> list[list[tuple[object, ...]]]:
+    """The foreign keys of ``table`` as lists of ``pragma_foreign_key_list`` rows, one per key.
+
+    Row layout: ``table`` (parent), ``from``, ``to``, ``on_update``, ``on_delete``. The table name
+    travels as a bound parameter, so any name is safe to pass.
+    """
+    rows = _rows(
+        conn,
+        'SELECT id, "table", "from", "to", on_update, on_delete FROM pragma_foreign_key_list(?)'
+        " ORDER BY id, seq",
+        (table,),
+    )
+    grouped: dict[int, list[tuple[object, ...]]] = {}
+    for row in rows:
+        fk_id = row[0]
+        if isinstance(fk_id, int):
+            grouped.setdefault(fk_id, []).append(row[1:])
+    return list(grouped.values())
+
+
+def _schema_foreign_keys(conn: sqlite3.Connection) -> list[_ForeignKey]:
+    """Every foreign key between tables with a plain identifier name.
+
+    A table whose name fails the identifier rule cannot be handled by the helpers. It is skipped
+    when it holds no foreign key to such a table; otherwise a delete could cascade into it without
+    a log row, so ``UNSUPPORTED_SCHEMA`` is raised.
+    """
     names = _table_names(conn)
-    lowered = {name.lower() for name in names}
-    graph: dict[str, list[_CascadeRef]] = {}
+    plain = {name.lower(): name for name in names if _IDENTIFIER.fullmatch(name)}
+    infos: dict[str, TableInfo] = {}
+
+    def info_of(name: str) -> TableInfo:
+        if name not in infos:
+            infos[name] = table_info(conn, name)
+        return infos[name]
+
+    result: list[_ForeignKey] = []
     for child in names:
-        child_info = table_info(conn, child)
-        fks = _rows(
-            conn,
-            'SELECT id, seq, "table", "from", "to", on_delete FROM pragma_foreign_key_list(?)'
-            " ORDER BY id, seq",
-            (child,),
-        )
-        grouped: dict[int, list[tuple[object, ...]]] = {}
-        for row in fks:
-            fk_id = row[0]
-            if isinstance(fk_id, int):
-                grouped.setdefault(fk_id, []).append(row)
-        for rows in grouped.values():
-            if str(rows[0][5]).upper() != "CASCADE":
+        child_is_plain = _IDENTIFIER.fullmatch(child) is not None
+        for rows in _foreign_key_groups(conn, child):
+            parent = plain.get(str(rows[0][0]).lower())
+            if parent is None:
                 continue
-            parent = str(rows[0][2])
-            if parent.lower() not in lowered:
-                continue
-            parent_info = table_info(conn, next(n for n in names if n.lower() == parent.lower()))
+            if not child_is_plain:
+                msg = "A table with an unsupported name references a table; it cannot be logged."
+                raise RepositoryError(msg, "UNSUPPORTED_SCHEMA")
+            child_info = info_of(child)
+            parent_info = info_of(parent)
             pairs: list[tuple[str, str]] = []
             for position, row in enumerate(rows):
-                child_column = str(row[3])
-                parent_column = (
-                    str(row[4]) if row[4] is not None else parent_info.primary_key[position]
+                child_column = _canonical_column(child_info, str(row[1]))
+                parent_name = row[2] if row[2] is not None else parent_info.primary_key[position]
+                pairs.append((child_column, _canonical_column(parent_info, str(parent_name))))
+            result.append(
+                _ForeignKey(
+                    child, parent, tuple(pairs), str(rows[0][3]).upper(), str(rows[0][4]).upper()
                 )
-                _check_columns(child_info, [child_column])
-                _check_columns(parent_info, [parent_column])
-                pairs.append((child_column, parent_column))
-            graph.setdefault(parent.lower(), []).append(_CascadeRef(child, tuple(pairs)))
+            )
+    return result
+
+
+def _cascade_graph(conn: sqlite3.Connection, root: str) -> dict[str, list[_CascadeRef]]:
+    """Foreign keys with ``ON DELETE CASCADE``, grouped by the lower-cased parent table name.
+
+    Raises ``UNSUPPORTED_FK_ACTION`` when a delete of ``root`` could change a row without a log
+    row: a table referencing ``root``, or a table cascaded from it, declares ``ON DELETE SET NULL``
+    or ``SET DEFAULT``, or any ``ON UPDATE`` action other than ``NO ACTION``/``RESTRICT``.
+    """
+    foreign_keys = _schema_foreign_keys(conn)
+    reachable = {root.lower()}
+    pending = [root.lower()]
+    while pending:
+        parent = pending.pop()
+        for fk in foreign_keys:
+            is_new = fk.child.lower() not in reachable
+            if fk.parent.lower() == parent and fk.on_delete == "CASCADE" and is_new:
+                reachable.add(fk.child.lower())
+                pending.append(fk.child.lower())
+    graph: dict[str, list[_CascadeRef]] = {}
+    for fk in foreign_keys:
+        if fk.parent.lower() not in reachable:
+            continue
+        if fk.on_delete in _UNLOGGED_DELETE_ACTIONS or fk.on_update not in _INERT_UPDATE_ACTIONS:
+            msg = "A foreign key action would change rows that the change log does not record."
+            raise RepositoryError(msg, "UNSUPPORTED_FK_ACTION")
+        if fk.on_delete == "CASCADE":
+            graph.setdefault(fk.parent.lower(), []).append(_CascadeRef(fk.child, fk.pairs))
     return graph
 
 
@@ -603,7 +692,7 @@ def _collect_cascade(
     conn: sqlite3.Connection, root: TableInfo, root_row: dict[str, object]
 ) -> list[tuple[TableInfo, dict[str, object]]]:
     """The row and every row a delete of it cascades to (children first found, parent first)."""
-    graph = _cascade_graph(conn)
+    graph = _cascade_graph(conn, root.name)
     infos: dict[str, TableInfo] = {root.name: root}
     found: list[tuple[TableInfo, dict[str, object]]] = []
     seen: set[tuple[str, tuple[object, ...]]] = set()

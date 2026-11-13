@@ -7,20 +7,25 @@ import shutil
 import sqlite3
 import stat
 from contextlib import closing
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
 from cbrn_dashboard.storage.db import (
     MIN_SQLITE_VERSION,
+    DatabaseConnection,
     DatabaseError,
+    DatabaseMovedError,
     DatabaseNotFoundError,
     HotJournalError,
+    NotADatabaseError,
     ReadOnlyDatabaseError,
     SqliteTooOldError,
     check_sqlite_version,
+    classify_sqlite_error,
     database_is_writable,
     open_database,
+    read_only_uri,
     read_pragmas,
     transaction,
 )
@@ -229,6 +234,94 @@ def test_read_write_open_recovers_the_hot_journal(tmp_path: Path) -> None:
         assert conn.execute("SELECT count(*) FROM t").fetchone()[0] == ROWS
 
 
+def test_non_database_file_beside_an_empty_journal_is_not_a_hot_journal(tmp_path: Path) -> None:
+    path = tmp_path / "junk.sqlite3"
+    path.write_bytes(b"this is not a database" * 100)
+    journal = tmp_path / "junk.sqlite3-journal"
+    journal.write_bytes(b"")  # stale and empty
+    with pytest.raises(NotADatabaseError) as error:
+        open_database(path, read_only=True)
+    assert error.value.code == "NOT_A_DATABASE"
+    assert not isinstance(error.value, HotJournalError)
+    assert isinstance(error.value.__cause__, sqlite3.DatabaseError)
+    assert journal.is_file()
+
+
+def test_non_database_file_without_a_journal_is_not_a_database(tmp_path: Path) -> None:
+    path = tmp_path / "junk.sqlite3"
+    path.write_bytes(b"this is not a database" * 100)
+    with pytest.raises(NotADatabaseError):
+        open_database(path, read_only=True)
+
+
+# --------------------------------------------------------------------------- error mapping
+
+
+def _fabricated(code: int, name: str) -> sqlite3.OperationalError:
+    error = sqlite3.OperationalError("fabricated")
+    error.sqlite_errorcode = code
+    error.sqlite_errorname = name
+    return error
+
+
+@pytest.mark.parametrize(
+    ("code", "name", "expected"),
+    [
+        (776, "SQLITE_READONLY_ROLLBACK", HotJournalError),
+        (1032, "SQLITE_READONLY_DBMOVED", DatabaseMovedError),
+        (8, "SQLITE_READONLY", ReadOnlyDatabaseError),
+        (264, "SQLITE_READONLY_RECOVERY", ReadOnlyDatabaseError),
+        (520, "SQLITE_READONLY_CANTLOCK", ReadOnlyDatabaseError),
+        (1288, "SQLITE_READONLY_DIRECTORY", ReadOnlyDatabaseError),
+        (26, "SQLITE_NOTADB", NotADatabaseError),
+        (5, "SQLITE_BUSY", None),
+        (6, "SQLITE_LOCKED", None),
+        (261, "SQLITE_BUSY_RECOVERY", None),
+        (1, "SQLITE_ERROR", None),
+    ],
+)
+def test_sqlite_errors_are_classified_by_extended_code(
+    code: int, name: str, expected: type[DatabaseError] | None
+) -> None:
+    error = _fabricated(code, name)
+    assert classify_sqlite_error(error.sqlite_errorcode, error.sqlite_errorname) is expected
+
+
+# --------------------------------------------------------------------------- read-only URI
+
+ODD_DRIVE_PATH = PureWindowsPath("C:\\pasta com espa\u00e7o\\dados \u00e9 #1%.sqlite3")
+UNC_PATH = PureWindowsPath("\\\\server\\share\\a b#%\u00e9.sqlite3")
+
+
+def test_read_only_uri_of_a_drive_path_is_path_as_uri() -> None:
+    uri = read_only_uri(ODD_DRIVE_PATH)
+    assert uri == ODD_DRIVE_PATH.as_uri() + "?mode=ro"
+    assert uri.startswith("file:///C:/")
+    body = uri.removesuffix("?mode=ro")
+    for raw in (" ", "#", "?", "\u00e7", "\u00e9"):
+        assert raw not in body
+    for encoded in ("%20", "%23", "%25", "%C3%A7", "%C3%A9"):
+        assert encoded in body
+
+
+def test_read_only_uri_encodes_a_question_mark() -> None:
+    uri = read_only_uri(PureWindowsPath("C:\\a?b\\x.sqlite3"))
+    assert uri == "file:///C:/a%3Fb/x.sqlite3?mode=ro"
+
+
+def test_read_only_uri_of_a_unc_path_has_an_empty_authority() -> None:
+    uri = read_only_uri(UNC_PATH)
+    assert uri == "file:////server/share/a%20b%23%25%C3%A9.sqlite3?mode=ro"
+    assert uri.startswith("file:////server/share/")
+    assert not uri.startswith("file://server")  # that would put "server" in the authority
+
+
+def test_read_only_uri_does_not_resolve_the_path(tmp_path: Path) -> None:
+    link_free = tmp_path / "dir" / "db.sqlite3"  # does not exist: nothing is read
+    assert read_only_uri(link_free) == link_free.absolute().as_uri() + "?mode=ro"
+    assert not link_free.parent.exists()
+
+
 # --------------------------------------------------------------------------- writability
 
 
@@ -355,6 +448,189 @@ def test_nested_success_with_outer_failure_rolls_back_everything(tmp_path: Path)
         assert _count(conn) == 1
 
 
+def _item_ids(conn: sqlite3.Connection) -> list[int]:
+    return [row[0] for row in conn.execute("SELECT id FROM item ORDER BY id")]
+
+
+def _add(conn: sqlite3.Connection, number: int) -> None:
+    conn.execute("INSERT INTO item (id, label) VALUES (?, ?)", (number, f"n{number}"))
+
+
+def _record_statements(conn: DatabaseConnection, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Wrap ``conn.execute`` so that the SQL text of every statement is recorded."""
+    seen: list[str] = []
+    real = conn.execute
+
+    def execute(sql: str, parameters: tuple[object, ...] = (), /) -> sqlite3.Cursor:
+        seen.append(sql)
+        return real(sql, parameters)
+
+    monkeypatch.setattr(conn, "execute", execute)
+    return seen
+
+
+def _fail_statements(
+    conn: DatabaseConnection, monkeypatch: pytest.MonkeyPatch, prefix: str
+) -> None:
+    """Make every statement that starts with ``prefix`` fail like a broken disk would."""
+    real = conn.execute
+
+    def execute(sql: str, parameters: tuple[object, ...] = (), /) -> sqlite3.Cursor:
+        if sql.startswith(prefix):
+            raise sqlite3.OperationalError("disk I/O error")
+        return real(sql, parameters)
+
+    monkeypatch.setattr(conn, "execute", execute)
+
+
+def test_nested_transaction_uses_a_savepoint_and_the_outer_one_begin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "db.sqlite3"
+    _create(path)
+    with closing(open_database(path)) as conn:
+        seen = _record_statements(conn, monkeypatch)
+        with transaction(conn), transaction(conn), transaction(conn):
+            _add(conn, 2)
+    assert seen[0] == "BEGIN IMMEDIATE"
+    assert seen[-1] == "COMMIT"
+    created = [sql.split()[1] for sql in seen if sql.startswith("SAVEPOINT ")]
+    released = [sql.split()[1] for sql in seen if sql.startswith("RELEASE ")]
+    assert len(created) == 2
+    assert len(set(created)) == 2  # unique names
+    assert sorted(released) == sorted(created)
+    assert all(name.isidentifier() for name in created)
+
+
+def test_caught_inner_failure_undoes_only_the_inner_block(tmp_path: Path) -> None:
+    path = tmp_path / "db.sqlite3"
+    _create(path)
+    with closing(open_database(path)) as conn:
+        with transaction(conn):
+            _add(conn, 2)
+            with pytest.raises(RuntimeError, match="inner"), transaction(conn):
+                _add(conn, 3)
+                raise RuntimeError("inner")
+            assert conn.in_transaction
+            assert _item_ids(conn) == [1, 2]
+            _add(conn, 4)
+        assert not conn.in_transaction
+        assert _item_ids(conn) == [1, 2, 4]
+    with closing(open_database(path)) as other:
+        assert _item_ids(other) == [1, 2, 4]
+
+
+def test_caught_inner_sql_error_undoes_only_the_inner_block(tmp_path: Path) -> None:
+    path = tmp_path / "db.sqlite3"
+    _create(path)
+    with closing(open_database(path)) as conn:
+        with transaction(conn):
+            with pytest.raises(sqlite3.IntegrityError), transaction(conn):
+                _add(conn, 2)
+                conn.execute("INSERT INTO child (id, parent_id) VALUES (1, 99)")
+            _add(conn, 3)
+        assert _item_ids(conn) == [1, 3]
+
+
+def test_a_failure_in_a_deeper_block_is_caught_at_any_level(tmp_path: Path) -> None:
+    path = tmp_path / "db.sqlite3"
+    _create(path)
+    with closing(open_database(path)) as conn:
+        with transaction(conn):
+            with transaction(conn):
+                _add(conn, 2)
+                with pytest.raises(RuntimeError), transaction(conn):
+                    _add(conn, 3)
+                    raise RuntimeError("deep")
+                _add(conn, 4)
+            with pytest.raises(RuntimeError), transaction(conn):
+                with transaction(conn):
+                    _add(conn, 5)
+                raise RuntimeError("middle")  # the released inner block is undone as well
+            _add(conn, 6)
+        assert _item_ids(conn) == [1, 2, 4, 6]
+
+
+def test_propagating_inner_failure_rolls_back_the_outer_block_too(tmp_path: Path) -> None:
+    path = tmp_path / "db.sqlite3"
+    _create(path)
+    with closing(open_database(path)) as conn:
+        with pytest.raises(RuntimeError, match="boom"), transaction(conn):
+            _add(conn, 2)
+            with transaction(conn):
+                _add(conn, 3)
+                raise RuntimeError("boom")
+        assert not conn.in_transaction
+        assert _item_ids(conn) == [1]
+
+
+def test_inner_success_and_outer_failure_commit_nothing(tmp_path: Path) -> None:
+    path = tmp_path / "db.sqlite3"
+    _create(path)
+    with closing(open_database(path)) as conn:
+        with pytest.raises(RuntimeError, match="outer"), transaction(conn):
+            with transaction(conn):
+                _add(conn, 2)
+            with transaction(conn):
+                _add(conn, 3)
+            raise RuntimeError("outer")
+        assert _item_ids(conn) == [1]
+    with closing(open_database(path)) as other:
+        assert _item_ids(other) == [1]
+
+
+def test_base_exceptions_roll_back_too(tmp_path: Path) -> None:
+    path = tmp_path / "db.sqlite3"
+    _create(path)
+    with closing(open_database(path)) as conn:
+        with pytest.raises(KeyboardInterrupt), transaction(conn):
+            _add(conn, 2)
+            raise KeyboardInterrupt
+        assert not conn.in_transaction
+        assert _item_ids(conn) == [1]
+        with transaction(conn):
+            _add(conn, 3)
+            with pytest.raises(KeyboardInterrupt), transaction(conn):
+                _add(conn, 4)
+                raise KeyboardInterrupt
+            assert _item_ids(conn) == [1, 3]
+        assert _item_ids(conn) == [1, 3]
+
+
+def test_failing_outer_rollback_does_not_mask_the_original_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "db.sqlite3"
+    _create(path)
+    with closing(open_database(path)) as conn:
+        _fail_statements(conn, monkeypatch, "ROLLBACK")
+        with pytest.raises(RuntimeError, match="original") as caught, transaction(conn):
+            _add(conn, 2)
+            raise RuntimeError("original")
+        assert "rollback itself also failed" in "".join(caught.value.__notes__)
+        monkeypatch.undo()
+        assert conn.in_transaction  # the failed rollback left it open; clean up by hand
+        conn.execute("ROLLBACK")
+        assert _item_ids(conn) == [1]
+
+
+def test_failing_savepoint_rollback_does_not_mask_the_original_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "db.sqlite3"
+    _create(path)
+    with closing(open_database(path)) as conn:
+        with pytest.raises(RuntimeError, match="original"), transaction(conn):
+            with pytest.raises(RuntimeError, match="original") as caught, transaction(conn):
+                _fail_statements(conn, monkeypatch, "ROLLBACK TO")
+                raise RuntimeError("original")
+            assert "rollback itself also failed" in "".join(caught.value.__notes__)
+            monkeypatch.undo()
+            raise RuntimeError("original")  # the outer block still rolls everything back
+        assert not conn.in_transaction
+        assert _item_ids(conn) == [1]
+
+
 def test_transaction_on_a_read_only_connection(tmp_path: Path) -> None:
     path = tmp_path / "db.sqlite3"
     _create(path)
@@ -400,3 +676,5 @@ def test_error_codes_are_stable() -> None:
     assert HotJournalError.code == "HOT_JOURNAL"
     assert SqliteTooOldError.code == "SQLITE_TOO_OLD"
     assert DatabaseNotFoundError.code == "DATABASE_NOT_FOUND"
+    assert DatabaseMovedError.code == "DATABASE_MOVED"
+    assert NotADatabaseError.code == "NOT_A_DATABASE"

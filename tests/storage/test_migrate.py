@@ -23,7 +23,9 @@ from cbrn_dashboard.storage.migrate import (
     Migration,
     MigrationError,
     MigrationFailedError,
+    MigrationInTransactionError,
     MigrationSequenceError,
+    MigrationSyntaxError,
     backup_before_migration,
     load_migrations,
     migrate,
@@ -142,6 +144,38 @@ def test_change_log_is_append_only(tmp_path: Path) -> None:
             conn.execute("DELETE FROM change_log")
         row = conn.execute("SELECT operator, count(*) FROM change_log").fetchone()
         assert (row[0], row[1]) == ("", 1)
+
+
+@pytest.mark.parametrize("verb", ["INSERT OR REPLACE INTO", "REPLACE INTO"])
+def test_change_log_row_cannot_be_overwritten_by_replace(tmp_path: Path, verb: str) -> None:
+    with closing(open_database(tmp_path / "db.sqlite3")) as conn:
+        migrate(conn)
+        _insert_log(conn)
+        before = tuple(conn.execute("SELECT * FROM change_log WHERE id = 1").fetchone())
+        with pytest.raises(sqlite3.DatabaseError, match="change_log is append-only"):
+            conn.execute(
+                f"{verb} change_log (id, at_utc, entity, entity_id, action) "
+                "VALUES (1, '2030-01-01T00:00:00Z', 'forged', 9, 'delete')"
+            )
+        assert tuple(conn.execute("SELECT * FROM change_log WHERE id = 1").fetchone()) == before
+        assert conn.execute("SELECT count(*) FROM change_log").fetchone()[0] == 1
+
+
+def test_change_log_still_accepts_new_rows_with_or_without_an_id(tmp_path: Path) -> None:
+    with closing(open_database(tmp_path / "db.sqlite3")) as conn:
+        migrate(conn)
+        _insert_log(conn)
+        conn.execute(
+            "INSERT INTO change_log (id, at_utc, entity, action)"
+            " VALUES (50, '2026-01-01T00:00:00Z', 'thing', 'insert')"
+        )
+        conn.execute(
+            "REPLACE INTO change_log (id, at_utc, entity, action)"
+            " VALUES (51, '2026-01-01T00:00:00Z', 'thing', 'insert')"
+        )
+        _insert_log(conn)
+        ids = [row[0] for row in conn.execute("SELECT id FROM change_log ORDER BY id")]
+        assert ids == [1, 50, 51, 52]
 
 
 def test_change_log_rejects_an_unknown_action(tmp_path: Path) -> None:
@@ -650,3 +684,339 @@ def test_readme_reserves_the_numbers_until_v010_and_states_the_max_plus_one_rule
     assert "max+1" in text
     assert "-- migrate: table-rebuild" in text
     assert "ascending order" in text
+
+
+# --------------------------------------------------------------------------- QA round 1: runner
+# P1A-10 (rebuild flag / DROP TABLE), P1A-12 (splitter / transaction control), P1A-14 (file
+# extension / negative user_version), P1A-15 (open transaction).
+
+
+def _pair(first: str, second: str, *, rebuild: bool = False) -> list[Migration]:
+    return [Migration(1, "first", first, False), Migration(2, "second", second, rebuild)]
+
+
+def _assert_refused_before_anything_ran(migrations: list[Migration], db: Path) -> None:
+    """``migrate`` raises ``MigrationSyntaxError``; no hook call, no table, no version bump."""
+    calls: list[tuple[int, int]] = []
+    with closing(open_database(db)) as conn:
+        with pytest.raises(MigrationSyntaxError) as caught:
+            migrate(conn, migrations=migrations, before_migrate=lambda a, b: calls.append((a, b)))
+        assert caught.value.code == "MIGRATION_SYNTAX"
+        assert calls == []
+        _assert_untouched(conn, 0)
+        assert not conn.in_transaction
+
+
+# --- P1A-10: misspelled rebuild flag
+
+FLAG_VARIANTS = [
+    "--migrate: table-rebuild",
+    "-- migrate: table-rebuild.",
+    "-- Migrate: table-rebuild",
+    "--  migrate : table-rebuild",
+    "-- migrate: table_rebuild",
+    "-- MIGRATE: TABLE-REBUILD",
+    "-- migrate:table-rebuild",
+    "-- migrate: something-else",
+]
+
+
+@pytest.mark.parametrize("variant", FLAG_VARIANTS)
+def test_a_misspelled_rebuild_flag_is_refused_at_load_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str
+) -> None:
+    package = make_package(
+        tmp_path, monkeypatch, {"0001_a.sql": f"-- Header.\n{variant}\n\n{CREATE_A}"}
+    )
+    with pytest.raises(MigrationSyntaxError) as caught:
+        load_migrations(package)
+    assert caught.value.code == "MIGRATION_SYNTAX"
+    assert "CREATE" not in str(caught.value)  # no SQL text in the message
+
+
+@pytest.mark.parametrize("variant", FLAG_VARIANTS)
+def test_a_misspelled_flag_with_a_drop_table_deletes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str
+) -> None:
+    package = make_package(
+        tmp_path,
+        monkeypatch,
+        {"0001_fk.sql": PARENT_CHILD, "0002_drop.sql": f"{variant}\nDROP TABLE parent;\n"},
+    )
+    one = make_package(tmp_path, monkeypatch, {"0001_fk.sql": PARENT_CHILD})
+    with closing(open_database(tmp_path / "db.sqlite3")) as conn:
+        migrate(conn, package=one)
+        conn.execute("INSERT INTO parent (id) VALUES (1)")
+        conn.execute("INSERT INTO child (id, parent_id) VALUES (1, 1)")
+        calls: list[tuple[int, int]] = []
+        with pytest.raises(MigrationSyntaxError):
+            migrate(conn, package=package, before_migrate=lambda a, b: calls.append((a, b)))
+        assert calls == []
+        assert user_version(conn) == 1
+        assert conn.execute("SELECT count(*) FROM parent").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM child").fetchone()[0] == 1
+
+
+def test_a_misspelled_flag_in_a_migration_list_is_refused(tmp_path: Path) -> None:
+    migrations = _pair(CREATE_A, f"--migrate: table-rebuild\n{CREATE_B}")
+    _assert_refused_before_anything_ran(migrations, tmp_path / "db.sqlite3")
+
+
+def test_a_late_or_correct_flag_line_is_still_accepted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = make_package(
+        tmp_path,
+        monkeypatch,
+        {
+            "0001_a.sql": f"-- Header, migrate: nothing special.\n{FLAG}{CREATE_A}",
+            # outside the leading comment block a directive-like comment is just a comment
+            "0002_b.sql": CREATE_B + "-- migrate: table-rebuild.\n",
+        },
+    )
+    assert [m.rebuild for m in load_migrations(package)] == [True, False]
+
+
+# --- P1A-10: DROP TABLE without the flag
+
+
+@pytest.mark.parametrize(
+    "drop",
+    [
+        "DROP TABLE a;",
+        "drop table a;",
+        "Drop   Table IF EXISTS a;",
+        "DROP\n  TABLE a;",
+        "/* gone */ DROP -- why\n TABLE a;",
+        "-- header comment\nDROP TABLE a;",
+    ],
+)
+def test_an_unflagged_drop_table_is_refused_and_nothing_runs(tmp_path: Path, drop: str) -> None:
+    migrations = _pair(CREATE_A, CREATE_B + drop + "\n" + CREATE_C)
+    _assert_refused_before_anything_ran(migrations, tmp_path / "db.sqlite3")
+
+
+def test_an_unflagged_drop_table_takes_no_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    one = make_package(tmp_path, monkeypatch, {"0001_a.sql": CREATE_A})
+    two = make_package(
+        tmp_path, monkeypatch, {"0001_a.sql": CREATE_A, "0002_drop.sql": "DROP TABLE a;\n"}
+    )
+    data = tmp_path / "data"
+    data.mkdir()
+    db = data / "db.sqlite3"
+    _migrate_and_close(db, data, one)
+    with closing(open_database(db)) as conn:
+        conn.execute("INSERT INTO a VALUES (7)")
+    with pytest.raises(MigrationSyntaxError):
+        _migrate_and_close(db, data, two)
+    assert _files(data / "backups") == []
+    with closing(open_database(db)) as conn:
+        assert user_version(conn) == 1
+        assert conn.execute("SELECT x FROM a").fetchone()[0] == 7
+
+
+def test_a_flagged_rebuild_with_drop_table_still_works(tmp_path: Path) -> None:
+    rebuild = (
+        FLAG
+        + "CREATE TABLE parent_new (id INTEGER PRIMARY KEY, note TEXT) STRICT;\n"
+        + "INSERT INTO parent_new (id) SELECT id FROM parent;\n"
+        + "DROP TABLE parent;\n"
+        + "ALTER TABLE parent_new RENAME TO parent;\n"
+    )
+    first = Migration(1, "fk", PARENT_CHILD, False)
+    with closing(open_database(tmp_path / "db.sqlite3")) as conn:
+        migrate(conn, migrations=[first])
+        conn.execute("INSERT INTO parent (id) VALUES (1)")
+        conn.execute("INSERT INTO child (id, parent_id) VALUES (1, 1)")
+        result = migrate(conn, migrations=[first, Migration(2, "rebuild", rebuild, True)])
+        assert result.applied == (2,)
+        assert user_version(conn) == 2
+        assert foreign_keys(conn) == 1
+        assert conn.execute("SELECT count(*) FROM parent").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM child").fetchone()[0] == 1
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_drop_index_and_drop_trigger_are_allowed_without_the_flag(tmp_path: Path) -> None:
+    first = (
+        CREATE_A
+        + "CREATE INDEX ix ON a (x);\n"
+        + "CREATE TRIGGER trg AFTER INSERT ON a BEGIN SELECT 1; END;\n"
+    )
+    second = "DROP INDEX ix;\nDROP TRIGGER trg;\n"
+    with closing(open_database(tmp_path / "db.sqlite3")) as conn:
+        assert migrate(conn, migrations=_pair(first, second)).applied == (1, 2)
+        names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
+        assert {"ix", "trg"}.isdisjoint(names)
+
+
+# --- P1A-12: several statements per line, transaction control
+
+ONE_LINE = "CREATE TABLE a (x INTEGER) STRICT; CREATE TABLE b (x INTEGER) STRICT;"
+
+
+def test_split_cuts_several_statements_on_one_line() -> None:
+    assert split_statements(ONE_LINE) == [
+        "CREATE TABLE a (x INTEGER) STRICT;",
+        "CREATE TABLE b (x INTEGER) STRICT;",
+    ]
+    assert split_statements(ONE_LINE + "\r\n" + ONE_LINE + "\r\n") == [
+        "CREATE TABLE a (x INTEGER) STRICT;",
+        "CREATE TABLE b (x INTEGER) STRICT;",
+        "CREATE TABLE a (x INTEGER) STRICT;",
+        "CREATE TABLE b (x INTEGER) STRICT;",
+    ]
+
+
+def test_split_handles_comments_and_literals_between_statements_on_one_line() -> None:
+    statements = split_statements(
+        "INSERT INTO t VALUES ('a;b'); /* x; y */ INSERT INTO t VALUES (2); -- done; ok\nSELECT 3;"
+    )
+    assert len(statements) == 3
+    assert statements[0] == "INSERT INTO t VALUES ('a;b');"
+    assert statements[1].endswith("INSERT INTO t VALUES (2);")
+    assert statements[2].endswith("SELECT 3;")
+
+
+def test_split_keeps_a_trigger_with_end_in_a_string_literal_whole() -> None:
+    trigger = "CREATE TRIGGER trg AFTER INSERT ON a BEGIN SELECT 'END; COMMIT;'; SELECT 2; END;"
+    statements = split_statements(trigger + " " + CREATE_B)
+    assert statements == [trigger, CREATE_B.strip()]
+
+
+def test_two_statements_on_one_line_are_both_applied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = make_package(
+        tmp_path, monkeypatch, {"0001_ab.sql": "\ufeff" + ONE_LINE + "\n" + CREATE_C}
+    )
+    with closing(open_database(tmp_path / "db.sqlite3")) as conn:
+        migrate(conn, package=package)
+        assert table_names(conn) == {"a", "b", "c"}
+        assert user_version(conn) == 1
+
+
+def test_the_real_migrations_split_and_pass_the_checks() -> None:
+    for migration in load_migrations():
+        assert split_statements(migration.sql), migration.number
+
+
+FORBIDDEN = [
+    "BEGIN;",
+    "BEGIN IMMEDIATE;",
+    "begin transaction;",
+    "COMMIT;",
+    "END;",
+    "end transaction;",
+    "ROLLBACK;",
+    "SAVEPOINT s;",
+    "RELEASE s;",
+    "RELEASE SAVEPOINT s;",
+    "VACUUM;",
+    "ATTACH DATABASE 'other.db' AS other;",
+    "DETACH DATABASE other;",
+    "PRAGMA foreign_keys = OFF;",
+    "pragma user_version = 5;",
+    "/* c */ COMMIT;",
+    "-- c\nCOMMIT;",
+]
+
+
+@pytest.mark.parametrize("statement", FORBIDDEN)
+def test_split_refuses_transaction_control_vacuum_attach_and_pragma(statement: str) -> None:
+    with pytest.raises(MigrationSyntaxError) as caught:
+        split_statements(CREATE_A + statement + "\n")
+    assert caught.value.code == "MIGRATION_SYNTAX"
+
+
+@pytest.mark.parametrize("statement", FORBIDDEN)
+def test_a_forbidden_statement_is_refused_before_anything_runs(
+    tmp_path: Path, statement: str
+) -> None:
+    # CREATE_A and the statement share a line: the cut must not hide the statement
+    second = CREATE_B.rstrip("\n") + " " + statement + "\n" + CREATE_C
+    _assert_refused_before_anything_ran(_pair(CREATE_A, second), tmp_path / "db.sqlite3")
+
+
+def test_a_forbidden_statement_takes_no_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    one = make_package(tmp_path, monkeypatch, {"0001_a.sql": CREATE_A})
+    two = make_package(
+        tmp_path, monkeypatch, {"0001_a.sql": CREATE_A, "0002_b.sql": CREATE_B + "COMMIT;\n"}
+    )
+    data = tmp_path / "data"
+    data.mkdir()
+    db = data / "db.sqlite3"
+    _migrate_and_close(db, data, one)
+    with closing(open_database(db)) as conn:
+        conn.execute("INSERT INTO a VALUES (7)")
+    with pytest.raises(MigrationSyntaxError):
+        _migrate_and_close(db, data, two)
+    assert _files(data / "backups") == []
+    with closing(open_database(db)) as conn:
+        assert user_version(conn) == 1
+        assert table_names(conn) == {"a"}
+
+
+# --- P1A-14: extension case, negative user_version
+
+
+@pytest.mark.parametrize("bad_name", ["0002_b.SQL", "0002_b.Sql", "0002_b.sQl"])
+def test_a_sql_file_with_an_upper_case_extension_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, bad_name: str
+) -> None:
+    package = make_package(tmp_path, monkeypatch, {"0001_a.sql": CREATE_A, bad_name: CREATE_B})
+    with pytest.raises(MigrationSequenceError) as caught:
+        load_migrations(package)
+    assert caught.value.code == "MIGRATION_SEQUENCE"
+    with closing(open_database(tmp_path / "db.sqlite3")) as conn:
+        with pytest.raises(MigrationSequenceError):
+            migrate(conn, package=package)
+        _assert_untouched(conn, 0)
+
+
+@pytest.mark.parametrize("version", [-1, -3, -2147483648])
+def test_a_negative_user_version_is_refused_and_nothing_runs(tmp_path: Path, version: int) -> None:
+    calls: list[tuple[int, int]] = []
+    with closing(open_database(tmp_path / "db.sqlite3")) as conn:
+        conn.execute(f"PRAGMA user_version = {version}")
+        with pytest.raises(MigrationSequenceError) as caught:
+            migrate(
+                conn,
+                migrations=_pair(CREATE_A, CREATE_B),
+                before_migrate=lambda a, b: calls.append((a, b)),
+            )
+        assert caught.value.code == "MIGRATION_SEQUENCE"
+        assert calls == []
+        _assert_untouched(conn, version)
+
+
+# --- P1A-15: an open transaction of the caller
+
+
+@pytest.mark.parametrize("begin", ["BEGIN", "BEGIN IMMEDIATE"])
+def test_migrate_refuses_to_run_inside_an_open_transaction_and_leaves_it_alone(
+    tmp_path: Path, begin: str
+) -> None:
+    calls: list[tuple[int, int]] = []
+    with closing(open_database(tmp_path / "db.sqlite3")) as conn:
+        conn.execute("CREATE TABLE keep (x INTEGER) STRICT")
+        conn.execute(begin)
+        conn.execute("INSERT INTO keep VALUES (42)")
+        with pytest.raises(MigrationInTransactionError) as caught:
+            migrate(
+                conn,
+                migrations=_pair(CREATE_A, CREATE_B),
+                before_migrate=lambda a, b: calls.append((a, b)),
+            )
+        assert caught.value.code == "MIGRATION_IN_TRANSACTION"
+        assert isinstance(caught.value, MigrationError)
+        assert calls == []
+        assert conn.in_transaction  # the caller's transaction was not rolled back
+        conn.execute("COMMIT")
+        assert [row[0] for row in conn.execute("SELECT x FROM keep")] == [42]
+        assert user_version(conn) == 0
+        assert table_names(conn) == {"keep"}

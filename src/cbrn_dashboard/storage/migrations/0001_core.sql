@@ -43,3 +43,12 @@ CREATE TRIGGER change_log_no_delete BEFORE DELETE ON change_log
 BEGIN
     SELECT RAISE(ABORT, 'change_log is append-only');
 END;
+
+-- INSERT OR REPLACE / REPLACE INTO with an existing id would overwrite a log row; SQLite fires the
+-- DELETE trigger for that implicit delete only when recursive_triggers is on, so refuse it here
+-- (D05). A new row, with or without an explicit new id, is not affected.
+CREATE TRIGGER change_log_no_replace BEFORE INSERT ON change_log
+WHEN NEW.id IS NOT NULL AND EXISTS (SELECT 1 FROM change_log WHERE id = NEW.id)
+BEGIN
+    SELECT RAISE(ABORT, 'change_log is append-only');
+END;

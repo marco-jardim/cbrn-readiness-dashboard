@@ -46,6 +46,7 @@ __all__ = [
     "Migration",
     "MigrationError",
     "MigrationFailedError",
+    "MigrationInTransactionError",
     "MigrationResult",
     "MigrationSequenceError",
     "MigrationSyntaxError",
@@ -64,6 +65,29 @@ REBUILD_FLAG = "-- migrate: table-rebuild"
 
 _FILE_NAME = re.compile(r"^(\d{4})_([a-z0-9_]+)\.sql$")
 _COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
+#: A header comment line that looks like a ``migrate:`` directive (any case or spacing).
+_DIRECTIVE = re.compile(r"(?i)^--\s*migrate\s*:")
+#: The first one or two keywords of a statement, after leading whitespace and comments.
+_LEADING_WORDS = re.compile(
+    r"^(?:\s|--[^\n]*+|/\*.*?\*/)*+([A-Za-z]+)(?:(?:\s|--[^\n]*+|/\*.*?\*/)++([A-Za-z]+))?",
+    re.DOTALL,
+)
+#: Statements a migration may not start with: the runner owns the transaction, ``user_version``
+#: and ``foreign_keys``, and a migration must stay inside the one database file.
+_FORBIDDEN_FIRST_WORDS = frozenset(
+    {
+        "BEGIN",
+        "COMMIT",
+        "END",
+        "ROLLBACK",
+        "SAVEPOINT",
+        "RELEASE",
+        "VACUUM",
+        "ATTACH",
+        "DETACH",
+        "PRAGMA",
+    }
+)
 
 
 # --------------------------------------------------------------------------- errors
@@ -76,7 +100,7 @@ class MigrationError(DatabaseError):
 
 
 class MigrationSyntaxError(MigrationError):
-    """A migration file ends with an incomplete SQL statement."""
+    """A migration file is refused: incomplete or forbidden statement, or a misspelled flag."""
 
     code = "MIGRATION_SYNTAX"
 
@@ -85,6 +109,12 @@ class MigrationSequenceError(MigrationError):
     """The migration files are not contiguous from 0001, or a file name is invalid."""
 
     code = "MIGRATION_SEQUENCE"
+
+
+class MigrationInTransactionError(MigrationError):
+    """``migrate()`` was called while the connection already had an open transaction."""
+
+    code = "MIGRATION_IN_TRANSACTION"
 
 
 class MigrationFailedError(MigrationError):
@@ -133,16 +163,25 @@ class MigrationResult:
 
 
 def _has_rebuild_flag(sql: str) -> bool:
-    """Whether the leading comment block of ``sql`` holds the table-rebuild flag line."""
+    """Whether the leading comment block of ``sql`` holds the table-rebuild flag line.
+
+    Raises :class:`MigrationSyntaxError` for a header line that looks like a ``migrate:``
+    directive (any case or spacing) but is not exactly :data:`REBUILD_FLAG`; a misspelled flag
+    must never be silently taken for "no flag".
+    """
+    flagged = False
     for line in sql.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
         if not stripped.startswith("--"):
-            return False
+            break
         if stripped == REBUILD_FLAG:
-            return True
-    return False
+            flagged = True
+        elif _DIRECTIVE.match(stripped):
+            msg = f"A header comment looks like a migrate directive but is not {REBUILD_FLAG!r}."
+            raise MigrationSyntaxError(msg)
+    return flagged
 
 
 def load_migrations(package: str = DEFAULT_PACKAGE) -> list[Migration]:
@@ -153,7 +192,7 @@ def load_migrations(package: str = DEFAULT_PACKAGE) -> list[Migration]:
     """
     found: list[Migration] = []
     for entry in resources.files(package).iterdir():
-        if not entry.name.endswith(".sql") or not entry.is_file():
+        if not entry.name.lower().endswith(".sql") or not entry.is_file():
             continue
         match = _FILE_NAME.fullmatch(entry.name)
         if match is None:
@@ -192,26 +231,61 @@ def _is_blank(text: str) -> bool:
     return not _COMMENT.sub(" ", text).replace(";", " ").strip()
 
 
+def _leading_words(statement: str) -> tuple[str, str]:
+    """The first two keywords of ``statement`` in upper case (``""`` when absent)."""
+    match = _LEADING_WORDS.match(statement)
+    if match is None:
+        return "", ""
+    return match.group(1).upper(), (match.group(2) or "").upper()
+
+
 def split_statements(sql: str) -> list[str]:
     """Split ``sql`` into single statements without ``executescript()``.
 
-    The text is accumulated line by line and cut whenever :func:`sqlite3.complete_statement` says
-    the buffer is a complete statement. That handles ``CREATE TRIGGER ... BEGIN ...; END;`` bodies
-    and semicolons inside string literals. Chunks that hold only whitespace or comments are
-    skipped; a non-empty unterminated tail raises :class:`MigrationSyntaxError`.
+    The text is scanned character by character; at every ``;`` the buffer is cut when
+    :func:`sqlite3.complete_statement` says it is a complete statement, so several statements on
+    one line are split too. That handles ``CREATE TRIGGER ... BEGIN ...; END;`` bodies, semicolons
+    inside string literals and comments. Chunks that hold only whitespace or comments are skipped;
+    a non-empty unterminated tail raises :class:`MigrationSyntaxError`.
+
+    A statement whose first keyword is ``BEGIN``, ``COMMIT``, ``END``, ``ROLLBACK``,
+    ``SAVEPOINT``, ``RELEASE``, ``VACUUM``, ``ATTACH``, ``DETACH`` or ``PRAGMA`` is refused with
+    :class:`MigrationSyntaxError` (the runner owns the transaction, ``user_version`` and
+    ``foreign_keys``). A ``CREATE TRIGGER ... BEGIN ... END;`` is one statement that starts with
+    ``CREATE`` and stays allowed.
     """
     statements: list[str] = []
-    buffer = ""
-    for line in sql.splitlines(keepends=True):
-        buffer += line
-        if sqlite3.complete_statement(buffer):
-            if not _is_blank(buffer):
-                statements.append(buffer.strip())
-            buffer = ""
-    if not _is_blank(buffer):
+    start = 0
+    for index, char in enumerate(sql):
+        if char != ";":
+            continue
+        chunk = sql[start : index + 1]
+        if sqlite3.complete_statement(chunk):
+            if not _is_blank(chunk):
+                statements.append(chunk.strip())
+            start = index + 1
+    if not _is_blank(sql[start:]):
         msg = "The migration ends with an incomplete SQL statement."
         raise MigrationSyntaxError(msg)
+    for statement in statements:
+        first = _leading_words(statement)[0]
+        if first in _FORBIDDEN_FIRST_WORDS:
+            msg = f"A migration statement starts with {first}, which a migration may not use."
+            raise MigrationSyntaxError(msg)
     return statements
+
+
+def _refuse_drop_table(statements: Sequence[str]) -> None:
+    """Refuse a statement that starts with ``DROP TABLE`` (used for migrations without the flag).
+
+    Without foreign keys switched off, dropping a parent table runs an implicit ``DELETE FROM``
+    that cascades into the child tables. The scan only looks at the leading keywords of each
+    statement; a ``DROP TABLE`` inside a trigger body is not detected.
+    """
+    for statement in statements:
+        if _leading_words(statement) == ("DROP", "TABLE"):
+            msg = f"DROP TABLE needs the {REBUILD_FLAG!r} header; the migration has none."
+            raise MigrationSyntaxError(msg)
 
 
 # --------------------------------------------------------------------------- running
@@ -269,12 +343,19 @@ def migrate(
     that is meant for tests. ``before_migrate(from_version, to_version)`` is called exactly once,
     before the first migration, and only when there is something to apply (the backup hook).
 
-    Raises :class:`MigrationSequenceError` when the files are not contiguous from 0001 (checked
-    first, so nothing is executed), :class:`DatabaseTooNewError` when ``user_version`` is higher
-    than the newest migration (the database is left untouched), :class:`MigrationSyntaxError` for
-    an incomplete statement and :class:`MigrationFailedError` when a migration fails; migrations
-    committed before the failing one stay applied.
+    Raises :class:`MigrationInTransactionError` (code ``MIGRATION_IN_TRANSACTION``) when ``conn``
+    already has an open transaction (checked first; the caller's transaction is left untouched),
+    :class:`MigrationSequenceError` when the files are not contiguous from 0001 or ``user_version``
+    is negative (checked first, so nothing is executed), :class:`DatabaseTooNewError` when
+    ``user_version`` is higher than the newest migration (the database is left untouched),
+    :class:`MigrationSyntaxError` for an incomplete or forbidden statement, a misspelled rebuild
+    flag or a ``DROP TABLE`` without the flag (all before the backup hook), and
+    :class:`MigrationFailedError` when a migration fails; migrations committed before the failing
+    one stay applied.
     """
+    if conn.in_transaction:
+        msg = "A transaction is already open on this connection; commit or roll it back first."
+        raise MigrationInTransactionError(msg)
     if migrations is not None and package is not None:
         msg = "Pass either migrations or package, not both."
         raise ValueError(msg)
@@ -285,6 +366,9 @@ def migrate(
 
     target = ordered[-1].number if ordered else 0
     current = _user_version(conn)
+    if current < 0:
+        msg = f"The database has a negative schema version ({current})."
+        raise MigrationSequenceError(msg)
     if current > target:
         raise DatabaseTooNewError(current, target)
 
@@ -295,10 +379,14 @@ def migrate(
     prepared: list[tuple[Migration, list[str]]] = []
     for migration in pending:
         try:
-            prepared.append((migration, split_statements(migration.sql)))
+            _has_rebuild_flag(migration.sql)  # raises for a misspelled flag line
+            statements = split_statements(migration.sql)
+            if not migration.rebuild:
+                _refuse_drop_table(statements)
         except MigrationSyntaxError as exc:
-            msg = f"Migration {migration.number:04d} ends with an incomplete SQL statement."
+            msg = f"Migration {migration.number:04d} is refused: {exc}"
             raise MigrationSyntaxError(msg) from exc
+        prepared.append((migration, statements))
 
     if before_migrate is not None:
         before_migrate(current, target)
