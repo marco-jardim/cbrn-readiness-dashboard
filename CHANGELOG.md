@@ -9,13 +9,17 @@ This file records only the **status** of each open question (open / answered and
 answered and implemented in task Tn), never the content of an answer. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and section 12 of [PLAN.md](PLAN.md).
 
-## [1.0.0] - unreleased
+## [1.0.1] - unreleased
 
-**Status of this entry: prepared in the repository, not published.** The version is set to 1.0.0
-in `src/cbrn_dashboard/__init__.py`, but no tag `v1.0.0` exists and no release has been created.
-The release workflow (`.github/workflows/release.yml`) has never run. A person still has to run the
-full default and packaging test suites, tag `v1.0.0`, start the executable on a clean Windows
-profile without administrator rights, run the manual smoke test
+**Version 1.0.0 was withdrawn.** The tag `v1.0.0` was created and the release workflow built it,
+but its draft release was never published and was discarded. Version 1.0.1 replaces it; no
+`1.0.0` file should be used.
+
+**Status of this entry: prepared in the repository, not published.** The version is set to 1.0.1
+in `src/cbrn_dashboard/__init__.py`, but no tag `v1.0.1` exists and no release has been created.
+The release workflow (`.github/workflows/release.yml`) has never run for 1.0.1. A person still has
+to run the full default and packaging test suites, tag `v1.0.1`, start the executable on a clean
+Windows profile without administrator rights, run the manual smoke test
 ([docs/smoke-test.pt-BR.md](docs/smoke-test.pt-BR.md)), which has not been executed yet, run the
 manual test script for the committee
 ([docs/manual-test-script.pt-BR.md](docs/manual-test-script.pt-BR.md)), which has not been executed
@@ -49,11 +53,22 @@ The work of phases 8 to 10 of the plan, on top of the first preliminary version:
 - Qt third-party notices now shipped in full: `licenses\QT-THIRD-PARTY-NOTICES.txt` holds the
   notice and licence text of every component documented in the Qt source release of the bundled
   version, and the build fails when that file is not for the bundled Qt version.
-- Microsoft runtime files in the bundle: the build no longer ships the Universal CRT
-  (`ucrtbase.dll` and the `api-ms-win-*` files), because Windows 10 and 11 always use their own
-  copy; `licenses\MSVC-RUNTIME.md` now lists every Visual C++ runtime file in any letter case (the
+
+### Changed since the 1.0.0 tag
+
+- The bundle no longer ships the Universal CRT (`ucrtbase.dll` and the `api-ms-win-*` files),
+  because Windows 10 and 11 always use their own copy.
+- `licenses\MSVC-RUNTIME.md` lists every Visual C++ runtime file in any letter case (the
   `shiboken6` copies included) and states that these are Microsoft's files, not covered by the GPL,
-  redistributed unmodified under Microsoft's terms.
+  redistributed unmodified under Microsoft's terms (Q21, answered and implemented in task T9.2).
+- The branch protection of `main` is configured on the hosting site (Q24: answered and applied
+  locally).
+- The source archives of Qt 6.12.0 and PySide6 6.12.0 are attached to the GitHub release next to
+  the binary (Q20: answered and applied locally).
+- The terminology review sheet tooling: `scripts/terminology_sheet.py` and
+  `docs/revisao-terminologia.pt-BR.md`.
+- The committee questionnaire, `docs/questionario-comite.pt-BR.md`.
+- The manual-test guide, `docs/guia-teste-manual.pt-BR.md`.
 
 ### Placeholders still flagged in `domain/config.py`
 
@@ -126,11 +141,11 @@ records no answer to any of them.
 - Q17: open
 - Q18: answered and applied locally
 - Q19: open
-- Q20: open
+- Q20: answered and applied locally
 - Q21: answered and implemented in task T9.2
 - Q22: answered and implemented in task T9.2
 - Q23: open
-- Q24: open
+- Q24: answered and applied locally
 
 Q19 (formal classification), Q4, Q11 and Q13 gate the entry of real data. Until they are answered,
 use only demo data. "Sensitive" is a working label of this project, not a classification.
@@ -149,16 +164,16 @@ message, one `type="unfinished"` translation); a test compares it with the files
 
 - The executable and the files beside it are unsigned. Windows SmartScreen, Smart App Control,
   AppLocker or WDAC may warn about or block them (see the install guides).
-- The release workflow ran once, for the tag `v1.0.0`: it produced the zip, the checksums, the
-  per-file manifest, the build-provenance attestation (checked with `gh attestation verify`) and
-  a draft release. The draft has not been published.
+- The release workflow ran for the tag `v1.0.0`: it produced the zip, the checksums, the per-file
+  manifest, the build-provenance attestation and a draft release, which was never published and
+  was withdrawn. It will run again for the tag `v1.0.1`; that run has not happened yet.
 - The Visual C++ runtime files are redistributed under Microsoft's terms (see
   `licenses\MSVC-RUNTIME.md`); the full Visual Studio licence text was not reviewed by counsel.
 - The warning about writing reports or CSV exports to removable media is never shown, because the
   application does not detect removable drives.
 - A read-only database on a network (UNC) path was never tried on a real network share.
-- The branch protection of `main` is a setting of the hosting site; it cannot be checked from
-  the repository's files.
+- The branch protection of `main` is a setting of the hosting site (configured); it cannot be
+  checked from the repository's files.
 - The manual smoke test has not been run, the manual test script for the committee has not been
   run either, and the built zip has not been tried on a clean Windows machine without
   administrator rights.

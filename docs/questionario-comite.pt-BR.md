@@ -7,7 +7,7 @@
 O CBRN Readiness Dashboard é um aplicativo para Windows, que funciona sem rede, para acompanhar a
 prontidão do hospital diante de incidentes químicos, biológicos, radiológicos e nucleares: pessoal
 habilitado, leitos, baias e equipamentos, exercícios, orçamento, alertas e relatórios. A versão atual
-(1.0.0) é **preliminar**: ela ainda não foi validada pela instituição.
+(1.0.1) é **preliminar**: ela ainda não foi validada pela instituição.
 
 Muitas decisões do aplicativo dependem de respostas do comitê. Enquanto uma pergunta não é
 respondida, o aplicativo usa uma **resposta de trabalho** provisória, descrita em cada pergunta no

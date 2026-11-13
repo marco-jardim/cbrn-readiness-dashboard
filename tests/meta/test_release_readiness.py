@@ -190,8 +190,8 @@ def test_the_readme_states_the_version_and_links_the_release_material() -> None:
     assert "https://github.com/marco-jardim/cbrn-readiness-dashboard/releases" in text
 
 
-def test_the_readme_states_version_1_0_0() -> None:
-    assert __version__ == "1.0.0"
+def test_the_readme_states_version_1_0_1() -> None:
+    assert __version__ == "1.0.1"
     text = _read(ROOT / "README.md")
     assert f"Version {__version__} is prepared" in text
     assert "(docs/manual-test-script.pt-BR.md)" in text

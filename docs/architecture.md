@@ -480,10 +480,11 @@ fictitious.
   and the packaging tests, zips the bundle those tests built and uploads it. The `release` job, the
   only one with write permissions, attests the zip's build provenance and creates a **draft**
   release.
-- The version in the source is `1.0.0`, single-sourced in `__init__.py` (hatch reads it, and
+- The version in the source is `1.0.1`, single-sourced in `__init__.py` (hatch reads it, and
   `uv.lock` records none). The release is prepared in the repository (`CHANGELOG.md`,
   `docs/smoke-test.pt-BR.md`, `docs/manual-test-script.pt-BR.md`), but nothing is tagged and
-  nothing is published: a person must tag `v1.0.0`, run the smoke test and publish the draft.
+  nothing is published: a person must tag `v1.0.1`, run the smoke test and publish the draft.
+  (The draft of 1.0.0 was never published and was withdrawn.)
   See the [install guide](install.en-US.md).
 
 ## 15. Known limits and unfinished parts

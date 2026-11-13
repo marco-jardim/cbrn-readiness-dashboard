@@ -1,8 +1,8 @@
-# Guia prático para executar o teste manual - versão 1.0.0
+# Guia prático para executar o teste manual - versão 1.0.1
 
 **Versão preliminar - indicadores não validados institucionalmente.**
 
-Este guia é para a pessoa que vai executar os roteiros de teste da versão 1.0.0 em um **perfil limpo
+Este guia é para a pessoa que vai executar os roteiros de teste da versão 1.0.1 em um **perfil limpo
 do Windows, sem direitos de administrador**. Ele diz como preparar o computador, como obter e conferir
 o pacote, o que executar e como registrar o resultado. Os testes em si estão nestes dois roteiros:
 
@@ -83,14 +83,14 @@ Não adicione a conta ao grupo "Administradores".
 
 ## 3. Obter o zip do rascunho da versão
 
-A versão 1.0.0 é um **rascunho** (*draft*) no GitHub: ele aparece só para quem colabora no
+A versão 1.0.1 é um **rascunho** (*draft*) no GitHub: ele aparece só para quem colabora no
 repositório `marco-jardim/cbrn-readiness-dashboard`, na página
 [releases](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases). Quem não colabora não
 o vê. Há duas formas de obtê-lo; escolha uma:
 
 - **A. Baixar com a conta do responsável pelo projeto**, em um navegador, em outro perfil ou outro
   computador. Baixe os três arquivos da **mesma** página de versão:
-  - `cbrn-readiness-dashboard-1.0.0-win-x64.zip`
+  - `cbrn-readiness-dashboard-1.0.1-win-x64.zip`
   - `SHA256SUMS.txt`
   - `SHA256-FILES.txt`
 - **B. Pedir ao responsável pelo projeto** que copie esses três arquivos para um pen drive ou uma
@@ -107,14 +107,14 @@ arquivo chegou (navegador, pen drive ou pasta compartilhada) na folha de resulta
 1. Abra o PowerShell na pasta dos arquivos e execute:
 
    ```powershell
-   Get-FileHash .\cbrn-readiness-dashboard-1.0.0-win-x64.zip -Algorithm SHA256
+   Get-FileHash .\cbrn-readiness-dashboard-1.0.1-win-x64.zip -Algorithm SHA256
    ```
 
 2. Compare o valor da coluna `Hash` com a linha do zip em `SHA256SUMS.txt`. Os dois devem ser
    iguais. Para esta compilação, o valor esperado é:
 
    ```text
-   13b575f176456d4de1440d3db53381de016a24bbb6bb3881bb8ca618504202e4
+   consulte o arquivo SHA256SUMS.txt do release
    ```
 
    O `Get-FileHash` mostra o valor em maiúsculas; a comparação não diferencia maiúsculas de
@@ -125,7 +125,7 @@ arquivo chegou (navegador, pen drive ou pasta compartilhada) na folha de resulta
    compilação.
 
    ```powershell
-   gh attestation verify .\cbrn-readiness-dashboard-1.0.0-win-x64.zip --repo marco-jardim/cbrn-readiness-dashboard
+   gh attestation verify .\cbrn-readiness-dashboard-1.0.1-win-x64.zip --repo marco-jardim/cbrn-readiness-dashboard
    ```
 
    Se a atestação não estiver disponível, anote o fato; ele não impede o teste. O checksum prova a
@@ -138,7 +138,7 @@ arquivo chegou (navegador, pen drive ou pasta compartilhada) na folha de resulta
    aparecer) e clique em **OK**. Alternativa no PowerShell:
 
    ```powershell
-   Unblock-File .\cbrn-readiness-dashboard-1.0.0-win-x64.zip
+   Unblock-File .\cbrn-readiness-dashboard-1.0.1-win-x64.zip
    ```
 
    Faça isso **antes** de extrair.
@@ -179,7 +179,7 @@ arquivo chegou (navegador, pen drive ou pasta compartilhada) na folha de resulta
    sugerida sobre publicar o rascunho (sim ou não). Informe a data da execução, a edição e a versão do
    Windows e o valor do `Get-FileHash` do zip que foi testado.
 2. **O responsável pelo projeto** registra o status em [CHANGELOG.md](../CHANGELOG.md), na entrada da
-   versão 1.0.0: data, versão testada, resultado e decisão sobre publicar, **sem** o conteúdo das
+   versão 1.0.1: data, versão testada, resultado e decisão sobre publicar, **sem** o conteúdo das
    respostas ao questionário. Depois troca a linha de status no início dos dois roteiros de "NÃO
    EXECUTADO" para o formato que os testes do repositório aceitam:
 

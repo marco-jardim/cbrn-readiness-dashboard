@@ -4,7 +4,7 @@
 |---|---|
 | Repository | `marco-jardim/cbrn-readiness-dashboard` (public) |
 | Licence | GPL-3.0-or-later |
-| Plan status | Draft for review by the project owner and the hospital's CBRN defence committee. Implemented up to T10.5; release v1.0.0 is pending the human and network steps of section 13. |
+| Plan status | Draft for review by the project owner and the hospital's CBRN defence committee. Implemented up to T10.5; release v1.0.1 (v1.0.0 was withdrawn) is pending the human and network steps of section 13. |
 | Requirements source | Appendix A of the thesis, product "PTT 2" (appendix source lines 55–95, in Portuguese). `Lnn` = line *nn* of that source. The source is not in this repository (the thesis is unpublished), so the R01–R36 quotes and the `Lnn` references cannot be checked from the repository alone. They were checked against `postextual/apendice-a.tex` of the private thesis repository, commit `f8b1d65a76b53019573fb789c09d3d938dbffb59` (2026-11-13), SHA-256 `fbe30bc40ff6ab5ebace449dd3309e2dc2ff8f216d4ad9048c77a83b9c6661c1` (Q18). |
 | Date | 2026-11-12 |
 
@@ -2387,6 +2387,7 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Until answered: the quotes and line references are unverifiable from the repository; the application is not affected.
 
 **Q20 — Qt and PySide6 source for the written offer.** The source links in the release body and in `SOURCE-OFFER.md` are built from URL patterns of `download.qt.io` in `scripts/make_release_zip.py` and have not been checked to resolve for the bundled versions. `uv.lock` records only wheels for the PySide6 family, so `SOURCE-OFFER.md` says it records no source archive for those packages. Are those links right, and is the written offer enough for the PySide6 family? (Phase 9 QA; the per-package source list is finding P9-10)
+- Status: answered and applied locally
 - Answered by: the project owner.
 - Confirms: §4.2, T9.2 and T9.3 (the source pointer and the written offer).
 - Until answered: the links are generated from the patterns and the written offer covers the Qt and PySide6 source of the bundled versions.
@@ -2409,6 +2410,7 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Until answered: the workflow is checked only by the workflow tests; the first tag is the first real run.
 
 **Q24 — Branch protection.** Merging only green pull requests (Dependabot ones included, T9.5) needs branch protection on `main` with the CI jobs `test` and `build` as required status checks. That is a setting of the repository on the hosting site, which nothing in the repository's files can enforce. Is it configured? (Phase 9 QA)
+- Status: answered and applied locally
 - Answered by: the project owner.
 - Confirms: T9.5 and `CONTRIBUTING.md`.
 - Until answered: the rule is stated in `CONTRIBUTING.md` only.
@@ -2421,8 +2423,8 @@ Version 1.0 is done when every item below can be verified.
 1. **Tasks:** every task from T0.1 to T10.5, including T9.6, is merged. Deferred items X1–X13 are excluded.
 2. **Default suite:** `uv run pytest` passes in CI on the pinned Windows image. This covers lint, types, guards, hygiene, translation completeness and sync, and the pseudo-locale walk. The CI coverage gate (at least 90% for `domain`, `storage` and `services`) passes.
 3. **Packaging suite:** `uv run pytest -m packaging` passes in CI. The frozen self-test passes every check; the bundle-content checks pass (no Qt network or web libraries, no data files); the portable-mode test passes.
-4. **CI is green** on the commit tagged `v1.0.0`.
-5. **Release artefacts:** the release workflow produced `cbrn-readiness-dashboard-1.0.0-win-x64.zip`, `SHA256SUMS.txt`, a per-file manifest of the bundle, a build-provenance attestation and a draft GitHub release. A person has verified the checksum with `Get-FileHash` before publishing; the checksum proves transfer integrity, not authenticity.
+4. **CI is green** on the commit tagged `v1.0.1`.
+5. **Release artefacts:** the release workflow produced `cbrn-readiness-dashboard-1.0.1-win-x64.zip`, `SHA256SUMS.txt`, a per-file manifest of the bundle, a build-provenance attestation and a draft GitHub release. A person has verified the checksum with `Get-FileHash` before publishing; the checksum proves transfer integrity, not authenticity.
 6. **Three languages:**
    - pt-BR, en-US and es-ES are complete according to the automated tests;
    - the terminology review (Q14) is recorded in `CHANGELOG.md`: either no unfinished message remains in the catalogues, or the changelog states the count still pending review (T10.5 test);

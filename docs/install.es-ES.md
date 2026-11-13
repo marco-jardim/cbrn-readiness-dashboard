@@ -10,12 +10,12 @@ reales: vea [data-protection.md](data-protection.md) (en inglés).
 
 ## 1. Estado de esta guía
 
-La versión del árbol de código es `1.0.0`. Está **preparada** en el repositorio (con registro de
+La versión del árbol de código es `1.0.1`. Está **preparada** en el repositorio (con registro de
 cambios y guion de prueba manual), pero no se ha marcado ninguna etiqueta (tag); por tanto,
 **todavía no se ha publicado ninguna versión y hoy no hay ningún archivo que descargar**. El flujo
 de publicación (`.github/workflows/release.yml`) solo se ejecuta cuando se envía una etiqueta
 `vX.Y.Z`, construye el paquete y crea una versión en *borrador* (marcada como prelanzamiento
-mientras la versión sea inferior a 1.0.0). El flujo nunca se ha ejecutado. Una persona publica el
+mientras la versión sea inferior a 1.0.0). El flujo nunca se ha ejecutado para la 1.0.1 (el borrador de la 1.0.0 nunca se publicó y fue retirado). Una persona publica el
 borrador tras la prueba manual ([smoke-test.pt-BR.md](smoke-test.pt-BR.md), en portugués); hasta
 entonces esta guía sigue siendo cierta: no hay ninguna versión publicada.
 

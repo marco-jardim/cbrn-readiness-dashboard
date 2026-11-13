@@ -10,11 +10,11 @@ veja [data-protection.md](data-protection.md) (em inglês).
 
 ## 1. Situação deste guia
 
-A versão na árvore de código é `1.0.0`. Ela está **preparada** no repositório (com registro de
+A versão na árvore de código é `1.0.1`. Ela está **preparada** no repositório (com registro de
 alterações e roteiro de teste manual), mas nada foi marcado com tag; portanto **nenhuma versão foi
 publicada e hoje não há arquivo para baixar**. O fluxo de publicação (`.github/workflows/release.yml`)
 só roda quando uma tag `vX.Y.Z` é enviada, monta o pacote e cria uma versão em *rascunho* (marcada
-como pré-lançamento enquanto a versão for menor que 1.0.0). O fluxo nunca foi executado. Uma pessoa
+como pré-lançamento enquanto a versão for menor que 1.0.0). O fluxo nunca foi executado para a 1.0.1 (o rascunho da 1.0.0 nunca foi publicado e foi retirado). Uma pessoa
 publica o rascunho depois do teste manual ([smoke-test.pt-BR.md](smoke-test.pt-BR.md)); até lá este
 guia continua verdadeiro: não há versão publicada.
 

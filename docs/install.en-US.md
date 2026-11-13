@@ -10,12 +10,12 @@ zip's first-run notes (`README-first-run.*.txt`) is shorter and says the same.
 
 ## 1. Status of this guide
 
-The version in the source tree is `1.0.0`. It is **prepared** in the repository (changelog and
+The version in the source tree is `1.0.1`. It is **prepared** in the repository (changelog and
 manual smoke-test script included), but nothing is tagged, so **no release has been published
 yet and there is no file to download today**. The release workflow
 (`.github/workflows/release.yml`) runs only when a tag `vX.Y.Z` is pushed, builds the bundle, and
 creates a *draft* release (marked pre-release while the version is below 1.0.0). The workflow has
-never run. A person publishes the draft after a manual smoke test
+never run for 1.0.1 (the draft it built for 1.0.0 was never published and was withdrawn). A person publishes the draft after a manual smoke test
 ([smoke-test.pt-BR.md](smoke-test.pt-BR.md), in Portuguese), and until then this guide stays true:
 there is no published release.
 
