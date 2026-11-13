@@ -24,6 +24,7 @@ EXPECTED_CHECKS = [
     "i18n.es-ES",
     "main_window",
     "database",
+    "chart",
 ]
 
 

@@ -140,5 +140,10 @@
         <source>An unexpected error occurred. Code: %1</source>
         <translation>An unexpected error occurred. Code: %1</translation>
     </message>
+    <message>
+        <source>No data</source>
+        <extracomment>Okabe-Ito colour-blind-safe palette; series take their colours from it in order (cycling). The property the pseudo-locale walker looks for: the widget&apos;s own texts are data.</extracomment>
+        <translation>No data</translation>
+    </message>
 </context>
 </TS>

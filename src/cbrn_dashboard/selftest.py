@@ -183,6 +183,29 @@ def _check_database(context: SelfTestContext) -> None:
         _require(tables == 1, "the change_log table is missing")
 
 
+@register("chart")
+def _check_chart(context: SelfTestContext) -> None:
+    # Imported here so that the other checks still run if Qt Charts fails to load (K09).
+    from cbrn_dashboard.ui.shell.charts import ChartData, ChartSeries, render_to_image
+
+    ensure_application()
+    width, height = 320, 200
+    data = ChartData(
+        title="Chart",
+        categories=("A", "B"),
+        series=(ChartSeries("Series", (3.0, 5.0)),),
+        unit="n",
+    )
+    image = render_to_image(data, width, height)
+    _require(not image.isNull(), "the chart image is null")
+    _require(image.width() == width and image.height() == height, "the chart image size differs")
+    # A coarse grid of samples, no pixel-exact comparison.
+    colours = {image.pixel(x, y) for x in range(0, width, 16) for y in range(0, height, 10)}
+    _require(len(colours) >= 2, "the chart image is blank")
+    empty = render_to_image(ChartData(title="", categories=(), series=()), width, height)
+    _require(not empty.isNull(), "the empty chart image is null")
+
+
 # --------------------------------------------------------------------------- the runner
 
 
