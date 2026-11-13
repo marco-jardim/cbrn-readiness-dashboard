@@ -1,0 +1,30 @@
+; CBRN Readiness Dashboard - portable mode (example file)
+;
+; [English]
+; Portable mode keeps all data in the folder .\data\ next to cbrn-dashboard.exe
+; instead of the Windows profile (%LOCALAPPDATA%\cbrn-readiness-dashboard).
+; To enable it, rename this file to portable.ini and keep it next to cbrn-dashboard.exe.
+; The program only checks that portable.ini exists. The keys in it are not read.
+; WARNING: copying the program folder copies the data too.
+; The command-line option --data-dir and the environment variable CBRN_DASHBOARD_DATA_DIR
+; take precedence over portable mode.
+;
+; [Portugues do Brasil]
+; O modo portatil guarda todos os dados na pasta .\data\ ao lado de cbrn-dashboard.exe,
+; em vez de usar o perfil do Windows (%LOCALAPPDATA%\cbrn-readiness-dashboard).
+; Para ativar, renomeie este arquivo para portable.ini e deixe-o ao lado de cbrn-dashboard.exe.
+; O programa apenas verifica se portable.ini existe. As chaves dele nao sao lidas.
+; AVISO: copiar a pasta do programa copia tambem os dados.
+; A opcao --data-dir e a variavel de ambiente CBRN_DASHBOARD_DATA_DIR
+; tem prioridade sobre o modo portatil.
+;
+; [Espanol de Espana]
+; El modo portatil guarda todos los datos en la carpeta .\data\ junto a cbrn-dashboard.exe,
+; en lugar de usar el perfil de Windows (%LOCALAPPDATA%\cbrn-readiness-dashboard).
+; Para activarlo, cambie el nombre de este archivo a portable.ini y dejelo junto a cbrn-dashboard.exe.
+; El programa solo comprueba que portable.ini exista. Las claves que contiene no se leen.
+; AVISO: copiar la carpeta del programa copia tambien los datos.
+; La opcion --data-dir y la variable de entorno CBRN_DASHBOARD_DATA_DIR
+; tienen prioridad sobre el modo portatil.
+
+[portable]

@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import configparser
 import hashlib
 import importlib.util
 import os
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -16,6 +18,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = ROOT / "scripts" / "make_release_zip.py"
 TEMPLATE_PATH = ROOT / ".github" / "release-body.template.md"
+PACKAGING_DIR = ROOT / "packaging"
 
 TOP = "cbrn-readiness-dashboard"
 UMLAUT_NAME = "\u00dcn\u00efcode.txt"
@@ -445,6 +448,221 @@ def test_cli_package_writes_zip_and_both_checksum_files(
     assert script.main(args) == 0
     with zipfile.ZipFile(out2 / "cbrn-readiness-dashboard-0.1.0-win-x64.zip") as archive:
         assert f"{TOP}/NOTES.txt" in archive.namelist()
+
+
+#: The four files the ``package`` command puts at the root of the top folder (T9.4).
+NOTE_NAMES: dict[str, str] = {
+    "pt-BR": "README-first-run.pt-BR.txt",
+    "en-US": "README-first-run.en-US.txt",
+    "es-ES": "README-first-run.es-ES.txt",
+}
+EXAMPLE_NAME = "portable.ini.example"
+ROOT_FILE_NAMES: list[str] = [*NOTE_NAMES.values(), EXAMPLE_NAME]
+
+#: The preliminary notice, verbatim, per language.
+NOTICES: dict[str, str] = {
+    "en-US": "Preliminary version \u2014 indicators not institutionally validated.",
+    "pt-BR": "Vers\u00e3o preliminar \u2014 indicadores n\u00e3o validados institucionalmente.",
+    "es-ES": "Versi\u00f3n preliminar \u2014 indicadores no validados institucionalmente.",
+}
+#: The sentence saying that "sensitive" is a working label and not a classification.
+NOT_A_CLASSIFICATION: dict[str, str] = {
+    "en-US": "It is not a formal classification",
+    "pt-BR": "N\u00e3o \u00e9 uma classifica\u00e7\u00e3o formal",
+    "es-ES": "No es una clasificaci\u00f3n formal",
+}
+SOURCE_URL = "https://github.com/marco-jardim/cbrn-readiness-dashboard"
+#: Product names, paths and commands that must be identical in the three notes.
+COMMON_PHRASES: tuple[str, ...] = (
+    "CBRN Readiness Dashboard",
+    "cbrn-dashboard.exe --demo",
+    "_internal\\",
+    "Get-FileHash .\\cbrn-readiness-dashboard-<version>-win-x64.zip -Algorithm SHA256",
+    "gh attestation verify",
+    "SHA256SUMS.txt",
+    "SHA256-FILES.txt",
+    "%LOCALAPPDATA%\\cbrn-readiness-dashboard",
+    "portable.ini.example",
+    "portable.ini",
+    ".\\data\\",
+    "--data-dir",
+    "BitLocker",
+    "licenses\\",
+    "GPL-3.0-or-later",
+    SOURCE_URL,
+    "Q4",
+    "Q11",
+    "Q13",
+    "Q19",
+)
+HEADING = re.compile(r"^(\d{1,2})\. \S", re.MULTILINE)
+
+
+def _flat(text: str) -> str:
+    """``text`` with every run of white space (line breaks too) replaced by one space."""
+    return " ".join(text.split())
+
+
+def _note_text(language: str) -> str:
+    return (PACKAGING_DIR / NOTE_NAMES[language]).read_bytes().decode("utf-8")
+
+
+def test_the_root_files_exist_in_the_repository(script: ModuleType) -> None:
+    assert list(script.DEFAULT_ROOT_FILES) == ROOT_FILE_NAMES
+    assert [path.name for path in script.default_root_files()] == ROOT_FILE_NAMES
+
+
+def test_default_root_files_fail_loudly_when_one_is_missing(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    for name in ROOT_FILE_NAMES[:-1]:
+        (tmp_path / name).write_bytes(b"x")
+    with pytest.raises(ValueError, match=r"portable\.ini\.example"):
+        script.default_root_files(tmp_path)
+
+
+def test_package_puts_the_notes_and_the_example_at_the_top_folder_root(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, bundle: Path, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    out = tmp_path / "release"
+    assert script.main(["package", "--bundle-dir", str(bundle), "--out-dir", str(out)]) == 0
+    with zipfile.ZipFile(out / "cbrn-readiness-dashboard-0.1.0-win-x64.zip") as archive:
+        names = archive.namelist()
+        for name in ROOT_FILE_NAMES:
+            assert archive.read(f"{TOP}/{name}") == (PACKAGING_DIR / name).read_bytes(), name
+    assert names == sorted(names)
+    assert len(names) == len(FAKE_FILES) + len(ROOT_FILE_NAMES)
+    assert not [name for name in names if name.endswith("/")]
+    # A fixed file name that is not at the root would be a packaging mistake.
+    assert [name for name in names if name.count("/") == 1 and name.endswith(".txt")] == sorted(
+        f"{TOP}/{name}" for name in NOTE_NAMES.values()
+    )
+
+
+def test_package_lists_the_notes_and_the_example_in_the_file_manifest(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, bundle: Path, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    out = tmp_path / "release"
+    assert script.main(["package", "--bundle-dir", str(bundle), "--out-dir", str(out)]) == 0
+    lines = (out / "SHA256-FILES.txt").read_bytes().decode("utf-8").splitlines()
+    entries: dict[str, str] = {}
+    for line in lines:
+        digest, path = line.split("  ", 1)
+        entries[path] = digest
+    assert len(entries) == len(lines) == len(FAKE_FILES) + len(ROOT_FILE_NAMES)
+    for name in ROOT_FILE_NAMES:
+        digest = hashlib.sha256((PACKAGING_DIR / name).read_bytes()).hexdigest()
+        assert entries[f"{TOP}/{name}"] == digest, name
+    paths = [line.split("  ", 1)[1] for line in lines]
+    assert paths == sorted(paths)
+
+
+def test_package_with_extra_files_adds_them_to_the_defaults(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, bundle: Path, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    extra = tmp_path / "NOTES.txt"
+    extra.write_bytes(b"notes")
+    out = tmp_path / "release"
+    args = ["package", "--bundle-dir", str(bundle), "--out-dir", str(out), "--extra", str(extra)]
+    assert script.main(args) == 0
+    with zipfile.ZipFile(out / "cbrn-readiness-dashboard-0.1.0-win-x64.zip") as archive:
+        names = set(archive.namelist())
+    assert {f"{TOP}/{name}" for name in ROOT_FILE_NAMES} <= names
+    assert f"{TOP}/NOTES.txt" in names
+    manifest = (out / "SHA256-FILES.txt").read_text(encoding="utf-8")
+    assert f"  {TOP}/NOTES.txt\n" in manifest
+
+
+def test_package_zip_with_the_default_root_files_is_reproducible(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, bundle: Path, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    zips: list[bytes] = []
+    manifests: list[bytes] = []
+    for index in (1, 2):
+        out = tmp_path / f"release{index}"
+        assert script.main(["package", "--bundle-dir", str(bundle), "--out-dir", str(out)]) == 0
+        zips.append((out / "cbrn-readiness-dashboard-0.1.0-win-x64.zip").read_bytes())
+        manifests.append((out / "SHA256-FILES.txt").read_bytes())
+    assert zips[0] == zips[1]
+    assert manifests[0] == manifests[1]
+
+
+def test_file_manifest_with_extra_root_files_is_sorted_and_refuses_clashes(
+    script: ModuleType, bundle: Path, tmp_path: Path
+) -> None:
+    extra = tmp_path / "A-first.txt"
+    extra.write_bytes(b"first")
+    manifest = script.write_file_manifest(bundle, tmp_path / "out", [extra])
+    lines = manifest.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == f"{hashlib.sha256(b'first').hexdigest()}  {TOP}/A-first.txt"
+    clash = tmp_path / "cbrn-dashboard.exe"
+    clash.write_bytes(b"other")
+    with pytest.raises(ValueError, match="twice"):
+        script.write_file_manifest(bundle, tmp_path / "out2", [clash])
+
+
+@pytest.mark.parametrize("language", sorted(NOTE_NAMES))
+def test_note_is_utf8_without_bom_tabs_or_carriage_returns(language: str) -> None:
+    raw = (PACKAGING_DIR / NOTE_NAMES[language]).read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf")
+    assert b"\t" not in raw
+    assert b"\r" not in raw
+    raw.decode("utf-8")  # raises when it is not valid UTF-8
+
+
+def test_the_three_notes_have_the_same_numbered_sections() -> None:
+    expected = [str(number) for number in range(1, 13)]
+    for language in NOTE_NAMES:
+        numbers = HEADING.findall(_note_text(language))
+        assert numbers == expected, language
+
+
+@pytest.mark.parametrize("language", sorted(NOTE_NAMES))
+def test_note_has_its_languages_preliminary_notice_verbatim(language: str) -> None:
+    assert NOTICES[language] in _flat(_note_text(language))
+
+
+@pytest.mark.parametrize("language", sorted(NOTE_NAMES))
+def test_note_says_that_sensitive_is_not_a_classification(language: str) -> None:
+    flat = _flat(_note_text(language))
+    assert NOT_A_CLASSIFICATION[language] in flat
+    assert "Q19" in flat
+
+
+@pytest.mark.parametrize("language", sorted(NOTE_NAMES))
+def test_note_names_the_commands_files_and_paths(language: str) -> None:
+    flat = _flat(_note_text(language))
+    missing = [phrase for phrase in COMMON_PHRASES if phrase not in flat]
+    assert not missing, f"{language}: missing {missing}"
+
+
+def test_the_notes_do_not_mix_up_the_languages() -> None:
+    for language, notice in NOTICES.items():
+        for other in NOTE_NAMES:
+            if other != language:
+                assert notice not in _flat(_note_text(other)), (language, other)
+
+
+def test_portable_example_parses_and_explains_portable_mode() -> None:
+    raw = (PACKAGING_DIR / EXAMPLE_NAME).read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf")
+    text = raw.decode("utf-8")
+    parser = configparser.ConfigParser()
+    parser.read_string(text)
+    assert parser.sections() == ["portable"]
+    assert dict(parser["portable"]) == {}
+    flat = _flat(text)
+    assert "portable.ini" in flat
+    assert ".\\data\\" in flat
+    assert "copying the program folder copies the data" in flat  # English
+    assert "copiar a pasta do programa copia tambem os dados" in flat  # pt-BR
+    assert "copiar la carpeta del programa copia tambien los datos" in flat  # es-ES
+    comment_lines = [line for line in text.splitlines() if line.strip()]
+    assert all(line.startswith((";", "[")) for line in comment_lines)
 
 
 def test_cli_release_body(

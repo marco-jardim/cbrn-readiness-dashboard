@@ -8,6 +8,8 @@ Sub-commands, all used by ``.github/workflows/release.yml``:
 ``package --bundle-dir DIR --out-dir DIR [--extra FILE ...]``
     Write ``cbrn-readiness-dashboard-<version>-win-x64.zip`` (top folder
     ``cbrn-readiness-dashboard/``), ``SHA256SUMS.txt`` and ``SHA256-FILES.txt``; print the paths.
+    The three first-run notes and ``portable.ini.example`` from ``packaging/`` always go at the
+    root of the top folder (and into ``SHA256-FILES.txt``); ``--extra`` adds more.
 ``prerelease-flag``
     Print ``--prerelease`` when the current version is a prerelease (below 1.0.0, or with a
     pre/dev suffix), otherwise an empty line.
@@ -33,6 +35,16 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = REPO_ROOT / "src"
+
+PACKAGING_DIR = REPO_ROOT / "packaging"
+#: Files of ``packaging/`` that ``package`` puts at the root of the top folder (T9.4): the
+#: first-run notes (the MVP mitigation for the unsigned executable) and the portable-mode example.
+DEFAULT_ROOT_FILES: tuple[str, ...] = (
+    "README-first-run.pt-BR.txt",
+    "README-first-run.en-US.txt",
+    "README-first-run.es-ES.txt",
+    "portable.ini.example",
+)
 
 TOP_FOLDER = "cbrn-readiness-dashboard"
 ZIP_NAME_FORMAT = "cbrn-readiness-dashboard-{version}-win-x64.zip"
@@ -200,12 +212,31 @@ def write_sha256sums(zip_path: Path, out_dir: Path) -> Path:
     return path
 
 
-def write_file_manifest(bundle_dir: Path, out_dir: Path) -> Path:
-    """Write ``SHA256-FILES.txt``: one line per file of the bundle, for hash allow-lists."""
-    lines = [
-        f"{sha256_file(path)}  {TOP_FOLDER}/{relative}\n"
-        for relative, path in bundle_file_paths(bundle_dir)
-    ]
+def default_root_files(packaging_dir: Path = PACKAGING_DIR) -> list[Path]:
+    """Return the :data:`DEFAULT_ROOT_FILES` in ``packaging_dir``; raise if one is missing."""
+    paths = [packaging_dir / name for name in DEFAULT_ROOT_FILES]
+    missing = [path.name for path in paths if not path.is_file()]
+    if missing:
+        raise ValueError(f"Missing in {packaging_dir}: {', '.join(missing)}")
+    return paths
+
+
+def write_file_manifest(
+    bundle_dir: Path, out_dir: Path, extra_root_files: Sequence[Path] = ()
+) -> Path:
+    """Write ``SHA256-FILES.txt``: one line per file of the top folder, for hash allow-lists.
+
+    ``extra_root_files`` (the first-run notes and the portable-mode example) are listed too: they
+    are files a user receives inside the folder. Lines are sorted by the POSIX relative path.
+    """
+    hashed: dict[str, Path] = dict(bundle_file_paths(bundle_dir))
+    for extra in extra_root_files:
+        if not extra.is_file():
+            raise ValueError(f"Not a file: {extra}")
+        if extra.name in hashed:
+            raise ValueError(f"{TOP_FOLDER}/{extra.name} would be listed twice")
+        hashed[extra.name] = extra
+    lines = [f"{sha256_file(hashed[name])}  {TOP_FOLDER}/{name}\n" for name in sorted(hashed)]
     path = out_dir / FILES_MANIFEST_NAME
     _write_text(path, "".join(lines))
     return path
@@ -314,9 +345,10 @@ def _command_check_tag(args: argparse.Namespace) -> int:
 
 def _command_package(args: argparse.Namespace) -> int:
     version = read_version()
-    zip_path = make_zip(args.bundle_dir, args.out_dir, version, args.extra)
+    root_files = [*default_root_files(), *args.extra]
+    zip_path = make_zip(args.bundle_dir, args.out_dir, version, root_files)
     sums_path = write_sha256sums(zip_path, args.out_dir)
-    manifest_path = write_file_manifest(args.bundle_dir, args.out_dir)
+    manifest_path = write_file_manifest(args.bundle_dir, args.out_dir, root_files)
     for path in (zip_path, sums_path, manifest_path):
         print(path)
     return 0
