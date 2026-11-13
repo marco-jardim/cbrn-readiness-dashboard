@@ -108,9 +108,12 @@ Para los equipos de TI:
   programas en la carpeta de Windows, en Program Files y para administradores. Elija una carpeta de
   extracción que su política permita. La compilación en una carpeta está pensada para no necesitar
   nunca ejecutar código desde `%TEMP%`.
-- **Reglas de hash.** Las reglas de hash son por archivo y por versión. Con reglas de DLL en
-  AppLocker, o con WDAC, deben cubrir también los archivos `.pyd` y DLL. Tome los hashes de
-  `SHA256-FILES.txt` de la misma versión; `SHA256SUMS.txt` cubre solo el zip.
+- **Comprobar los archivos.** `SHA256-FILES.txt` de la misma versión lista el SHA-256 de cada
+  archivo de la carpeta, incluidos los archivos `.pyd` y DLL (los valores que muestra
+  `Get-FileHash`); úselo para comprobar cada archivo extraído. `SHA256SUMS.txt` cubre solo el zip.
+  Cree sus reglas de autorización a partir de la carpeta comprobada, con las herramientas de
+  política de su propia organización. Esas reglas son por archivo y por versión, y deben cubrir
+  también los archivos `.pyd` y DLL.
 - **Smart App Control** no admite excepciones por archivo. En un equipo donde está activo, el
   programa no firmado puede sencillamente no ejecutarse.
 - Solo la firma de código eliminaría la mayor parte de esta fricción. Está aplazada hasta que se
@@ -126,7 +129,12 @@ Las opciones son las de `cli.py`. Valen para `cbrn-dashboard.exe` y para `uv run
 | `--lang pt-BR`, `--lang en-US` o `--lang es-ES` | idioma de la interfaz solo en esta ejecución (no se guarda) |
 | `--self-test` | ejecuta las comprobaciones internas, escribe `selftest.json` en la carpeta de datos y termina |
 | `--demo` | abre la base de datos de demostración separada, con datos ficticios, nunca la real |
-| `--version` | muestra la versión y termina |
+| `--version` | muestra la versión y termina (véase la nota bajo la tabla) |
+
+`cbrn-dashboard.exe` es un programa de ventanas: no tiene consola. Por eso `--version` no imprime
+nada con lo que se pueda contar en un prompt del programa congelado. En una copia del código
+fuente, `uv run cbrn-dashboard --version` muestra la versión. La versión también está en el recurso
+de versión del ejecutable.
 
 El idioma predeterminado es el portugués de Brasil, sea cual sea el idioma de Windows; se cambia en
 el programa y se guarda en `prefs.json` en la carpeta de datos.
@@ -141,6 +149,12 @@ La autoprueba nunca abre la base de datos real. Trabaja en una carpeta desechabl
 dentro de la carpeta de datos y solo escribe `selftest.json` junto a ella. El programa de ventanas
 no tiene consola, y por eso el resultado es un archivo. El código de salida es 0 cuando todas las
 comprobaciones pasan y 1 en caso contrario.
+
+Como el programa es de ventanas, un prompt puede volver antes de que termine la autoprueba. Lea
+`selftest.json` (el campo `passed`) solo después de que el programa haya terminado. Un script que
+necesite el código de salida debe iniciar el programa de un modo que lo espere, como hacen las
+pruebas de empaquetado (lo ejecutan como proceso hijo, esperan y leen el código de salida y
+`selftest.json`).
 
 ```text
 cbrn-dashboard.exe --demo
@@ -220,9 +234,11 @@ versión publicada contiene todavía estas entradas (sección 1).
 ## 12. Actualizaciones
 
 Extraiga la nueva versión a una carpeta **nueva** e iníciela; los datos del perfil no se tocan. En
-el primer inicio el programa hace una copia de seguridad de la base de datos y la migra. Una base de
-datos escrita por una versión más nueva se rechaza, de modo que volver a una versión anterior queda
-bloqueado.
+el primer inicio, si la nueva versión tiene una migración de la base de datos que aplicar, el
+programa hace primero una copia de seguridad de la base de datos (la de antes de cada actualización
+de la base de datos, sección 11) y después la migra. Si no hay migración pendiente, no hace esa
+copia y no migra nada. Una base de datos escrita por una versión más nueva se rechaza, de modo que
+volver a una versión anterior queda bloqueado.
 
 En modo portátil los datos están en `data\` junto al programa; por eso una carpeta nueva del
 programa empieza sin datos, salvo que copie en ella la carpeta `data\` antigua o inicie el programa

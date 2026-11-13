@@ -7,6 +7,7 @@ The runtime environment may contain only the licences of ``ALLOWED_LICENSES`` in
 
 import importlib.util
 import sys
+import tomllib
 from collections.abc import Sequence
 from importlib.metadata import Distribution
 from pathlib import Path
@@ -79,9 +80,64 @@ def test_every_runtime_distribution_has_an_allowed_licence(script: ModuleType) -
     assert not offenders, "licences outside the allow-list:\n" + "\n".join(offenders)
 
 
+def _locked_runtime_closure(script: ModuleType) -> set[str]:
+    """The names reachable from the project's own runtime dependencies in ``uv.lock``.
+
+    Dev, build and tools groups are not followed. A dependency edge with a marker counts when the
+    marker holds here (the build is Windows-only; markers are written with single quotes).
+    """
+    data = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    packages: dict[str, list[dict[str, object]]] = {}
+    for package in data["package"]:
+        packages.setdefault(script.normalize_name(package["name"]), []).append(package)
+    pending = [script.normalize_name(script.PROJECT_NAME)]
+    reached: set[str] = set()
+    while pending:
+        for package in packages.get(pending.pop(), []):
+            dependencies = package.get("dependencies", [])
+            assert isinstance(dependencies, list)
+            for edge in dependencies:
+                marker = edge.get("marker")
+                if marker and not script.marker_applies(marker):
+                    continue
+                name = script.normalize_name(edge["name"])
+                if name not in reached:
+                    reached.add(name)
+                    pending.append(name)
+    return reached
+
+
+def test_collected_distributions_are_exactly_the_locked_runtime_closure(
+    script: ModuleType,
+) -> None:
+    """P9-05: nothing of the locked runtime closure is silently left out, and nothing extra."""
+    collected = {script.normalize_name(dist.name) for dist in script.runtime_distributions()}
+    locked = _locked_runtime_closure(script)
+    assert {"cryptography", "pyside6", "shiboken6"} <= locked
+    assert collected == locked
+
+
+def test_an_applicable_requirement_that_is_not_installed_is_an_error(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    missing = "definitely-not-installed-package-xyz"
+    monkeypatch.setattr(script, "_root_requirements", lambda root: [f"{missing}>=1"])
+    with pytest.raises(script.LicenseError, match=missing):
+        script.runtime_distributions()
+
+
+def test_a_requirement_whose_marker_does_not_apply_may_be_missing(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    missing = "definitely-not-installed-package-xyz"
+    requirements = [f'{missing}>=1; sys_platform == "plan9"', f'{missing}; extra == "docs"']
+    monkeypatch.setattr(script, "_root_requirements", lambda root: requirements)
+    assert script.runtime_distributions() == []
+
+
 def test_runtime_set_has_pyside_and_no_dev_tools(script: ModuleType) -> None:
     names = {script.normalize_name(dist.name) for dist in script.runtime_distributions()}
-    assert {"pyside6", "shiboken6"} <= names
+    assert {"pyside6", "shiboken6", "cryptography"} <= names
     assert not names & set(NOT_RUNTIME)
     assert "cbrn-readiness-dashboard" not in names
 
@@ -225,6 +281,7 @@ def test_two_license_classifiers_are_alternatives(script: ModuleType, tmp_path: 
     [
         ("MIT", "MIT"),
         ("MIT-0", "MIT-0"),
+        ("Python-2.0", None),
         ("GPL-2.0-only OR MIT", "MIT"),
         ("LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only", "LGPL-3.0-only"),
         ("GPL-3.0-only OR GPL-2.0-only OR LGPL-3.0-only", "LGPL-3.0-only"),
@@ -293,6 +350,146 @@ def test_allow_list_follows_the_plan(script: ModuleType) -> None:
     assert {"MIT", "BSD-3-Clause", "Apache-2.0", "PSF-2.0", "MPL-2.0", "Unicode-3.0"} <= allowed
     assert {"LGPL-3.0-only", "GPL-3.0-only"} <= allowed
     assert not allowed & {"GPL-2.0-only", "AGPL-3.0-only", "GPL-2.0-or-later"}
+
+
+def test_allow_list_is_exactly_the_plan_list(script: ModuleType) -> None:
+    """P9-14: PLAN.md section 4.2 (MIT, BSD, Apache-2.0, PSF-2.0, MPL-2.0, Unicode-3.0, LGPL-3.0,
+    GPL-3.0), with BSD as its 2- and 3-clause ids and the LGPL/GPL ids in their two SPDX forms,
+    plus ``MIT-0``, which the locked ``cffi`` declares. Any other id, ``Python-2.0`` included,
+    needs a plan change first."""
+    assert (
+        frozenset(
+            {
+                "MIT",
+                "MIT-0",
+                "BSD-2-Clause",
+                "BSD-3-Clause",
+                "Apache-2.0",
+                "PSF-2.0",
+                "MPL-2.0",
+                "Unicode-3.0",
+                "LGPL-3.0-only",
+                "LGPL-3.0-or-later",
+                "GPL-3.0-only",
+                "GPL-3.0-or-later",
+            }
+        )
+        == script.ALLOWED_LICENSES
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# The legacy License field and the classifiers (P9-06)
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("disallowed", ["GPL-2.0-only", "AGPL-3.0-only", "GPL-2.0-or-later"])
+def test_an_allowed_classifier_does_not_overrule_a_disallowed_spdx_legacy_field(
+    script: ModuleType, tmp_path: Path, disallowed: str
+) -> None:
+    dist = make_distribution(
+        tmp_path,
+        "mixed",
+        license_field=disallowed,
+        classifiers=["License :: OSI Approved :: MIT License"],
+    )
+    assert script.resolve_license(dist) == (disallowed, None)
+
+
+def test_a_shorthand_in_the_legacy_field_defers_to_the_classifiers(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    dist = make_distribution(
+        tmp_path,
+        "shorthand",
+        license_field="BSD",
+        classifiers=["License :: OSI Approved :: BSD License"],
+    )
+    assert script.resolve_license(dist) == ("BSD-3-Clause", "BSD-3-Clause")
+
+
+def test_a_shorthand_without_classifiers_stays_unresolved(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    dist = make_distribution(tmp_path, "shorthand", license_field="BSD")
+    assert script.resolve_license(dist) == ("BSD", None)
+
+
+def test_an_unknown_legacy_field_defers_to_the_classifiers(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    dist = make_distribution(
+        tmp_path,
+        "unknown",
+        license_field="UNKNOWN",
+        classifiers=["License :: OSI Approved :: Apache Software License"],
+    )
+    assert script.resolve_license(dist) == ("Apache-2.0", "Apache-2.0")
+
+
+# --------------------------------------------------------------------------------------------
+# Distributions that the build removed (P9-04)
+# --------------------------------------------------------------------------------------------
+
+
+def make_distribution_with_files(folder: Path, name: str, files: Sequence[str]) -> Distribution:
+    """A fake distribution whose ``RECORD`` lists ``files`` (relative to the site folder)."""
+    make_distribution(folder, name, license_expression="Apache-2.0")  # its standard text exists
+    info = folder / f"{name.replace('-', '_')}-1.0.dist-info"
+    (info / "RECORD").write_text("".join(f"{item},,\n" for item in files), encoding="utf-8")
+    for item in files:  # importlib.metadata lists only the recorded files that exist
+        installed = folder / item
+        installed.parent.mkdir(parents=True, exist_ok=True)
+        installed.write_bytes(b"")
+    return Distribution.at(info)
+
+
+def test_a_distribution_whose_native_files_were_all_pruned_is_not_bundled(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    pruned = make_distribution_with_files(
+        tmp_path / "site",
+        "pyside6-pdf",
+        ["PySide6/QtPdf.pyd", "PySide6/Qt6Pdf.dll", "PySide6/a.py"],
+    )
+    kept = make_distribution_with_files(
+        tmp_path / "site2", "pyside6-essentials", ["PySide6/QtCore.pyd", "PySide6/Qt6Core.dll"]
+    )
+    pure = make_distribution_with_files(tmp_path / "site3", "pure", ["pure/__init__.py"])
+    bundle = tmp_path / "bundle"
+    (bundle / "_internal" / "PySide6").mkdir(parents=True)
+    (bundle / "_internal" / "PySide6" / "QtCore.pyd").write_bytes(b"x")
+
+    names = script.bundle_file_names(bundle)
+
+    assert names == {"qtcore.pyd"}
+    assert script.distribution_is_bundled(pruned, names) is False
+    assert script.distribution_is_bundled(kept, names) is True
+    assert script.distribution_is_bundled(pure, names) is True
+
+
+def test_the_index_of_a_built_bundle_has_no_row_for_a_pruned_distribution(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    pruned = make_distribution_with_files(tmp_path / "a", "gone-pkg", ["gone/gone.pyd"])
+    kept = make_distribution_with_files(tmp_path / "b", "kept-pkg", ["kept/kept.pyd"])
+    bundle = tmp_path / "bundle"
+    (bundle / "_internal" / "kept").mkdir(parents=True)
+    (bundle / "_internal" / "kept" / "kept.pyd").write_bytes(b"x")
+
+    entries = script.collect(
+        tmp_path / "out",
+        repo_root=ROOT,
+        distributions=[pruned, kept],
+        qt_versions=("6.12.0", "6.12.0"),
+        allow_missing_pyinstaller=True,
+        bundle_dir=bundle,
+    )
+
+    components = {entry.component for entry in entries}
+    assert "kept-pkg" in components
+    assert "gone-pkg" not in components
+    assert not (tmp_path / "out" / "gone-pkg").exists()
 
 
 # --------------------------------------------------------------------------------------------

@@ -1,8 +1,11 @@
 # Microsoft Visual C++ runtime
 
-The bundle contains the files `vcruntime140.dll` and `vcruntime140_1.dll`. They are Microsoft
-Visual C++ runtime files, taken from the CPython distribution used for the build, and are
-redistributed unmodified.
+The bundle contains Microsoft Visual C++ runtime files. They come with the CPython distribution
+or with the Python packages used for the build, and are redistributed unmodified. The list below
+is written when the bundle is built, from the files that are really in it (names starting with
+`vcruntime`, `msvcp` or `concrt`):
+
+{{msvc_files}}
 
 Microsoft's terms for redistributing these files are published at:
 

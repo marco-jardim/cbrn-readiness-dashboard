@@ -68,8 +68,10 @@ Texto em rascunho. O comitê ainda precisa revisar a terminologia (Q14).
 
    AppLocker, WDAC ou o Controle Inteligente de Aplicativos (Smart App Control) podem bloquear o programa.
    Com AppLocker ou WDAC, extraia o zip em uma pasta que a TI permita.
-   A TI pode criar regras de hash com o manifesto por arquivo SHA256-FILES.txt da página de release.
-   Regras de hash valem por arquivo e por versão. Devem cobrir os arquivos .pyd e DLL.
+   O manifesto SHA256-FILES.txt da página de release lista o SHA-256 de cada arquivo da pasta,
+   inclusive os arquivos .pyd e DLL. A TI pode conferir cada arquivo extraído com ele.
+   Depois a TI cria suas regras de liberação a partir da pasta conferida, com as ferramentas de política da própria organização.
+   As regras valem por arquivo e por versão.
    O Smart App Control não tem exceção para um único arquivo.
 
 9. Onde ficam os dados
@@ -80,7 +82,8 @@ Texto em rascunho. O comitê ainda precisa revisar a terminologia (Q14).
 
    Ali ficam o banco de dados, os backups, os logs e as preferências.
    Os dados continuam ali quando você extrai uma nova versão em uma nova pasta.
-   Uma atualização faz backup do banco de dados. Ela o migra na primeira inicialização.
+   Se a nova versão tiver uma alteração do banco de dados a aplicar, o programa faz primeiro um backup
+   do banco e depois o migra, na primeira inicialização. Caso contrário, não migra nada.
    Um banco de dados gravado por uma versão mais nova é recusado.
 
 10. Modo portátil
@@ -103,6 +106,7 @@ Texto em rascunho. O comitê ainda precisa revisar a terminologia (Q14).
 
 12. Licença e código-fonte
 
-   Licença: GPL-3.0-or-later. Não há garantia.
+   Licença: o código-fonte do projeto é GPL-3.0-or-later; o pacote como um todo é GPL-3.0
+   (veja licenses\README.md). Não há garantia.
    Código-fonte: https://github.com/marco-jardim/cbrn-readiness-dashboard
    Os textos das licenças de componentes de terceiros estão na pasta licenses\.

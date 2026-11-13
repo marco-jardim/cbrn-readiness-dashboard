@@ -1,8 +1,16 @@
 name: Release
 
-# Runs only when a version tag is pushed. It builds the one-folder bundle, zips it reproducibly,
-# attests the zip's build provenance and creates a DRAFT release. Nothing is published here:
-# a person publishes the draft after a manual smoke test of the zip on a clean Windows machine.
+# Runs only when a version tag is pushed. Two jobs:
+#   build   - read-only. Runs the tests, then the packaging tests, which build the one-folder
+#             bundle into dist/ (the two CBRN_BUNDLE_* variables) and run its frozen self-test.
+#             The zip is made from that very folder, so the zip is the bundle that was tested.
+#             There is no second build. The zip, the checksum files and the release notes are
+#             uploaded as one workflow artefact.
+#   release - the only job with write permissions. It downloads that artefact, attests the build
+#             provenance of the zip and creates a DRAFT release. It installs no dependency and
+#             runs no project code.
+# Nothing is published here: a person publishes the draft after a manual smoke test of the zip on
+# a clean Windows machine.
 on:
   push:
     tags: ["v*.*.*"]
@@ -15,16 +23,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  build:
     runs-on: windows-2025
     timeout-minutes: 60
     env:
       QT_QPA_PLATFORM: offscreen
-    # Elevated permissions are granted to this job only (top level stays read-only).
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,35 +50,64 @@ jobs:
       - name: Default test suite
         run: uv run pytest
 
+      # The packaging tests build the bundle into dist/ and build/; the zip below is made from it.
       - name: Packaging test suite
         run: uv run pytest -m packaging
+        env:
+          CBRN_BUNDLE_DIST_DIR: dist
+          CBRN_BUNDLE_WORK_DIR: build
 
-      - name: Build the bundle
-        run: uv run python scripts/build_exe.py --dist-dir dist --work-dir build
-
-      - name: Zip the bundle and write the checksum files
+      - name: Zip the tested bundle and write the checksum files
         run: uv run python scripts/make_release_zip.py package --bundle-dir dist/cbrn-dashboard --out-dir release
+
+      - name: Write the release notes and the prerelease flag
+        shell: pwsh
+        run: |
+          $zip = (Get-ChildItem -Path release -Filter '*.zip').FullName
+          uv run python scripts/make_release_zip.py release-body --template .github/release-body.template.md --out release/body.md --zip $zip
+          if ($LASTEXITCODE -ne 0) { throw "release-body failed" }
+          $pre = uv run python scripts/make_release_zip.py prerelease-flag
+          if ($LASTEXITCODE -ne 0) { throw "prerelease-flag failed" }
+          Set-Content -Path release/prerelease.txt -Value "$pre" -Encoding utf8
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cbrn-dashboard-release
+          path: release
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: windows-2025
+    timeout-minutes: 15
+    # Elevated permissions are granted to this job only (top level stays read-only). It has no
+    # checkout and installs nothing: it only receives the artefact of the build job.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      # The artefact the build job of this very run uploaded.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cbrn-dashboard-release
+          path: release
 
       - name: Attest the build provenance of the zip
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: release/*.zip
 
-      - name: Write the release notes
-        shell: pwsh
-        run: |
-          $zip = (Get-ChildItem -Path release -Filter '*.zip').FullName
-          uv run python scripts/make_release_zip.py release-body --template .github/release-body.template.md --out release/body.md --zip $zip
-
       - name: Create the draft release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
           $zip = (Get-ChildItem -Path release -Filter '*.zip').FullName
-          $pre = uv run python scripts/make_release_zip.py prerelease-flag
-          if ($LASTEXITCODE -ne 0) { throw "prerelease-flag failed" }
+          $pre = (Get-Content -Path release/prerelease.txt -Raw).Trim()
           $arguments = @($env:TAG, $zip, 'release/SHA256SUMS.txt', 'release/SHA256-FILES.txt')
           $arguments += @('--draft', '--title', "CBRN Readiness Dashboard $env:TAG", '--notes-file', 'release/body.md')
           if ($pre) { $arguments += $pre }

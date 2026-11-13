@@ -219,6 +219,91 @@ def test_source_offer_is_complete_and_links_the_exact_sources(
     assert pyside_version in text
 
 
+def test_source_offer_covers_every_locked_runtime_package(
+    script: ModuleType, collected: Collected
+) -> None:
+    """P9-10: the offer lists every runtime package with the source URL ``uv.lock`` records."""
+    out, _entries = collected
+    text = (out / "SOURCE-OFFER.md").read_text(encoding="utf-8")
+    locked = script.locked_sources(ROOT)
+    assert locked, "uv.lock has no packages"
+    for dist in script.runtime_distributions():
+        url = locked[(script.normalize_name(dist.name), dist.version)]
+        expected = url if url else "no source archive is recorded in uv.lock"
+        assert f"- {dist.metadata['Name']} {dist.version}: {expected}" in text, dist.name
+    assert "one-folder build" in text
+    assert "scripts/build_exe.py" in text
+
+
+def test_locked_sources_reads_sdist_urls_and_wheel_only_packages(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    (tmp_path / "uv.lock").write_text(
+        "[[package]]\n"
+        'name = "Has_Sdist"\n'
+        'version = "1.0"\n'
+        'sdist = { url = "https://example.invalid/has-sdist-1.0.tar.gz", hash = "sha256:00" }\n'
+        "[[package]]\n"
+        'name = "wheel-only"\n'
+        'version = "2.0"\n',
+        encoding="utf-8",
+    )
+    assert script.locked_sources(tmp_path) == {
+        ("has-sdist", "1.0"): "https://example.invalid/has-sdist-1.0.tar.gz",
+        ("wheel-only", "2.0"): None,
+    }
+    assert script.locked_sources(tmp_path / "missing") == {}
+
+
+def test_msvc_notice_has_no_token_and_says_the_list_is_generated(collected: Collected) -> None:
+    out, _entries = collected
+    text = (out / "MSVC-RUNTIME.md").read_text(encoding="utf-8")
+    assert "{{" not in text
+    assert "generated when the bundle is built" in text
+
+
+def test_msvc_notice_names_every_runtime_file_of_a_bundle(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    bundle = tmp_path / "bundle"
+    for relative in (
+        "_internal/vcruntime140.dll",
+        "_internal/VCRUNTIME140_1.dll",
+        "_internal/PySide6/msvcp140.dll",
+        "_internal/PySide6/MSVCP140_1.dll",
+        "_internal/PySide6/concrt140.dll",
+        "_internal/PySide6/Qt6Core.dll",
+    ):
+        path = bundle / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+    files = script.msvc_runtime_files(bundle)
+    assert files == [
+        "_internal/PySide6/MSVCP140_1.dll",
+        "_internal/PySide6/concrt140.dll",
+        "_internal/PySide6/msvcp140.dll",
+        "_internal/VCRUNTIME140_1.dll",
+        "_internal/vcruntime140.dll",
+    ]
+    template = (SOURCES / "MSVC-RUNTIME.md").read_text(encoding="utf-8")
+    text = script.render_msvc_notice(template, files)
+    for relative in files:
+        assert f"`{relative}`" in text
+    assert "Qt6Core" not in text
+    assert script.msvc_runtime_files(None) is None
+
+
+def test_msvc_notice_template_must_keep_its_token(script: ModuleType) -> None:
+    with pytest.raises(script.LicenseError):
+        script.render_msvc_notice("no token here\n", ["a.dll"])
+
+
+def test_openssl_entry_records_what_cryptography_reports(collected: Collected) -> None:
+    _out, entries = collected
+    entry = _entries_by_component(entries)["OpenSSL (bundled with CPython and cryptography)"]
+    assert "cryptography reports for its own backend:" in entry.note
+
+
 def test_gpl_text_is_the_repository_licence_byte_for_byte(
     collected: Collected,
 ) -> None:

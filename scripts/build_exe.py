@@ -75,6 +75,10 @@ DATA_FILE_NAME_PATTERNS: tuple[str, ...] = (
     "selftest.json",
     "location.json",
     "*.log",
+    "app.log*",
+    "*.log.*",
+    "*.tmp",
+    ".write-probe-*",
     "*.csv",
 )
 #: Leading bytes of an SQLite database and of a CBRN backup archive (any file name).
@@ -88,7 +92,9 @@ BUILD_INFO_NAME = "build_info.json"
 #: build time and handed to PyInstaller with ``--version-file``. It is never committed.
 VERSION_FILE_NAME = "version_info.txt"
 VERSION_FILE_PRODUCT_NAME = "CBRN Readiness Dashboard"
-VERSION_FILE_COPYRIGHT = "GPL-3.0-or-later"
+#: The project source is GPL-3.0-or-later; the combined bundle is GPL-3.0 (packaging/licenses/
+#: README.md explains why), so the resource says both.
+VERSION_FILE_COPYRIGHT = "Source: GPL-3.0-or-later; bundle: GPL-3.0"
 #: Language 0x0409 (US English) and code page 0x04B0 (Unicode), the usual pair.
 VERSION_FILE_LANGUAGE = "040904B0"
 
@@ -565,7 +571,9 @@ def build(dist_dir: Path, work_dir: Path) -> Path:
         raise BuildError(f"PyInstaller did not produce {bundle / (APP_NAME + '.exe')}")
     pruned = prune_bundle(bundle)
     licenses_dir = bundle / LICENSES_DIR_NAME
-    license_entries = _load_collect_licenses_script().collect(licenses_dir, repo_root=REPO_ROOT)
+    license_entries = _load_collect_licenses_script().collect(
+        licenses_dir, repo_root=REPO_ROOT, bundle_dir=bundle
+    )
     print(f"licenses: {len(license_entries)} component(s) in {licenses_dir}")
     megabytes = bundle_size_bytes(bundle) / (1024 * 1024)
     print(f"pruned {pruned} file(s)")

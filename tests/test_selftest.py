@@ -30,6 +30,7 @@ EXPECTED_CHECKS = [
     "chart",
     "encrypted_backup",
     "pdf",
+    "demo",
 ]
 
 
@@ -304,6 +305,89 @@ def test_pdf_check_passes_and_leaves_nothing_in_the_throwaway_folder(
 
     assert list(workdir.iterdir()) == []
     assert not (tmp_path / "data").exists()
+
+
+def test_pdf_check_draws_a_chart(
+    qapp: QApplication, qm_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P8-11: the frozen self-test must exercise Qt Charts and ``render_to_image``."""
+    from PySide6.QtCore import QLocale
+    from PySide6.QtGui import QImage
+
+    from cbrn_dashboard.reports import pdf
+    from cbrn_dashboard.ui.shell.charts import ChartData
+
+    real_render = pdf.render_to_image
+    drawn: list[ChartData] = []
+
+    def spy_render(
+        data: ChartData, width: int, height: int, *, locale: QLocale | None = None
+    ) -> QImage:
+        drawn.append(data)
+        return real_render(data, width, height, locale=locale)
+
+    monkeypatch.setattr(pdf, "render_to_image", spy_render)
+    location = DataLocation(path=tmp_path / "data", source=LocationSource.CLI, writable=True)
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+
+    dict(selftest.CHECKS)["pdf"](selftest.SelfTestContext(location, workdir, qm_dir))
+
+    assert len(drawn) == 1
+    assert not drawn[0].is_empty
+
+
+def test_the_demo_check_is_registered_after_the_pdf_check() -> None:
+    names = [name for name, _ in selftest.CHECKS]
+    assert names.index("pdf") < names.index("demo")
+
+
+def test_demo_check_seeds_a_demo_database_inside_the_throwaway_folder(tmp_path: Path) -> None:
+    location = DataLocation(path=tmp_path / "data", source=LocationSource.CLI, writable=True)
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+
+    dict(selftest.CHECKS)["demo"](selftest.SelfTestContext(location, workdir, None))
+
+    assert not (tmp_path / "data").exists()
+    assert [entry.name for entry in tmp_path.iterdir()] == ["work"]
+    assert (workdir / "demo-selftest" / "demo" / "demo.sqlite3").is_file()
+    shutil.rmtree(workdir)  # every handle is closed, so the folder can be removed (Windows)
+    assert not workdir.exists()
+
+
+def test_a_run_with_the_demo_check_leaves_only_the_result_file(
+    qapp: QApplication, qm_dir: Path, tmp_path: Path
+) -> None:
+    data = tmp_path / "data"
+    assert _run(data, qm_dir) == 0
+    assert _checks_by_name(data)["demo"] == {"name": "demo", "passed": True, "error": None}
+    assert [entry.name for entry in data.iterdir()] == ["selftest.json"]
+
+
+def test_demo_check_fails_when_the_database_is_not_a_demo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cbrn_dashboard import demo
+    from cbrn_dashboard.clock import Clock
+    from cbrn_dashboard.storage.db import DatabaseConnection
+    from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
+
+    def not_a_demo(data_dir: Path, clock: Clock) -> DatabaseConnection:
+        return open_and_migrate(
+            data_dir / "other.sqlite3",
+            data_dir=data_dir,
+            identity=DatabaseIdentity.REAL,
+            backup=False,
+        )
+
+    monkeypatch.setattr(demo, "open_demo_database", not_a_demo)
+    location = DataLocation(path=tmp_path / "data", source=LocationSource.CLI, writable=True)
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+
+    with pytest.raises(selftest.SelfTestError):
+        dict(selftest.CHECKS)["demo"](selftest.SelfTestContext(location, workdir, None))
 
 
 def test_register_appends_a_check(monkeypatch: pytest.MonkeyPatch) -> None:

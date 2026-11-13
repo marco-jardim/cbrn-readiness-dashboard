@@ -68,8 +68,10 @@ Draft text. The committee still has to review the wording (Q14).
 
    AppLocker, WDAC or Smart App Control may block the program.
    With AppLocker or WDAC, extract the zip to a folder that IT allows.
-   IT can write hash rules with the per-file manifest SHA256-FILES.txt on the release page.
-   Hash rules are per file and per release. They must cover the .pyd and DLL files.
+   The manifest SHA256-FILES.txt on the release page lists the SHA-256 of every file of the folder,
+   the .pyd and DLL files included. IT can check each extracted file against it.
+   IT then creates its allow-listing rules from the verified folder, with its own policy tooling.
+   The rules are per file and per release.
    Smart App Control has no bypass for a single file.
 
 9. Where the data lives
@@ -80,7 +82,8 @@ Draft text. The committee still has to review the wording (Q14).
 
    It holds the database, the backups, the logs and the preferences.
    The data stays there when you extract a new version to a new folder.
-   An upgrade backs up the database. It migrates the database on the first start.
+   If the new version has a database change to apply, the program first backs up the database
+   and then migrates it, on the first start. Otherwise it migrates nothing.
    A database written by a newer version is refused.
 
 10. Portable mode
@@ -103,6 +106,7 @@ Draft text. The committee still has to review the wording (Q14).
 
 12. Licence and source
 
-   Licence: GPL-3.0-or-later. There is no warranty.
+   Licence: the project source is GPL-3.0-or-later; the bundle as a whole is GPL-3.0
+   (see licenses\README.md). There is no warranty.
    Source code: https://github.com/marco-jardim/cbrn-readiness-dashboard
    The licence texts of third-party components are in the licenses\ folder.

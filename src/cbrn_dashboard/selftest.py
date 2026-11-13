@@ -298,13 +298,15 @@ def _check_pdf(context: SelfTestContext) -> None:
     from datetime import date
 
     from cbrn_dashboard.domain.alerts import Severity
-    from cbrn_dashboard.domain.indicators import Module
+    from cbrn_dashboard.domain.indicators import Module, UnitKind
     from cbrn_dashboard.reports.model import (
         AlertCountRow,
         Cell,
         KeyFigureGroup,
+        ReportChart,
         ReportDocument,
         ReportHeader,
+        ReportSeries,
         ReportVariant,
     )
     from cbrn_dashboard.reports.pdf import write_report_pdf
@@ -334,7 +336,21 @@ def _check_pdf(context: SelfTestContext) -> None:
         alert_summary=(
             AlertCountRow(Severity.INFO, Cell("alert:INFO", 3.0, personnel_derived=True)),
         ),
-        charts=(),
+        # One small fictitious chart, so that Qt Charts and ``render_to_image`` run frozen too.
+        charts=(
+            ReportChart(
+                key="infrastructure_availability",
+                categories=("bed", "stretcher"),
+                series=(
+                    ReportSeries(
+                        "available",
+                        (Cell("chart:selftest:a:1", 4.0), Cell("chart:selftest:a:2", 2.0)),
+                    ),
+                ),
+                unit=UnitKind.COUNT,
+                parameters=(),
+            ),
+        ),
         retraining=(),
         overdue_assets=(),
     )
@@ -347,6 +363,33 @@ def _check_pdf(context: SelfTestContext) -> None:
     finally:
         target.unlink(missing_ok=True)
     _require(not target.exists(), "the report PDF was not removed")
+
+
+_DEMO_WORK_DIR_NAME = "demo-selftest"
+
+
+@register("demo")
+def _check_demo(context: SelfTestContext) -> None:
+    # Imported here so that the other checks still run if the demo framework fails to load.
+    from cbrn_dashboard.demo import DEMO_SEED_KEY, is_demo_identifier, open_demo_database
+    from cbrn_dashboard.storage import app_meta
+
+    # The same entry point as ``--demo``, over a data folder inside the throwaway folder: it
+    # creates and seeds <that folder>/demo/demo.sqlite3, never the real or the user's demo data.
+    # The connection is closed here; the files go away with the throwaway folder, as for the
+    # other checks.
+    demo_data = context.workdir / _DEMO_WORK_DIR_NAME
+    demo_data.mkdir()
+    conn = open_demo_database(demo_data, SystemClock())
+    with contextlib.closing(conn):
+        _require(app_meta.read_is_demo(conn), "the database is not flagged as a demo")
+        _require(app_meta.get(conn, DEMO_SEED_KEY) is not None, "the demo was not seeded")
+        identifiers = [row[0] for row in conn.execute("SELECT identifier FROM staff_member")]
+        _require(len(identifiers) > 0, "the demo database has no people")
+        _require(
+            all(is_demo_identifier(str(item)) for item in identifiers),
+            "a demo record has no DEMO identifier",
+        )
 
 
 # --------------------------------------------------------------------------- the runner

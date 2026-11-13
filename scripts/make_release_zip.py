@@ -224,7 +224,10 @@ def default_root_files(packaging_dir: Path = PACKAGING_DIR) -> list[Path]:
 def write_file_manifest(
     bundle_dir: Path, out_dir: Path, extra_root_files: Sequence[Path] = ()
 ) -> Path:
-    """Write ``SHA256-FILES.txt``: one line per file of the top folder, for hash allow-lists.
+    """Write ``SHA256-FILES.txt``: one line per file of the top folder, to verify each file.
+
+    The lines are flat SHA-256 file hashes (what ``Get-FileHash`` prints); they are not rules of
+    any allow-listing product.
 
     ``extra_root_files`` (the first-run notes and the portable-mode example) are listed too: they
     are files a user receives inside the folder. Lines are sorted by the POSIX relative path.

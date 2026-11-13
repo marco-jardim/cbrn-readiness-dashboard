@@ -19,9 +19,10 @@ code-signing certificate. Depending on how a computer is set up, Windows may rea
 - **AppLocker** or **Windows Defender Application Control (WDAC)** policies may refuse to run
   it, or its DLL and `.pyd` files, until an administrator allows them.
 
-IT teams that allow-list by file hash can use the per-file manifest `SHA256-FILES.txt` attached to
-this release. It lists the SHA-256 of every file inside the `cbrn-readiness-dashboard` folder of
-the zip, DLL and `.pyd` files included.
+The per-file manifest `SHA256-FILES.txt` attached to this release lists the SHA-256 of every file
+inside the `cbrn-readiness-dashboard` folder of the zip, DLL and `.pyd` files included. IT teams
+can use it to verify each extracted file, and then create their allow-listing rules from the
+verified folder with the policy tooling of their own organisation.
 
 ## Verify the download
 
@@ -69,9 +70,15 @@ exact matching source releases are here:
 - Qt {{qt_version}}: {{qt_source_url}}
 - PySide6 {{pyside_version}}: {{pyside_source_url}}
 
-The texts of the third-party licences are in the `licenses\` folder of the zip.
+The texts of the third-party licences are in the `licenses\` folder of the zip. Its
+`SOURCE-OFFER.md` lists the source archive that `uv.lock` records for every other Python package
+in the zip, and says so where `uv.lock` records none.
 
 **Written offer.** For at least three years from the date of this release, this project will
 provide, to anyone who asks through the issue tracker of this repository, the complete
-corresponding source code of the Qt and PySide6 versions bundled in this release, for no more than
-the cost of physically performing the distribution (GPL-3.0 section 6, LGPL-3.0).
+corresponding source code of the Qt and PySide6 versions bundled in this release and of every
+other Python package locked in `uv.lock` of the tag above, for no more than the cost of
+physically performing the distribution (GPL-3.0 section 6, LGPL-3.0).
+
+**Relinking.** The zip is a one-folder build. To produce it again with other libraries, check out
+the tag above, change the locked versions in `uv.lock` and build with `scripts/build_exe.py`.

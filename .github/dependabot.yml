@@ -37,6 +37,10 @@ updates:
         versions: [">=6.13"]
       - dependency-name: "pyside6-addons"
         versions: [">=6.13"]
+      - dependency-name: "pyside6-pdf"
+        versions: [">=6.13"]
+      - dependency-name: "pyside6-webengine"
+        versions: [">=6.13"]
       - dependency-name: "shiboken6"
         versions: [">=6.13"]
     commit-message:

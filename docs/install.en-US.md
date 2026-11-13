@@ -104,9 +104,11 @@ For IT teams:
   Windows folder, in Program Files and for administrators. Choose an extraction folder that your
   policy allows. The one-folder build is designed so that it never needs to run code from
   `%TEMP%`.
-- **Hash rules.** Hash rules are per file and per release. With DLL rules in AppLocker, or with
-  WDAC, they must cover the `.pyd` and DLL files too. Take the hashes from `SHA256-FILES.txt` of
-  the same release; `SHA256SUMS.txt` covers only the zip.
+- **Verifying the files.** `SHA256-FILES.txt` of the same release lists the SHA-256 of every file
+  in the folder, the `.pyd` and DLL files included (the values `Get-FileHash` prints); use it to
+  verify each extracted file. `SHA256SUMS.txt` covers only the zip. Create your allow-listing
+  rules from the verified folder with the policy tooling of your own organisation. Such rules are
+  per file and per release, and must cover the `.pyd` and DLL files too.
 - **Smart App Control** has no per-file bypass. On a machine where it is on, the unsigned program
   may simply not run.
 - Only code signing would remove most of this friction. It is deferred until the deployment
@@ -123,7 +125,11 @@ The options are those of `cli.py`. They apply to `cbrn-dashboard.exe` and to
 | `--lang pt-BR`, `--lang en-US` or `--lang es-ES` | interface language for this run only (not saved) |
 | `--self-test` | run the built-in checks, write `selftest.json` to the data folder and exit |
 | `--demo` | open the separate demo database with fictitious data, never the real one |
-| `--version` | print the version and exit |
+| `--version` | print the version and exit (see the note below the table) |
+
+`cbrn-dashboard.exe` is a windowed program: it has no console. So `--version` prints nothing you can
+rely on in a prompt of the frozen program. From a source checkout, `uv run cbrn-dashboard --version`
+prints the version. The version is also stored in the version resource of the executable.
 
 The default language is Brazilian Portuguese whatever the Windows language; it is changed in the
 program and saved in `prefs.json` in the data folder.
@@ -137,6 +143,11 @@ cbrn-dashboard.exe --self-test --data-dir C:\Temp\cbrn-selftest
 The self-test never opens the real database. It works in a throwaway folder `tmp\selftest-*` under
 the data folder and writes only `selftest.json` beside it. The windowed program has no console,
 which is why the result is a file. The exit code is 0 when all checks pass and 1 otherwise.
+
+Because the program is windowed, a prompt can return before the self-test has finished. Read
+`selftest.json` (its `passed` field) only after the program has ended. A script that needs the exit
+code must start the program in a way that waits for it, as the packaging tests do (they run it as
+a child process, wait, and read the exit code and `selftest.json`).
 
 ```text
 cbrn-dashboard.exe --demo
@@ -210,7 +221,9 @@ No published version contains these entries yet (section 1).
 ## 12. Upgrades
 
 Extract the new version to a **new** folder and start it; the data in the profile is untouched. On
-the first start the program makes a backup of the database and migrates it. A database written by
+the first start, if the new version has a database migration to apply, the program first makes a
+backup of the database (the one before each upgrade of the database, section 11) and then migrates
+it. If no migration is pending, it makes no such backup and migrates nothing. A database written by
 a newer version is refused, so going back to an older version is blocked.
 
 In portable mode the data is in `data\` beside the program, so a new program folder starts without

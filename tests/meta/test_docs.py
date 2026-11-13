@@ -174,6 +174,63 @@ def test_install_guide_states_the_current_version(language: str) -> None:
     assert f"`{__version__}`" in _read(_guide(language))
 
 
+#: P9-02: the manifest holds flat SHA-256 file hashes. No text may say that allow-listing rules are
+#: built from it, or tell IT to "take the hashes" for a product; it only verifies files.
+HASH_RULE_CLAIMS: tuple[str, ...] = (
+    "allow-list by file hash",
+    "write hash rules",
+    "take the hashes",
+    "use os hashes",
+    "tome los hashes",
+    "regras de hash com o manifesto",
+    "reglas de hash con el manifiesto",
+)
+POLICY_TOOLING = {
+    "en-US": "policy tooling of your own organisation",
+    "pt-BR": "ferramentas de política da própria organização",
+    "es-ES": "herramientas de política de su propia organización",
+}
+
+
+def _hash_claim_sources() -> list[Path]:
+    notes = sorted((ROOT / "packaging").glob("README-first-run.*.txt"))
+    assert len(notes) == 3
+    return [*notes, ROOT / ".github" / "release-body.template.md", *map(_guide, LANGUAGES)]
+
+
+@pytest.mark.parametrize("path", _hash_claim_sources(), ids=lambda path: path.name)
+def test_no_text_claims_that_hash_rules_come_from_the_manifest(path: Path) -> None:
+    text = " ".join(_read(path).lower().split())
+    found = [claim for claim in HASH_RULE_CLAIMS if claim in text]
+    assert not found, f"{path.name} claims too much about SHA256-FILES.txt: {found}"
+    assert "SHA256-FILES.txt" in _read(path)
+
+
+@pytest.mark.parametrize("note", _hash_claim_sources()[:3], ids=lambda path: path.name)
+def test_first_run_notes_state_the_licence_as_licenses_readme_does(note: Path) -> None:
+    """P9-13: project source GPL-3.0-or-later, the bundle as a whole GPL-3.0 - everywhere."""
+    readme = " ".join(_read(ROOT / "packaging" / "licenses" / "README.md").split())
+    assert "source code of the application is GPL-3.0-or-later" in readme
+    assert "distributed under GPL-3.0" in readme
+    text = " ".join(_read(note).split())
+    assert "GPL-3.0-or-later" in text
+    assert "GPL-3.0 (" in text  # "... the bundle as a whole is GPL-3.0 (see licenses\README.md)"
+
+
+def test_version_resource_copyright_says_both_licences() -> None:
+    source = _read(ROOT / "scripts" / "build_exe.py")
+    match = re.search(r'^VERSION_FILE_COPYRIGHT = "([^"]+)"', source, re.MULTILINE)
+    assert match is not None
+    assert "GPL-3.0-or-later" in match.group(1)
+    assert "bundle: GPL-3.0" in match.group(1)
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_install_guide_leaves_the_rules_to_the_organisations_own_tooling(language: str) -> None:
+    text = " ".join(_read(_guide(language)).split())
+    assert POLICY_TOOLING[language] in text
+
+
 # --- indicators.md -------------------------------------------------------------------------------
 
 ENTRY_HEADING = re.compile(r"^### `([A-Z][A-Z0-9_]*)`\s*$")

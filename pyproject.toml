@@ -43,6 +43,9 @@ packages = ["src/cbrn_dashboard"]
 # The version is read by hatch from the package (dynamic), so the editable install must be
 # rebuilt when that file changes, not only when pyproject.toml does.
 cache-keys = [{ file = "pyproject.toml" }, { file = "src/cbrn_dashboard/__init__.py" }]
+# The interpreter is always uv's managed build, pinned to the full version in .python-version: the
+# licence notices of the bundle (packaging/licenses/python-build-standalone) describe that build.
+python-preference = "only-managed"
 
 [tool.ruff]
 line-length = 100

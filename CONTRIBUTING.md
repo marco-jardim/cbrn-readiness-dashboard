@@ -77,6 +77,9 @@ empty and must keep all placeholders.
 Dependabot opens weekly pull requests for GitHub Actions and for the uv lockfile.
 
 - Every such pull request runs CI, including the packaging job, and is merged only when green.
+  Nothing in this repository enforces that: it needs branch protection on `main` with the CI
+  jobs (`test` and `build`) set as required status checks. That is a repository setting that
+  the maintainers configure on the hosting site; it is not configured from the files here.
 - For an actions update, the reviewer checks that the new commit SHA belongs to the tagged
   release named in the trailing `# vX.Y.Z` comment. Dependabot can leave that comment stale.
 - The PySide6 upper bound (`<6.13`) is deliberate while Windows 10 is a target. It is revisited

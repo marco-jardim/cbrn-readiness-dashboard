@@ -11,15 +11,27 @@ corresponding source of those versions can be downloaded here:
 - PySide6 {{pyside_version}}: {{pyside_source_url}}
 - This application (source tag of this release, with the build scripts): {{project_source_url}}
 
+## Every other Python package in the bundle
+
+The versions of the Python packages in the bundle are fixed by `uv.lock` in the source tag
+above. For each one, this is the source archive that `uv.lock` records, or a statement that it
+records none (it lists only the built wheels of such a package):
+
+{{package_sources}}
+
 ## Written offer
 
-The project provides the source code of the Qt and PySide6 versions named above, and the source
-of this application, on request. Requests go through the issue tracker of the repository linked
-above. The offer is valid for at least three years from the release date of this bundle. The
-source is provided for no more than the cost of physically performing the distribution
-(GPL-3.0 section 6; LGPL-3.0).
+The project provides the source code of the Qt and PySide6 versions named above, of every Python
+package listed in the section above, and of this application, on request. Requests go through
+the issue tracker of the repository linked above. The offer is valid for at least three years
+from the release date of this bundle. The source is provided for no more than the cost of
+physically performing the distribution (GPL-3.0 section 6; LGPL-3.0).
 
 ## Replacing the Qt libraries
 
 The Qt libraries are separate DLL files in `_internal\PySide6\` next to the executable and can
 be replaced by the user with another build of the same Qt version.
+
+The bundle is a one-folder build, not a single linked file. To produce a bundle again with other
+libraries, check out the source tag above, change the locked versions (`uv.lock`) and build it
+with `scripts/build_exe.py` as described in the repository.

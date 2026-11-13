@@ -8,6 +8,7 @@ built once per session by the ``bundle_dir`` fixture.
 import ast
 import ctypes
 import fnmatch
+import importlib.util
 import json
 import os
 import re
@@ -71,6 +72,7 @@ REQUIRED_SELF_TESTS: frozenset[str] = frozenset(
         "chart",
         "encrypted_backup",
         "pdf",
+        "demo",
     }
 )
 
@@ -98,6 +100,18 @@ DATA_NAME_PATTERNS: tuple[str, ...] = (
 )
 #: Leading bytes of an SQLite database and of an encrypted backup (T7.2), whatever the file name.
 DATA_MAGIC: tuple[bytes, ...] = (b"SQLite format 3\x00", b"CBRNBAK1")
+
+#: Log and temporary-file patterns (lower case; P9-11). They are scanned only in the application's
+#: own folder, at the bundle root and in ``licenses/``, not in the whole of ``_internal``: the
+#: names of the third-party files in a built bundle were not available when this was written, so
+#: a pattern such as ``*.log`` could have hit a legitimate library file.
+LOG_AND_TEMP_PATTERNS: tuple[str, ...] = (
+    "*.log",
+    "app.log*",
+    "*.log.*",
+    "*.tmp",
+    ".write-probe-*",
+)
 
 
 def _internal(bundle: Path) -> Path:
@@ -274,6 +288,11 @@ def test_filesystem_fallback_lists_data_and_skips_sources(
         "selftest.json",
         "location.json",
         "app.log",
+        "app.log.1",
+        "app.log.2026-01-01",
+        "x.log.old",
+        "scratch.tmp",
+        ".write-probe-1a2b3c",
         "table.csv",
     ],
 )
@@ -319,6 +338,53 @@ def test_bundle_has_licenses_folder_with_index(bundle_dir: Path) -> None:
         if not (folder / relative).is_file()
     ]
     assert not missing, f"index entries without a file: {missing}"
+
+
+def _collect_licenses_script() -> ModuleType:
+    """``scripts/collect_licenses.py`` imported by path (registered, as it defines dataclasses)."""
+    name = "cbrn_packaging_collect_licenses_script"
+    path = REPO_ROOT / "scripts" / "collect_licenses.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_licence_index_lists_only_the_distributions_that_are_in_the_bundle(
+    bundle_dir: Path,
+) -> None:
+    """P9-04: "one row per component bundled" - the pruned PDF and web-engine wheels get none."""
+    script = _collect_licenses_script()
+    folder = bundle_dir / "licenses"
+    index = json.loads((folder / "index.json").read_text(encoding="utf-8"))
+    rows = {script.normalize_name(item["component"]) for item in index}
+    names = script.bundle_file_names(bundle_dir)
+    for dist in script.runtime_distributions():
+        key = script.normalize_name(dist.name)
+        expected = script.distribution_is_bundled(dist, names)
+        assert (key in rows) is expected, f"{key}: row {key in rows}, files in bundle {expected}"
+        assert (folder / key).exists() is expected, f"{key}: licence folder mismatch"
+    for pruned in ("pyside6-webengine", "pyside6-pdf"):
+        assert pruned not in rows, f"{pruned} is pruned from the bundle but has a row"
+        assert not (folder / pruned).exists()
+
+
+def test_msvc_runtime_notice_names_every_runtime_file_in_the_bundle(bundle_dir: Path) -> None:
+    """P9-07: every vcruntime*, msvcp* and concrt* file of the bundle is named in the notice."""
+    notice = (bundle_dir / "licenses" / "MSVC-RUNTIME.md").read_text(encoding="utf-8")
+    patterns = ("vcruntime*", "msvcp*", "concrt*")
+    found = [
+        path.relative_to(bundle_dir).as_posix()
+        for path in _files(bundle_dir)
+        if any(fnmatch.fnmatchcase(path.name.lower(), pattern) for pattern in patterns)
+    ]
+    assert found, "no Visual C++ runtime file in the bundle: the notice would be empty"
+    missing = [name for name in found if f"`{name}`" not in notice]
+    assert not missing, f"runtime files not named in licenses/MSVC-RUNTIME.md: {missing}"
+    assert "{{" not in notice
 
 
 def test_bundle_has_no_ts_catalogues(bundle_dir: Path) -> None:
@@ -512,6 +578,31 @@ def test_bundle_holds_no_data_files(bundle_dir: Path) -> None:
         if any(head.startswith(magic) for magic in DATA_MAGIC):
             offenders.append(relative)
     assert not offenders, f"database, backup, CSV or preference files in the bundle: {offenders}"
+
+
+def test_build_patterns_cover_the_log_and_temp_patterns(build_script: ModuleType) -> None:
+    patterns: tuple[str, ...] = build_script.DATA_FILE_NAME_PATTERNS
+    missing = [pattern for pattern in LOG_AND_TEMP_PATTERNS if pattern not in patterns]
+    assert not missing, f"the build does not refuse: {missing}"
+
+
+def test_bundle_holds_no_log_or_temporary_files_of_its_own(bundle_dir: Path) -> None:
+    # Scope: the application folder, the files at the bundle root and licenses/ (see the comment
+    # at LOG_AND_TEMP_PATTERNS).
+    own = [
+        *(_internal(bundle_dir) / "cbrn_dashboard").rglob("*"),
+        *bundle_dir.glob("*"),
+        *(bundle_dir / "licenses").rglob("*"),
+    ]
+    offenders = sorted(
+        {
+            path.relative_to(bundle_dir).as_posix()
+            for path in own
+            if path.is_file()
+            and any(fnmatch.fnmatchcase(path.name.lower(), p) for p in LOG_AND_TEMP_PATTERNS)
+        }
+    )
+    assert not offenders, f"log or temporary files in the bundle: {offenders}"
 
 
 def test_bundle_holds_nothing_from_tests_or_caches(bundle_dir: Path) -> None:

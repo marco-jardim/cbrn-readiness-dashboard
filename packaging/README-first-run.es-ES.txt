@@ -68,8 +68,10 @@ Texto en borrador. El comité aún debe revisar la terminología (Q14).
 
    AppLocker, WDAC o Smart App Control pueden bloquear el programa.
    Con AppLocker o WDAC, extraiga el zip en una carpeta que TI permita.
-   TI puede crear reglas de hash con el manifiesto por archivo SHA256-FILES.txt de la página de release.
-   Las reglas de hash valen por archivo y por versión. Deben cubrir los archivos .pyd y DLL.
+   El manifiesto SHA256-FILES.txt de la página de release lista el SHA-256 de cada archivo de la carpeta,
+   incluidos los archivos .pyd y DLL. TI puede comprobar cada archivo extraído con él.
+   Después TI crea sus reglas de autorización a partir de la carpeta comprobada, con las herramientas de política de la propia organización.
+   Las reglas valen por archivo y por versión.
    Smart App Control no tiene excepción para un solo archivo.
 
 9. Dónde están los datos
@@ -80,7 +82,8 @@ Texto en borrador. El comité aún debe revisar la terminología (Q14).
 
    Allí se guardan la base de datos, las copias de seguridad, los registros y las preferencias.
    Los datos siguen allí cuando extrae una versión nueva en una carpeta nueva.
-   Una actualización hace una copia de seguridad de la base de datos. La migra en el primer inicio.
+   Si la nueva versión tiene un cambio de la base de datos que aplicar, el programa hace primero una copia
+   de seguridad de la base de datos y después la migra, en el primer inicio. Si no, no migra nada.
    Una base de datos escrita por una versión más reciente se rechaza.
 
 10. Modo portátil
@@ -103,6 +106,7 @@ Texto en borrador. El comité aún debe revisar la terminología (Q14).
 
 12. Licencia y código fuente
 
-   Licencia: GPL-3.0-or-later. No hay garantía.
+   Licencia: el código fuente del proyecto es GPL-3.0-or-later; el paquete en su conjunto es GPL-3.0
+   (véase licenses\README.md). No hay garantía.
    Código fuente: https://github.com/marco-jardim/cbrn-readiness-dashboard
    Los textos de las licencias de componentes de terceros están en la carpeta licenses\.

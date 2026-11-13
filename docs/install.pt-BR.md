@@ -106,9 +106,11 @@ Para equipes de TI:
   pasta do Windows, em Program Files e para administradores. Escolha uma pasta de extração que a
   sua política permita. A compilação em uma pasta foi feita para nunca precisar executar código a
   partir de `%TEMP%`.
-- **Regras de hash.** As regras de hash valem por arquivo e por versão. Com regras de DLL no
-  AppLocker, ou com WDAC, elas precisam cobrir também os arquivos `.pyd` e DLL. Use os hashes de
-  `SHA256-FILES.txt` da mesma versão; o `SHA256SUMS.txt` cobre apenas o zip.
+- **Conferir os arquivos.** O `SHA256-FILES.txt` da mesma versão lista o SHA-256 de cada arquivo da
+  pasta, inclusive os arquivos `.pyd` e DLL (os valores que o `Get-FileHash` mostra); use-o para
+  conferir cada arquivo extraído. O `SHA256SUMS.txt` cobre apenas o zip. Crie as suas regras de
+  liberação a partir da pasta conferida, com as ferramentas de política da própria organização.
+  Essas regras valem por arquivo e por versão, e precisam cobrir também os arquivos `.pyd` e DLL.
 - O **Smart App Control** não tem exceção por arquivo. Em uma máquina em que ele está ativo, o
   programa não assinado pode simplesmente não executar.
 - Só a assinatura de código eliminaria a maior parte desse atrito. Ela está adiada até que as
@@ -124,7 +126,12 @@ As opções são as de `cli.py`. Valem para `cbrn-dashboard.exe` e para `uv run 
 | `--lang pt-BR`, `--lang en-US` ou `--lang es-ES` | idioma da interface só nesta execução (não é salvo) |
 | `--self-test` | executa as verificações internas, grava `selftest.json` na pasta de dados e termina |
 | `--demo` | abre o banco de demonstração separado, com dados fictícios, nunca o banco real |
-| `--version` | mostra a versão e termina |
+| `--version` | mostra a versão e termina (veja a nota abaixo da tabela) |
+
+O `cbrn-dashboard.exe` é um programa em modo janela: não tem console. Por isso o `--version` não
+imprime nada com que se possa contar em um prompt do programa congelado. Em uma cópia do código-fonte,
+`uv run cbrn-dashboard --version` mostra a versão. A versão também está no recurso de versão do
+executável.
 
 O idioma padrão é o português do Brasil, qualquer que seja o idioma do Windows; ele é trocado no
 programa e salvo em `prefs.json` na pasta de dados.
@@ -139,6 +146,12 @@ O autoteste nunca abre o banco real. Ele trabalha em uma pasta descartável `tmp
 da pasta de dados e grava apenas `selftest.json` ao lado dela. O programa em modo janela não tem
 console, e por isso o resultado é um arquivo. O código de saída é 0 quando todas as verificações
 passam e 1 caso contrário.
+
+Como o programa é em modo janela, um prompt pode voltar antes de o autoteste terminar. Leia o
+`selftest.json` (o campo `passed`) só depois que o programa tiver terminado. Um script que precisa
+do código de saída deve iniciar o programa de um modo que espere por ele, como fazem os testes de
+empacotamento (eles o executam como processo filho, esperam e leem o código de saída e o
+`selftest.json`).
 
 ```text
 cbrn-dashboard.exe --demo
@@ -215,7 +228,9 @@ de dados** mostra a pasta de dados local. Nenhuma versão publicada contém esse
 ## 12. Atualizações
 
 Extraia a nova versão para uma pasta **nova** e inicie-a; os dados no perfil não são alterados. Na
-primeira execução o programa faz um backup do banco e o migra. Um banco gravado por uma versão mais
+primeira execução, se a nova versão tiver uma migração do banco a aplicar, o programa faz primeiro
+um backup do banco (o de antes de cada atualização do banco, seção 11) e depois o migra. Se não
+houver migração pendente, não faz esse backup e não migra nada. Um banco gravado por uma versão mais
 nova é recusado; portanto, voltar a uma versão mais antiga é bloqueado.
 
 No modo portátil os dados ficam em `data\` ao lado do programa; assim, uma nova pasta do programa

@@ -348,6 +348,24 @@ def test_template_has_the_preliminary_notice_and_unsigned_statement(template_tex
     assert "SHA256-FILES.txt" in template_text
 
 
+def test_template_presents_the_manifest_as_verification_not_as_hash_rules(
+    template_text: str,
+) -> None:
+    flat = " ".join(template_text.split())
+    assert "allow-list by file hash" not in flat
+    assert "verify each extracted file" in flat
+    assert "policy tooling of their own organisation" in flat
+
+
+def test_template_offer_covers_every_locked_package_and_the_relinking_route(
+    template_text: str,
+) -> None:
+    flat = " ".join(template_text.split())
+    assert "every other Python package locked in `uv.lock`" in flat
+    assert "scripts/build_exe.py" in flat
+    assert "one-folder build" in flat
+
+
 def test_template_explains_how_to_verify_and_what_it_proves(template_text: str) -> None:
     assert "Get-FileHash .\\{{zip_name}} -Algorithm SHA256" in template_text
     assert "{{sha256}}" in template_text

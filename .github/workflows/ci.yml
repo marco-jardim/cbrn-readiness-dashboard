@@ -1,7 +1,11 @@
 name: CI
 
+# Pushes run CI on the main branch only. Every other branch (Dependabot's included) is covered by
+# its pull request, so it is not tested twice, and a tag push (a release) never starts CI: the
+# release workflow runs the tests itself.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:

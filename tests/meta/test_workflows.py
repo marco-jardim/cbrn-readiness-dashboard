@@ -296,6 +296,14 @@ def test_ci_triggers_on_push_and_pull_request() -> None:
     assert {"push", "pull_request"} <= trigger_names(read_workflow("ci.yml"))
 
 
+def test_ci_push_trigger_is_limited_to_the_main_branch() -> None:
+    """P9-15: an unfiltered push ran CI for tags and again for every pull-request branch."""
+    lines = on_block_lines(read_workflow("ci.yml"))
+    assert "push:" in lines
+    assert "branches: [main]" in lines
+    assert not [line for line in lines if line.startswith(("tags", "tags-ignore"))]
+
+
 def test_ci_cancels_superseded_runs() -> None:
     assert has_cancelling_concurrency(read_workflow("ci.yml"))
 
@@ -611,6 +619,14 @@ def _release_job() -> list[str]:
     return job_lines(_release_text(), "release")
 
 
+def _build_job() -> list[str]:
+    return job_lines(_release_text(), "build")
+
+
+def _stripped(lines: list[str]) -> list[str]:
+    return [line.strip() for line in lines]
+
+
 def test_release_workflow_exists_and_is_named_release() -> None:
     assert WORKFLOWS_DIR / "release.yml" in workflow_files()
     assert "name: Release" in code_lines(_release_text())
@@ -628,19 +644,44 @@ def test_release_has_read_only_top_level_permissions() -> None:
     assert has_read_only_top_level_permissions(_release_text())
 
 
-def test_release_elevated_permissions_are_only_inside_the_release_job() -> None:
+def test_release_has_a_build_job_and_a_release_job_that_needs_it() -> None:
     text = _release_text()
-    assert job_names(text) == ["release"]
+    assert job_names(text) == ["build", "release"]
+    assert job_needs(text, "release") == {"build"}
+    assert job_needs(text, "build") == set()
+
+
+def test_release_elevated_permissions_are_only_inside_the_release_job() -> None:
+    """P9-01: dependency install, tests and PyInstaller run without any write permission."""
+    text = _release_text()
+    assert grants_write("\n".join(_build_job())) == []
+    assert not [line for line in _build_job() if line.strip() == "permissions:"]
     in_job = grants_write("\n".join(_release_job()))
     assert sorted(in_job) == sorted(RELEASE_ELEVATED_PERMISSIONS)
     assert sorted(grants_write(text)) == sorted(RELEASE_ELEVATED_PERMISSIONS)
 
 
-def test_release_job_runs_on_the_pinned_runner_with_a_timeout() -> None:
-    lines = [line.strip() for line in _release_job()]
-    assert "runs-on: windows-2025" in lines
-    assert "timeout-minutes: 60" in lines
-    assert sets_env("\n".join(_release_job()), "QT_QPA_PLATFORM", "offscreen")
+def test_release_job_asks_for_no_more_than_it_uses() -> None:
+    permissions = _sub_block(_release_job(), "permissions", 4)
+    granted = sorted(line.strip() for line in permissions)
+    assert granted == sorted(RELEASE_ELEVATED_PERMISSIONS)
+
+
+def test_release_job_installs_nothing_and_runs_no_project_code() -> None:
+    joined = "\n".join(_release_job())
+    assert uv_sync_lines("\n".join(_release_job())) == []
+    for forbidden in ("uv run", "uv sync", "actions/checkout", "setup-uv", "pytest", "build_exe"):
+        assert forbidden not in joined, forbidden
+
+
+def test_release_jobs_run_on_the_pinned_runner_with_a_timeout() -> None:
+    build = _stripped(_build_job())
+    assert "runs-on: windows-2025" in build
+    assert "timeout-minutes: 60" in build
+    assert sets_env("\n".join(_build_job()), "QT_QPA_PLATFORM", "offscreen")
+    release = _stripped(_release_job())
+    assert "runs-on: windows-2025" in release
+    assert any(line.startswith("timeout-minutes: ") for line in release)
 
 
 def test_release_does_not_cancel_a_running_release() -> None:
@@ -651,7 +692,7 @@ def test_release_does_not_cancel_a_running_release() -> None:
 
 
 def test_release_checkout_keeps_no_credentials_and_uv_cache_is_off() -> None:
-    lines = [line.strip() for line in _release_job()]
+    lines = _stripped(_build_job())
     assert "persist-credentials: false" in lines
     assert "enable-cache: false" in lines
     assert 'version: "0.11.7"' in lines
@@ -663,63 +704,112 @@ def test_release_syncs_locked_with_all_groups() -> None:
     assert all("--locked" in line and "--all-groups" in line for line in lines), lines
 
 
-def test_release_checks_the_tag_before_building() -> None:
-    lines = _release_job()
+def test_release_never_runs_the_build_script_directly() -> None:
+    """P9-01: like ci.yml, the release ships the bundle the packaging tests built, not a second."""
+    offenders = [line.strip() for line in code_lines(_release_text()) if "build_exe" in line]
+    assert offenders == [], f"release.yml must not build a second time: {offenders}"
+
+
+def test_release_checks_the_tag_before_testing() -> None:
+    lines = _build_job()
     check = index_containing(lines, "make_release_zip.py check-tag")
-    build = index_containing(lines, "scripts/build_exe.py")
+    packaging_suite = index_of_run(lines, "uv run pytest -m packaging")
     assert check != -1, "no check-tag step"
-    assert build != -1, "no build step"
-    assert check < build
+    assert packaging_suite != -1
+    assert check < packaging_suite
     assert index_containing(lines, "--tag") != -1
 
 
 def test_release_runs_both_test_suites_before_packaging() -> None:
-    lines = _release_job()
+    lines = _build_job()
     default_suite = index_of_run(lines, "uv run pytest")
     packaging_suite = index_of_run(lines, "uv run pytest -m packaging")
-    build = index_containing(lines, "scripts/build_exe.py")
     package = index_containing(lines, "make_release_zip.py package")
-    assert -1 not in (default_suite, packaging_suite, build, package)
-    assert default_suite < packaging_suite < build < package
+    assert -1 not in (default_suite, packaging_suite, package)
+    assert default_suite < packaging_suite < package
 
 
-def test_release_attests_the_zip_after_packaging() -> None:
-    lines = _release_job()
-    attest = next((i for i, line in enumerate(lines) if _ATTEST_ACTION.search(line)), -1)
+def test_release_packaging_tests_build_into_the_folders_that_are_zipped() -> None:
+    """P9-01: the two CBRN_BUNDLE_* variables belong to the packaging step, and the zip is made
+    from the folder they name."""
+    lines = _build_job()
+    dist = _env_value(lines, "CBRN_BUNDLE_DIST_DIR")
+    work = _env_value(lines, "CBRN_BUNDLE_WORK_DIR")
+    assert dist, "the build job does not set CBRN_BUNDLE_DIST_DIR"
+    assert work, "the build job does not set CBRN_BUNDLE_WORK_DIR"
+    run_index = index_of_run(lines, "uv run pytest -m packaging")
+    assert 0 <= run_index < index_containing(lines, "CBRN_BUNDLE_DIST_DIR")
+    assert run_index < index_containing(lines, "CBRN_BUNDLE_WORK_DIR")
+    package = next(line for line in lines if "make_release_zip.py package" in line)
+    assert f"--bundle-dir {dist}/cbrn-dashboard " in package + " ", package
+
+
+def test_release_uploads_the_zip_and_the_release_job_attests_that_zip() -> None:
+    build = _stripped(_build_job())
+    package = next(line for line in build if "make_release_zip.py package" in line)
+    assert "--out-dir release" in package
+    upload = next(i for i, line in enumerate(build) if "uses: actions/upload-artifact@" in line)
+    upload_step = build[upload:]
+    assert "name: cbrn-dashboard-release" in upload_step
+    assert "path: release" in upload_step
+    assert "if-no-files-found: error" in upload_step
+    assert index_containing(build, "make_release_zip.py package") < upload
+
+    release = _release_job()
+    attest = next((i for i, line in enumerate(release) if _ATTEST_ACTION.search(line)), -1)
     assert attest != -1, "no actions/attest-build-provenance@<sha> step"
-    assert index_containing(lines, "make_release_zip.py package") < attest
-    assert "subject-path: release/*.zip" in [line.strip() for line in lines]
+    assert "subject-path: release/*.zip" in _stripped(release)
+    # The artefact moves between the jobs with the pinned download action (the documented way to
+    # share data between jobs of one run), not with a CLI call that needs another permission.
+    download = index_containing(release, "uses: actions/download-artifact@")
+    assert 0 <= download < attest
+    download_step = _stripped(release[download:attest])
+    assert "name: cbrn-dashboard-release" in download_step
+    assert "path: release" in download_step
+    assert index_containing(release, "gh run download") == -1
+    assert index_containing(release, "gh release create") > attest
+
+
+def test_release_notes_are_written_in_the_build_job_before_the_upload() -> None:
+    build = _build_job()
+    body = index_containing(build, "make_release_zip.py release-body")
+    flag = index_containing(build, "make_release_zip.py prerelease-flag")
+    upload = index_containing(build, "uses: actions/upload-artifact@")
+    package = index_containing(build, "make_release_zip.py package")
+    assert -1 not in (body, flag, upload, package)
+    assert package < body < upload
+    assert package < flag < upload
+    assert "release-body.template.md" in "\n".join(build)
 
 
 def test_release_creates_a_draft_with_prerelease_handling_and_the_three_files() -> None:
-    lines = _release_job()
-    joined = "\n".join(lines)
+    joined = "\n".join(_release_job())
     assert "gh release create" in joined
     assert "--draft" in joined
     assert "--notes-file" in joined
-    assert "make_release_zip.py prerelease-flag" in joined
+    assert "release/prerelease.txt" in joined
     assert "$pre" in joined
     assert "release/SHA256SUMS.txt" in joined
     assert "release/SHA256-FILES.txt" in joined
-    assert "release-body" in joined
-    assert "release-body.template.md" in joined
-    assert "gh release create" not in "\n".join(lines[: index_containing(lines, "release-body")])
+    assert "release/body.md" in joined
+    assert "release/prerelease.txt" in "\n".join(_build_job())
 
 
 def test_release_never_publishes() -> None:
-    joined = "\n".join(_release_job())
+    joined = "\n".join(code_lines(_release_text()))
     assert "--draft=false" not in joined
     assert "gh release edit" not in joined
     assert "gh release upload" not in joined
 
 
 def test_release_sets_the_github_token_for_gh() -> None:
-    lines = [line.strip() for line in _release_job()]
-    assert "GH_TOKEN: ${{ github.token }}" in lines
+    lines = _stripped(_release_job())
+    assert lines.count("GH_TOKEN: ${{ github.token }}") == 1  # only "gh release create" uses gh
+    assert "GH_REPO: ${{ github.repository }}" in lines
 
 
 def test_release_uses_pwsh_for_powershell_steps() -> None:
-    lines = [line.strip() for line in _release_job()]
+    lines = _stripped(code_lines(_release_text()))
     assert lines.count("shell: pwsh") >= 3
     assert "$env:TAG" in "\n".join(lines)
 
@@ -788,7 +878,14 @@ def test_ref_name_check_allows_env_entries_and_flags_scripts() -> None:
 
 DEPENDABOT_FILE = ROOT / ".github" / "dependabot.yml"
 REQUIRED_ECOSYSTEMS: tuple[str, ...] = ("github-actions", "uv")
-PYSIDE_FAMILY: tuple[str, ...] = ("pyside6", "pyside6-essentials", "pyside6-addons", "shiboken6")
+PYSIDE_FAMILY: tuple[str, ...] = (
+    "pyside6",
+    "pyside6-essentials",
+    "pyside6-addons",
+    "pyside6-pdf",
+    "pyside6-webengine",
+    "shiboken6",
+)
 
 _ECOSYSTEM_LINE = re.compile(r"^\s*-\s+package-ecosystem:\s*(?P<value>\S.*?)\s*$")
 _INTERVAL_LINE = re.compile(r"^\s*interval:\s*(?P<value>\S.*?)\s*$")
