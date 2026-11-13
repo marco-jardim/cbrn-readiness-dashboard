@@ -640,7 +640,9 @@ def test_keyboard_interrupt_goes_to_the_previous_hook(data_dir: Path, configure:
     assert _log_text(data_dir) == ""
 
 
-def test_exceptions_in_threads_are_reported_too(data_dir: Path, configure: _Opened) -> None:
+def test_exceptions_in_threads_are_logged_but_never_reach_the_main_callback(
+    data_dir: Path, configure: _Opened
+) -> None:
     configure(data_dir)
     reports: list[CrashReport] = []
     install_exception_hook(reports.append)
@@ -649,12 +651,73 @@ def test_exceptions_in_threads_are_reported_too(data_dir: Path, configure: _Open
     worker.start()
     worker.join()
 
-    (report,) = reports
+    assert reports == []  # the GUI callback must never run on a worker thread
+    text = _log_text(data_dir)
+    assert "APP.UNHANDLED_EXCEPTION exc=ValueError" in text
+    assert any(line.endswith(" in _crash_site_a") for line in text.splitlines())
+    _assert_no_needles(text)
+
+
+def test_the_thread_callback_receives_the_report_of_a_worker_exception(
+    data_dir: Path, configure: _Opened
+) -> None:
+    configure(data_dir)
+    main_reports: list[CrashReport] = []
+    thread_reports: list[CrashReport] = []
+    install_exception_hook(main_reports.append, thread_reports.append)
+
+    worker = threading.Thread(target=_crash_site_a, args=(SECRET_MESSAGE,))
+    worker.start()
+    worker.join()
+
+    assert main_reports == []
+    (report,) = thread_reports
     assert report.exception_type == "ValueError"
     assert re.fullmatch(r"E-[0-9a-f]{8}", report.code)
     text = _log_text(data_dir)
     assert "APP.UNHANDLED_EXCEPTION exc=ValueError" in text
     _assert_no_needles(text)
+
+
+def test_the_callback_is_not_entered_again_while_it_runs(
+    data_dir: Path, configure: _Opened
+) -> None:
+    configure(data_dir)
+    entered: list[CrashReport] = []
+
+    def callback(report: CrashReport) -> None:
+        entered.append(report)
+        if len(entered) == 1:
+            _call_hook(_capture(_crash_site_b, CHAIN_MESSAGE))  # an exception during the dialog
+
+    install_exception_hook(callback)
+
+    _call_hook(_capture(_crash_site_a))
+
+    assert len(entered) == 1
+    text = _log_text(data_dir)
+    assert text.count("APP.UNHANDLED_EXCEPTION exc=ValueError") == 2
+    assert " in _crash_site_a" in text
+    assert " in _crash_site_b" in text
+    _assert_no_needles(text)
+
+    _call_hook(_capture(_crash_site_a))  # the guard was reset: the callback runs again
+    assert len(entered) == 2
+    assert _log_text(data_dir).count("APP.UNHANDLED_EXCEPTION") == 3
+
+
+def test_the_guard_is_reset_when_the_callback_fails(data_dir: Path, configure: _Opened) -> None:
+    configure(data_dir)
+    calls: list[int] = []
+
+    def failing(_report: CrashReport) -> None:
+        calls.append(1)
+        raise RuntimeError(CHAIN_MESSAGE)
+
+    install_exception_hook(failing)
+    _call_hook(_capture(_crash_site_a))
+    _call_hook(_capture(_crash_site_a))
+    assert len(calls) == 2
 
 
 # --------------------------------------------------------------------------- configuration

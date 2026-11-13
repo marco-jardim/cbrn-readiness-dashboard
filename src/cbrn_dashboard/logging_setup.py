@@ -24,7 +24,9 @@ memory instead.
 Crash handling: :func:`install_exception_hook` replaces ``sys.excepthook`` and
 ``threading.excepthook``. An unhandled exception is logged as ``APP.UNHANDLED_EXCEPTION`` and handed
 to an injectable callback as a :class:`CrashReport` (a short stable code and the exception type,
-never the message). Nothing is uploaded or sent anywhere.
+never the message). The callback runs for main-thread exceptions only, and not again while it is
+running; worker-thread exceptions are logged and go to an optional separate ``thread_callback``.
+Nothing is uploaded or sent anywhere.
 
 This module is Qt-free; the start-up sequence (T1.9) wires the callback to a translated dialog.
 """
@@ -456,29 +458,43 @@ def _report_crash(
 
 def install_exception_hook(
     callback: Callable[[CrashReport], None] | None = None,
+    thread_callback: Callable[[CrashReport], None] | None = None,
 ) -> Callable[[], None]:
     """Install ``sys.excepthook`` and ``threading.excepthook``; return the ``uninstall`` function.
 
     An unhandled exception is logged as ``APP.UNHANDLED_EXCEPTION`` (type and frames, no message)
-    and ``callback`` receives a :class:`CrashReport`. The hooks never raise. ``KeyboardInterrupt``
-    (and ``SystemExit`` in a thread) goes untouched to the previous hook. Nothing is sent anywhere.
+    and ``callback`` receives a :class:`CrashReport`. While ``callback`` is running (it may show a
+    modal dialog with a nested event loop) further unhandled exceptions are logged only, so
+    dialogs cannot pile up. An unhandled exception in a worker thread is only logged: ``callback``
+    is never called on a worker thread (it may create GUI objects); ``thread_callback``, when
+    given, receives the report instead. The hooks never raise. ``KeyboardInterrupt`` (and
+    ``SystemExit`` in a thread) goes untouched to the previous hook. Nothing is sent anywhere.
     """
     previous_hook = sys.excepthook
     previous_thread_hook = threading.excepthook
+    in_callback = False  # the main-thread hook runs on one thread, so a plain flag is enough
 
     def hook(
         exc_type: type[BaseException], exc_value: BaseException, tb: TracebackType | None
     ) -> None:
+        nonlocal in_callback
         if issubclass(exc_type, KeyboardInterrupt):
             previous_hook(exc_type, exc_value, tb)
             return
-        _report_crash(exc_type, exc_value, tb, callback)
+        if in_callback:
+            _report_crash(exc_type, exc_value, tb, None)
+            return
+        in_callback = True
+        try:
+            _report_crash(exc_type, exc_value, tb, callback)
+        finally:
+            in_callback = False
 
     def thread_hook(args: threading.ExceptHookArgs) -> None:
         if issubclass(args.exc_type, KeyboardInterrupt | SystemExit):
             previous_thread_hook(args)
             return
-        _report_crash(args.exc_type, args.exc_value, args.exc_traceback, callback)
+        _report_crash(args.exc_type, args.exc_value, args.exc_traceback, thread_callback)
 
     sys.excepthook = hook
     threading.excepthook = thread_hook
