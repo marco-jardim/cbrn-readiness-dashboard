@@ -114,7 +114,7 @@ arquivo chegou (navegador, pen drive ou pasta compartilhada) na folha de resulta
    iguais. Para esta compilação, o valor esperado é:
 
    ```text
-   consulte o arquivo SHA256SUMS.txt do release
+   bc7bc0f7f96a097281ae453807af1e778b8dbe9f87edc4e42b38661aca1e2f18
    ```
 
    O `Get-FileHash` mostra o valor em maiúsculas; a comparação não diferencia maiúsculas de
