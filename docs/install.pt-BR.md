@@ -82,7 +82,14 @@ código de rede, verificação de atualizações nem telemetria.
   foi danificado no caminho). Não prova a autenticidade: quem pudesse alterar o zip nessa página
   poderia alterar também o arquivo de checksums.
 - A atestação prova onde e como a compilação foi feita. Não prova que o programa é seguro.
-- O executável é **não assinado** (a assinatura de código é uma decisão adiada).
+- O executável é **não assinado** hoje. As versões poderão ser assinadas no futuro pelo programa de
+  código aberto da SignPath Foundation (veja a [política de assinatura de
+  código](../CODE-SIGNING-POLICY.md), em inglês). Uma versão assim diz isso nas suas notas. Para
+  conferir, extraia o zip e abra as Propriedades de `cbrn-dashboard.exe`, aba *Assinaturas
+  Digitais*, ou execute no PowerShell
+  `Get-AuthenticodeSignature .\cbrn-readiness-dashboard\cbrn-dashboard.exe`: o status deve ser
+  `Valid` e o signatário "SignPath Foundation". Só esse executável seria assinado, não os arquivos
+  do Qt, do Python e da Microsoft ao lado dele.
 
 ## 5. Desbloquear e extrair
 
@@ -115,8 +122,9 @@ Para equipes de TI:
   Essas regras valem por arquivo e por versão, e precisam cobrir também os arquivos `.pyd` e DLL.
 - O **Smart App Control** não tem exceção por arquivo. Em uma máquina em que ele está ativo, o
   programa não assinado pode simplesmente não executar.
-- Só a assinatura de código eliminaria a maior parte desse atrito. Ela está adiada até que as
-  perguntas sobre a implantação sejam respondidas.
+- Só a assinatura de código eliminaria a maior parte desse atrito, e apenas para o executável (as
+  DLL e os arquivos `.pyd` continuam sem assinatura). Ela está preparada, mas inativa (seção 4.3), e
+  continua adiada até que as perguntas sobre a implantação sejam respondidas.
 
 ## 8. Opções de linha de comando
 

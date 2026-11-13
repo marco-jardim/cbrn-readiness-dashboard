@@ -476,10 +476,19 @@ fictitious.
   the application never use the network for this.
 - `scripts/make_release_zip.py` writes the reproducible zip, `SHA256SUMS.txt` and
   `SHA256-FILES.txt` and fills the release-notes template.
-- The release workflow runs on a version tag in two jobs. The read-only `build` job runs the tests
-  and the packaging tests, zips the bundle those tests built and uploads it. The `release` job, the
-  only one with write permissions, attests the zip's build provenance and creates a **draft**
-  release.
+- The release workflow runs on a version tag in four jobs. The read-only `build` job runs the tests
+  and the packaging tests and uploads the bundle folder those tests built. The optional `sign` job
+  runs only when the repository variable `SIGNPATH_ORGANIZATION_ID` is not empty: it sends that
+  folder to SignPath (free code signing for open-source projects, SignPath Foundation), waits for
+  the manual approval, checks the signature of `cbrn-dashboard.exe` and uploads the signed folder.
+  Only `cbrn-dashboard.exe` is signed (`.signpath/artifact-configurations/release.xml`). The
+  read-only `package` job zips the signed folder when `sign` ran and the tested folder otherwise,
+  writes the checksum files and the release notes (`release-body --signed` only after signing).
+  The `release` job, the only one with write permissions, attests the zip's build provenance and
+  creates a **draft** release. Signing needs the repository variables `SIGNPATH_ORGANIZATION_ID`,
+  `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG` (optionally
+  `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`) and the secret `SIGNPATH_API_TOKEN`; it is not active
+  until the project is accepted by SignPath. See [CODE-SIGNING-POLICY.md](../CODE-SIGNING-POLICY.md).
 - The version in the source is `1.0.1`, single-sourced in `__init__.py` (hatch reads it, and
   `uv.lock` records none). The release is prepared in the repository (`CHANGELOG.md`,
   `docs/smoke-test.pt-BR.md`, `docs/manual-test-script.pt-BR.md`), but nothing is tagged and
@@ -494,4 +503,5 @@ fictitious.
   path.
 - Qt writes the creation date of a PDF from the system clock (section 5).
 - The pt-BR and es-ES translations are drafts (`unfinished`, section 11).
-- The executable is unsigned; the effects are described in the install guides.
+- The executable is unsigned; the effects are described in the install guides. Signing through
+  SignPath is prepared in the release workflow but not active.

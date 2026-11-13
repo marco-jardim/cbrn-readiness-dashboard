@@ -623,6 +623,14 @@ def _build_job() -> list[str]:
     return job_lines(_release_text(), "build")
 
 
+def _sign_job() -> list[str]:
+    return job_lines(_release_text(), "sign")
+
+
+def _package_job() -> list[str]:
+    return job_lines(_release_text(), "package")
+
+
 def _stripped(lines: list[str]) -> list[str]:
     return [line.strip() for line in lines]
 
@@ -644,18 +652,23 @@ def test_release_has_read_only_top_level_permissions() -> None:
     assert has_read_only_top_level_permissions(_release_text())
 
 
-def test_release_has_a_build_job_and_a_release_job_that_needs_it() -> None:
+def test_release_has_build_sign_package_and_release_jobs_in_a_chain() -> None:
     text = _release_text()
-    assert job_names(text) == ["build", "release"]
-    assert job_needs(text, "release") == {"build"}
+    assert job_names(text) == ["build", "sign", "package", "release"]
     assert job_needs(text, "build") == set()
+    assert job_needs(text, "sign") == {"build"}
+    assert job_needs(text, "package") == {"build", "sign"}
+    assert job_needs(text, "release") == {"package"}
 
 
 def test_release_elevated_permissions_are_only_inside_the_release_job() -> None:
     """P9-01: dependency install, tests and PyInstaller run without any write permission."""
     text = _release_text()
     assert grants_write("\n".join(_build_job())) == []
+    assert grants_write("\n".join(_sign_job())) == []
+    assert grants_write("\n".join(_package_job())) == []
     assert not [line for line in _build_job() if line.strip() == "permissions:"]
+    assert not [line for line in _package_job() if line.strip() == "permissions:"]
     in_job = grants_write("\n".join(_release_job()))
     assert sorted(in_job) == sorted(RELEASE_ELEVATED_PERMISSIONS)
     assert sorted(grants_write(text)) == sorted(RELEASE_ELEVATED_PERMISSIONS)
@@ -682,6 +695,10 @@ def test_release_jobs_run_on_the_pinned_runner_with_a_timeout() -> None:
     release = _stripped(_release_job())
     assert "runs-on: windows-2025" in release
     assert any(line.startswith("timeout-minutes: ") for line in release)
+    for job in (_sign_job(), _package_job()):
+        lines = _stripped(job)
+        assert "runs-on: windows-2025" in lines
+        assert any(line.startswith("timeout-minutes: ") for line in lines)
 
 
 def test_release_does_not_cancel_a_running_release() -> None:
@@ -692,10 +709,11 @@ def test_release_does_not_cancel_a_running_release() -> None:
 
 
 def test_release_checkout_keeps_no_credentials_and_uv_cache_is_off() -> None:
-    lines = _stripped(_build_job())
-    assert "persist-credentials: false" in lines
-    assert "enable-cache: false" in lines
-    assert 'version: "0.11.7"' in lines
+    for job in (_build_job(), _package_job()):
+        lines = _stripped(job)
+        assert "persist-credentials: false" in lines
+        assert "enable-cache: false" in lines
+        assert 'version: "0.11.7"' in lines
 
 
 def test_release_syncs_locked_with_all_groups() -> None:
@@ -720,18 +738,19 @@ def test_release_checks_the_tag_before_testing() -> None:
     assert index_containing(lines, "--tag") != -1
 
 
-def test_release_runs_both_test_suites_before_packaging() -> None:
+def test_release_runs_both_test_suites_before_the_bundle_is_uploaded() -> None:
     lines = _build_job()
     default_suite = index_of_run(lines, "uv run pytest")
     packaging_suite = index_of_run(lines, "uv run pytest -m packaging")
-    package = index_containing(lines, "make_release_zip.py package")
-    assert -1 not in (default_suite, packaging_suite, package)
-    assert default_suite < packaging_suite < package
+    upload = index_containing(lines, "uses: actions/upload-artifact@")
+    assert -1 not in (default_suite, packaging_suite, upload)
+    assert default_suite < packaging_suite < upload
+    assert index_containing(lines, "make_release_zip.py package") == -1
 
 
-def test_release_packaging_tests_build_into_the_folders_that_are_zipped() -> None:
-    """P9-01: the two CBRN_BUNDLE_* variables belong to the packaging step, and the zip is made
-    from the folder they name."""
+def test_release_packaging_tests_build_into_the_folder_that_is_uploaded_and_then_zipped() -> None:
+    """P9-01: the two CBRN_BUNDLE_* variables belong to the packaging step; the folder they name
+    is what the build job uploads, and the package job zips what it downloads (signed or not)."""
     lines = _build_job()
     dist = _env_value(lines, "CBRN_BUNDLE_DIST_DIR")
     work = _env_value(lines, "CBRN_BUNDLE_WORK_DIR")
@@ -740,12 +759,17 @@ def test_release_packaging_tests_build_into_the_folders_that_are_zipped() -> Non
     run_index = index_of_run(lines, "uv run pytest -m packaging")
     assert 0 <= run_index < index_containing(lines, "CBRN_BUNDLE_DIST_DIR")
     assert run_index < index_containing(lines, "CBRN_BUNDLE_WORK_DIR")
-    package = next(line for line in lines if "make_release_zip.py package" in line)
-    assert f"--bundle-dir {dist}/cbrn-dashboard " in package + " ", package
+    stripped = _stripped(lines)
+    assert f"path: {dist}/cbrn-dashboard" in stripped
+    assert index_containing(lines, f"path: {dist}/cbrn-dashboard") > run_index
+    package_lines = _stripped(_package_job())
+    package = next(line for line in package_lines if "make_release_zip.py package" in line)
+    assert "--bundle-dir bundle " in package + " ", package
+    assert package_lines.count("path: bundle") == 2  # the unsigned and the signed download
 
 
 def test_release_uploads_the_zip_and_the_release_job_attests_that_zip() -> None:
-    build = _stripped(_build_job())
+    build = _stripped(_package_job())
     package = next(line for line in build if "make_release_zip.py package" in line)
     assert "--out-dir release" in package
     upload = next(i for i, line in enumerate(build) if "uses: actions/upload-artifact@" in line)
@@ -770,8 +794,8 @@ def test_release_uploads_the_zip_and_the_release_job_attests_that_zip() -> None:
     assert index_containing(release, "gh release create") > attest
 
 
-def test_release_notes_are_written_in_the_build_job_before_the_upload() -> None:
-    build = _build_job()
+def test_release_notes_are_written_in_the_package_job_before_the_upload() -> None:
+    build = _package_job()
     body = index_containing(build, "make_release_zip.py release-body")
     flag = index_containing(build, "make_release_zip.py prerelease-flag")
     upload = index_containing(build, "uses: actions/upload-artifact@")
@@ -792,7 +816,7 @@ def test_release_creates_a_draft_with_prerelease_handling_and_the_three_files() 
     assert "release/SHA256SUMS.txt" in joined
     assert "release/SHA256-FILES.txt" in joined
     assert "release/body.md" in joined
-    assert "release/prerelease.txt" in "\n".join(_build_job())
+    assert "release/prerelease.txt" in "\n".join(_package_job())
 
 
 def test_release_never_publishes() -> None:
@@ -800,6 +824,125 @@ def test_release_never_publishes() -> None:
     assert "--draft=false" not in joined
     assert "gh release edit" not in joined
     assert "gh release upload" not in joined
+
+
+# --------------------------------------------------------------------------------------------
+# Release workflow: optional SignPath signing (skipped while SIGNPATH_ORGANIZATION_ID is empty)
+# --------------------------------------------------------------------------------------------
+
+_SIGNPATH_ACTION = re.compile(r"signpath/github-action-submit-signing-request@[0-9a-f]{40}")
+SIGN_GATE = "if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}"
+
+
+def test_signing_job_is_gated_by_the_organisation_variable() -> None:
+    sign = _stripped(_sign_job())
+    assert SIGN_GATE in sign
+    # The gate is on the job, before its steps, so that a skipped job never loads the action.
+    assert sign.index(SIGN_GATE) < index_containing(sign, "steps:")
+    assert "organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}" in sign
+
+
+def test_signpath_action_and_secret_live_only_in_the_signing_job() -> None:
+    for name, lines in (
+        ("build", _build_job()),
+        ("package", _package_job()),
+        ("release", _release_job()),
+    ):
+        joined = "\n".join(lines).lower()
+        assert "signpath/" not in joined, name
+        assert "secrets." not in joined, name
+        assert "SIGNPATH_ORGANIZATION_ID" not in "\n".join(lines), name
+    sign = _stripped(_sign_job())
+    assert any(_SIGNPATH_ACTION.search(line) for line in sign), "action not pinned by SHA"
+    assert "api-token: ${{ secrets.SIGNPATH_API_TOKEN }}" in sign
+    assert [ref for ref in uses_refs(_release_text()) if "signpath/" in ref] == [
+        next(ref for ref in uses_refs("\n".join(_sign_job())) if "signpath/" in ref)
+    ]
+
+
+def test_signing_request_sends_the_uploaded_folder_and_waits_for_the_approval() -> None:
+    sign = _stripped(_sign_job())
+    assert "project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}" in sign
+    assert "signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}" in sign
+    assert "artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}" in sign
+    assert "github-artifact-id: ${{ needs.build.outputs.bundle-artifact-id }}" in sign
+    assert "wait-for-completion: true" in sign
+    assert "output-artifact-directory: dist-signed/cbrn-dashboard" in sign
+    assert 'version: "${{ needs.build.outputs.version }}"' in sign
+
+
+def test_build_job_uploads_the_unzipped_bundle_folder_with_an_id_and_a_unique_name() -> None:
+    build = _stripped(_build_job())
+    upload = index_containing(build, "uses: actions/upload-artifact@")
+    assert upload != -1
+    step = build[upload - 2 : upload + 8]  # the "- name:" and "id:" lines come first
+    assert "id: upload-bundle" in step
+    assert "path: dist/cbrn-dashboard" in step
+    assert "name: cbrn-dashboard-bundle-${{ github.run_id }}-${{ github.run_attempt }}" in step
+    assert "bundle-artifact-id: ${{ steps.upload-bundle.outputs.artifact-id }}" in build
+    assert "version: ${{ steps.version.outputs.version }}" in build
+    assert not [line for line in build if "Compress-Archive" in line]
+
+
+def test_signing_job_checks_the_signature_and_uploads_the_signed_folder_last() -> None:
+    sign = _stripped(_sign_job())
+    joined = "\n".join(sign)
+    assert "Get-AuthenticodeSignature" in joined
+    assert "-ne 'Valid'" in joined
+    assert "--self-test" in joined
+    check = index_containing(sign, "Get-AuthenticodeSignature")
+    upload = index_containing(sign, "uses: actions/upload-artifact@")
+    mark = index_containing(sign, "signed=true")
+    submit = next(i for i, line in enumerate(sign) if _SIGNPATH_ACTION.search(line))
+    assert submit < check < upload < mark
+    assert "path: dist-signed/cbrn-dashboard" in sign
+    assert (
+        "name: cbrn-dashboard-bundle-signed-${{ github.run_id }}-${{ github.run_attempt }}" in sign
+    )
+    assert "signed: ${{ steps.mark-signed.outputs.signed }}" in sign
+
+
+def test_package_job_runs_after_a_skipped_or_successful_signing_job_only() -> None:
+    package = _stripped(_package_job())
+    condition = next(line for line in package if line.startswith("if: "))
+    assert "!cancelled()" in condition
+    assert "needs.build.result == 'success'" in condition
+    assert "needs.sign.result == 'success'" in condition
+    assert "needs.sign.result == 'skipped'" in condition
+    assert "failure" not in condition
+
+
+def test_package_job_takes_the_signed_folder_only_when_signing_ran() -> None:
+    package = _stripped(_package_job())
+    unsigned = index_containing(package, "if: ${{ needs.sign.outputs.signed != 'true' }}")
+    signed = index_containing(package, "if: ${{ needs.sign.outputs.signed == 'true' }}")
+    assert -1 not in (unsigned, signed)
+    assert (
+        "name: cbrn-dashboard-bundle-${{ github.run_id }}-${{ github.run_attempt }}"
+        in package[unsigned : unsigned + 4]
+    )
+    assert (
+        "name: cbrn-dashboard-bundle-signed-${{ github.run_id }}-${{ github.run_attempt }}"
+        in package[signed : signed + 4]
+    )
+    # One zip step, whatever was downloaded: no duplicated packaging steps.
+    assert len([line for line in package if "make_release_zip.py package" in line]) == 1
+
+
+def test_release_notes_say_signed_only_when_signing_ran() -> None:
+    package = _stripped(_package_job())
+    assert "SIGNED: ${{ needs.sign.outputs.signed }}" in package
+    assert "if ($env:SIGNED -eq 'true') { $signedFlag = @('--signed') }" in package
+    notes = next(line for line in package if "make_release_zip.py release-body" in line)
+    assert notes.endswith("@signedFlag")
+    assert "--signed" not in notes.replace("@signedFlag", "")
+
+
+def test_signpath_action_pin_is_a_full_sha() -> None:
+    refs = [ref for ref in uses_refs(_release_text()) if ref.startswith("signpath/")]
+    assert len(refs) == 1
+    assert refs[0].startswith("signpath/github-action-submit-signing-request@")
+    assert is_sha_pinned(refs[0])
 
 
 def test_release_sets_the_github_token_for_gh() -> None:

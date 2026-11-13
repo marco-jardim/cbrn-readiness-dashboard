@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration of the release bundle. This file is the copy kept in the
+  repository for review: paste it into the artifact configuration "release" of the project in
+  SignPath (the workflow names it through the variable SIGNPATH_ARTIFACT_CONFIGURATION_SLUG, or
+  uses the default configuration of the project).
+
+  The artifact is the ZIP of the bundle folder dist/cbrn-dashboard that the build job uploaded, so
+  the root of the zip holds cbrn-dashboard.exe and _internal/. Exactly one file is signed: our own
+  executable. The Qt, Python and Microsoft runtime files (.dll, .pyd, ...) belong to other
+  publishers and are NOT signed (a condition of the SignPath Foundation open-source programme).
+
+  product-name must equal the ProductName of the version resource that scripts/build_exe.py writes
+  (VERSION_FILE_PRODUCT_NAME). The ProductVersion of that resource is the package version as is
+  (for example 1.0.1), which is the "version" parameter the workflow passes.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="cbrn-dashboard.exe" product-name="CBRN Readiness Dashboard" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

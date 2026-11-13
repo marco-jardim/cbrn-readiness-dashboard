@@ -420,6 +420,143 @@ def test_real_template_renders_without_leftover_tokens(
 
 
 # --------------------------------------------------------------------------------------------
+# Signed and unsigned release notes (SignPath signing is optional)
+# --------------------------------------------------------------------------------------------
+
+START = "<!-- signing-notice:start -->"
+END = "<!-- signing-notice:end -->"
+
+
+def _render(script: ModuleType, template: str, *, signed: bool | None = None) -> str:
+    extra = {} if signed is None else {"signed": signed}
+    return script.render_release_body(template, flagged_placeholders=["x"], **SAMPLE, **extra)
+
+
+def test_template_wraps_the_unsigned_section_in_the_two_markers(template_text: str) -> None:
+    assert template_text.count(START) == 1
+    assert template_text.count(END) == 1
+    inner = template_text.split(START)[1].split(END)[0]
+    assert "## The program is unsigned" in inner
+    assert "SmartScreen" in inner
+    assert "SHA256-FILES.txt" not in inner  # the manifest paragraph is for both kinds of release
+
+
+def test_unsigned_notes_are_the_template_without_the_marker_lines(
+    script: ModuleType, template_text: str
+) -> None:
+    default = _render(script, template_text)
+    assert default == _render(script, template_text, signed=False)
+    assert START not in default
+    assert END not in default
+    assert "<!--" not in default
+    assert "## The program is unsigned" in default
+    assert "**unsigned**" in default
+    assert "signed by" not in default.lower()
+    expected = template_text.replace(START + "\n", "").replace(END + "\n", "")
+    assert default == script.render_release_body(expected, flagged_placeholders=["x"], **SAMPLE)
+
+
+def test_signed_notes_name_signpath_and_replace_the_unsigned_section(
+    script: ModuleType, template_text: str
+) -> None:
+    body = _render(script, template_text, signed=True)
+    assert "{{" not in body
+    assert "<!--" not in body
+    assert "## The program is unsigned" not in body
+    assert "## The executable is signed" in body
+    flat = " ".join(body.split())
+    assert (
+        "Free code signing provided by [SignPath.io](https://about.signpath.io), "
+        "certificate by [SignPath Foundation](https://signpath.org)"
+    ) in flat
+    assert "Only `cbrn-dashboard.exe` is signed" in body
+    assert "Get-AuthenticodeSignature" in body
+    assert "https://github.com/marco-jardim/cbrn-readiness-dashboard/blob/v0.1.0/" in body
+    assert "CODE-SIGNING-POLICY.md" in body
+    # Everything outside the section is the same as in the unsigned notes.
+    unsigned = _render(script, template_text)
+    assert body.split("## The executable is signed")[0] == unsigned.split("## The program")[0]
+    assert body.endswith(unsigned.split("The per-file manifest")[1])
+    assert "The per-file manifest `SHA256-FILES.txt`" in body
+
+
+def test_the_script_is_ascii_and_fits_the_line_length() -> None:
+    text = SCRIPT_PATH.read_text(encoding="utf-8")
+    assert text.isascii()
+    assert max(len(line) for line in text.splitlines()) <= 100
+
+
+def test_a_signed_render_needs_the_markers(script: ModuleType) -> None:
+    with pytest.raises(ValueError, match="signing-notice"):
+        script.render_release_body("{{version}}", flagged_placeholders=[], signed=True, **SAMPLE)
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        f"a\n{START}\nb\n",  # no end
+        f"a\n{END}\nb\n",  # no start
+        f"{END}\nb\n{START}\n",  # wrong order
+        f"{START}\n{START}\nb\n{END}\n",  # two starts
+    ],
+)
+def test_broken_markers_are_refused(script: ModuleType, template: str) -> None:
+    for signed in (False, True):
+        with pytest.raises(ValueError, match="signing-notice"):
+            script.render_release_body(template, flagged_placeholders=[], signed=signed, **SAMPLE)
+
+
+def test_cli_release_body_signed_flag(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, bundle: Path, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    monkeypatch.setattr(script, "read_qt_versions", lambda: ("6.12.0", "6.12.0"))
+    monkeypatch.setattr(script, "read_flagged_placeholders", lambda: ["demo_flag"])
+    zip_path = script.make_zip(bundle, tmp_path / "release", "0.1.0")
+    base = ["release-body", "--template", str(TEMPLATE_PATH), "--zip", str(zip_path)]
+    unsigned_out = tmp_path / "unsigned.md"
+    signed_out = tmp_path / "signed.md"
+    assert script.main([*base, "--out", str(unsigned_out)]) == 0
+    assert script.main([*base, "--out", str(signed_out), "--signed"]) == 0
+    unsigned = unsigned_out.read_text(encoding="utf-8")
+    signed = signed_out.read_text(encoding="utf-8")
+    assert "## The program is unsigned" in unsigned
+    assert "SignPath" not in unsigned
+    assert "## The executable is signed" in signed
+    assert "SignPath" in signed
+
+
+def test_cli_print_version(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    assert script.main(["print-version"]) == 0
+    assert capsys.readouterr().out.strip() == "0.1.0"
+
+
+def test_package_makes_the_zip_from_a_signed_folder(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The zip is made from whatever folder it is given: the signed one carries the signed exe."""
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    signed = _make_bundle(tmp_path / "signed" / "cbrn-dashboard")
+    (signed / "cbrn-dashboard.exe").write_bytes(b"MZ fake executable + signature")
+    out = tmp_path / "release"
+    assert script.main(["package", "--bundle-dir", str(signed), "--out-dir", str(out)]) == 0
+    with zipfile.ZipFile(out / "cbrn-readiness-dashboard-0.1.0-win-x64.zip") as archive:
+        assert archive.read(f"{TOP}/cbrn-dashboard.exe") == b"MZ fake executable + signature"
+        assert archive.read(f"{TOP}/_internal/alpha.txt") == b"alpha"
+    manifest = (out / "SHA256-FILES.txt").read_text(encoding="utf-8")
+    digest = hashlib.sha256(b"MZ fake executable + signature").hexdigest()
+    assert f"{digest}  {TOP}/cbrn-dashboard.exe\n" in manifest
+    sums = (out / "SHA256SUMS.txt").read_text(encoding="utf-8")
+    zip_digest = hashlib.sha256(
+        (out / "cbrn-readiness-dashboard-0.1.0-win-x64.zip").read_bytes()
+    ).hexdigest()
+    assert sums.startswith(zip_digest)
+
+
+# --------------------------------------------------------------------------------------------
 # Command line (the project-reading helpers are replaced; no build and no PySide6 needed)
 # --------------------------------------------------------------------------------------------
 

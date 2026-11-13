@@ -31,6 +31,18 @@ Documentation:
 - [Import templates](docs/import-templates.md): the CSV layouts accepted by the import.
 - [Manual test guide](docs/guia-teste-manual.pt-BR.md) (Portuguese): how to run the manual tests on a clean Windows profile without administrator rights.
 - [Questionnaire for the CBRN defence committee](docs/questionario-comite.pt-BR.md) (Portuguese): the open questions of the plan, in plain language; answers are kept outside the repository.
+- [Code signing policy](CODE-SIGNING-POLICY.md): which file the project would sign, by whom, who approves each release, and how to check the signature.
+
+## Code signing policy
+
+The executable is unsigned today. This project is preparing to use free code signing for open-source projects; the full policy is in [CODE-SIGNING-POLICY.md](CODE-SIGNING-POLICY.md) (Code signing policy).
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- **Committers and reviewers:** [marco-jardim](https://github.com/marco-jardim)
+- **Approvers:** [marco-jardim](https://github.com/marco-jardim)
+
+**Privacy policy:** This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
 
 ## Background
 

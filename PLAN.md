@@ -2219,6 +2219,8 @@ That is enough for the committee to review the indicators and placeholders with 
 | X12 | macOS and Linux builds | demand | §2.2 |
 | X13 | Argon2id key derivation for encrypted backups, instead of scrypt | Q11 requires it | D04 |
 
+**X6 status:** integration prepared (SignPath Foundation OSS program); not active until the project is accepted. The release workflow has an optional `sign` job that is skipped while the repository variable `SIGNPATH_ORGANIZATION_ID` is empty, so releases stay unsigned (D10). Only `cbrn-dashboard.exe` is signed (`.signpath/artifact-configurations/release.xml`); the policy page is `CODE-SIGNING-POLICY.md`.
+
 **Sizing.** Sizes use the labels of §10.1 (S ≈ under 200 changed lines, M ≈ 200–600, L ≈ over 600). There are no L tasks: everything larger was split.
 
 | Phase | Tasks | S | M | Release |

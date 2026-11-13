@@ -85,7 +85,14 @@ código de red, ni comprobación de actualizaciones, ni telemetría.
   archivo no se dañó por el camino). No prueba la autenticidad: quien pudiera cambiar el zip en esa
   página podría cambiar también el archivo de sumas.
 - La atestación prueba dónde y cómo se ejecutó la compilación. No prueba que el programa sea seguro.
-- El ejecutable es **no firmado** (la firma de código es una decisión aplazada).
+- El ejecutable es **no firmado** hoy. Las versiones podrán firmarse en el futuro mediante el
+  programa de código abierto de la SignPath Foundation (vea la [política de firma de
+  código](../CODE-SIGNING-POLICY.md), en inglés). Una versión así lo indica en sus notas. Para
+  comprobarlo, extraiga el zip y abra las Propiedades de `cbrn-dashboard.exe`, pestaña *Firmas
+  digitales*, o ejecute en PowerShell
+  `Get-AuthenticodeSignature .\cbrn-readiness-dashboard\cbrn-dashboard.exe`: el estado debe ser
+  `Valid` y el firmante "SignPath Foundation". Solo ese ejecutable se firmaría, no los archivos de
+  Qt, de Python y de Microsoft que lo acompañan.
 
 ## 5. Desbloquear y extraer
 
@@ -119,8 +126,9 @@ Para los equipos de TI:
   también los archivos `.pyd` y DLL.
 - **Smart App Control** no admite excepciones por archivo. En un equipo donde está activo, el
   programa no firmado puede sencillamente no ejecutarse.
-- Solo la firma de código eliminaría la mayor parte de esta fricción. Está aplazada hasta que se
-  respondan las preguntas sobre el despliegue.
+- Solo la firma de código eliminaría la mayor parte de esta fricción, y solo para el ejecutable (las
+  DLL y los archivos `.pyd` siguen sin firma). Está preparada pero inactiva (sección 4.3) y sigue
+  aplazada hasta que se respondan las preguntas sobre el despliegue.
 
 ## 8. Opciones de la línea de comandos
 

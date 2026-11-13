@@ -82,7 +82,13 @@ network code, no update check and no telemetry.
   the way). It does not prove authenticity: anyone who could change the zip on that page could
   change the checksum file too.
 - The attestation proves where and how the build ran. It does not prove that the program is safe.
-- The executable is **unsigned** (code signing is a deferred decision).
+- The executable is **unsigned** today. Releases may be signed in future through the SignPath
+  Foundation open-source programme (see the [code signing policy](../CODE-SIGNING-POLICY.md)). A
+  release made that way says so in its notes. To check, extract the zip and open the Properties of
+  `cbrn-dashboard.exe`, tab *Digital Signatures*, or run
+  `Get-AuthenticodeSignature .\cbrn-readiness-dashboard\cbrn-dashboard.exe` in PowerShell: the
+  status must be `Valid` and the signer "SignPath Foundation". Only that executable would be
+  signed, not the Qt, Python and Microsoft files next to it.
 
 ## 5. Unblock and extract
 
@@ -114,8 +120,9 @@ For IT teams:
   per file and per release, and must cover the `.pyd` and DLL files too.
 - **Smart App Control** has no per-file bypass. On a machine where it is on, the unsigned program
   may simply not run.
-- Only code signing would remove most of this friction. It is deferred until the deployment
-  questions are answered.
+- Only code signing would remove most of this friction, and only for the executable itself (the
+  DLL and `.pyd` files stay unsigned). It is prepared but not active (section 4.3); it stays
+  deferred until the deployment questions are answered.
 
 ## 8. Command-line options
 

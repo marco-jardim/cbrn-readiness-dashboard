@@ -6,6 +6,7 @@ This is a Windows desktop program that helps a hospital look at its own CBRN rea
 indicators it shows are not yet validated by any institution; do not use them for decisions that
 need a validated tool.
 
+<!-- signing-notice:start -->
 ## The program is unsigned
 
 The executable (`cbrn-dashboard.exe`) and the files next to it are **unsigned**: they carry no
@@ -18,6 +19,7 @@ code-signing certificate. Depending on how a computer is set up, Windows may rea
   well-known software.
 - **AppLocker** or **Windows Defender Application Control (WDAC)** policies may refuse to run
   it, or its DLL and `.pyd` files, until an administrator allows them.
+<!-- signing-notice:end -->
 
 The per-file manifest `SHA256-FILES.txt` attached to this release lists the SHA-256 of every file
 inside the `cbrn-readiness-dashboard` folder of the zip, DLL and `.pyd` files included. IT teams

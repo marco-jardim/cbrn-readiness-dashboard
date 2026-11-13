@@ -13,8 +13,11 @@ Sub-commands, all used by ``.github/workflows/release.yml``:
 ``prerelease-flag``
     Print ``--prerelease`` when the current version is a prerelease (below 1.0.0, or with a
     pre/dev suffix), otherwise an empty line.
-``release-body --template FILE --out FILE --zip FILE``
-    Fill the release-notes template.
+``print-version``
+    Print ``cbrn_dashboard.__version__`` (the workflow passes it to the SignPath request).
+``release-body --template FILE --out FILE --zip FILE [--signed]``
+    Fill the release-notes template. ``--signed`` (given only when the workflow signed the
+    executable through SignPath) swaps the "unsigned" section for the signed one.
 
 The zip is reproducible: entries in a fixed order, a fixed timestamp, fixed attributes, a fixed
 compression level, no extra fields. Two runs over the same file contents give identical bytes,
@@ -75,6 +78,11 @@ PYSIDE_SOURCE_URL_FORMAT = (
 PROJECT_SOURCE_URL_FORMAT = (
     "https://github.com/marco-jardim/cbrn-readiness-dashboard/tree/v{version}"
 )
+#: The code signing policy of this project, as it is at the tag of the release.
+POLICY_URL_FORMAT = (
+    "https://github.com/marco-jardim/cbrn-readiness-dashboard/blob/v{version}/"
+    "CODE-SIGNING-POLICY.md"
+)
 
 _VERSION = re.compile(
     r"""
@@ -87,6 +95,41 @@ _VERSION = re.compile(
     re.VERBOSE,
 )
 _TOKEN = re.compile(r"\{\{[^{}]*\}\}")
+
+#: The release-notes template wraps its "the program is unsigned" section in these two lines
+#: (HTML comments, invisible when rendered). The lines are removed from the notes; with
+#: ``signed=True`` everything between them is replaced by :data:`SIGNED_NOTICE`.
+SIGNING_START_MARKER = "<!-- signing-notice:start -->"
+SIGNING_END_MARKER = "<!-- signing-notice:end -->"
+
+#: What the release notes say when the executable was signed through SignPath. ``{{version}}`` is
+#: filled like every other token. Only ``cbrn-dashboard.exe`` is signed; the third-party files of
+#: the bundle are not.
+SIGNED_NOTICE = """\
+## The executable is signed
+
+The executable (`cbrn-dashboard.exe`) is signed with an Authenticode certificate of the SignPath
+Foundation. Free code signing provided by [SignPath.io](https://about.signpath.io), certificate
+by [SignPath Foundation](https://signpath.org). Every release is approved by hand before it is
+signed; see the [Code signing policy]({{policy_url}}).
+
+Only `cbrn-dashboard.exe` is signed. The other files in the zip (Qt, Python, the Microsoft
+runtime, `.dll` and `.pyd` files) are third-party files: this project does not sign them.
+
+To check the signature, extract the zip, open the Properties of `cbrn-dashboard.exe` and look at
+the Digital Signatures tab, or run in PowerShell:
+
+```powershell
+Get-AuthenticodeSignature .\\cbrn-readiness-dashboard\\cbrn-dashboard.exe
+```
+
+The status must be `Valid` and the signer certificate must be issued to "SignPath Foundation". A
+valid signature shows who built the executable and that it was not changed afterwards. It does not
+show that the program is safe or that its indicators are validated. Depending on how a computer
+is set up, Microsoft Defender SmartScreen may still warn until the file has built a reputation,
+and AppLocker or Windows Defender Application Control (WDAC) policies may still need an
+administrator's decision.
+"""
 
 
 # --------------------------------------------------------------------------------------------
@@ -266,6 +309,31 @@ def project_source_url(version: str) -> str:
     return PROJECT_SOURCE_URL_FORMAT.format(version=version)
 
 
+def policy_url(version: str) -> str:
+    """Return the link to the code signing policy of this project at the tag of ``version``."""
+    return POLICY_URL_FORMAT.format(version=version)
+
+
+def apply_signing_notice(template: str, *, signed: bool) -> str:
+    """Resolve the signing section of ``template``, delimited by the two marker lines.
+
+    Unsigned: only the marker lines are dropped, the section stays as written. Signed: the
+    section is replaced by :data:`SIGNED_NOTICE`. Raise :class:`ValueError` when the markers are
+    not exactly one start line followed by one end line.
+    """
+    lines = template.split("\n")
+    starts = [index for index, line in enumerate(lines) if line.strip() == SIGNING_START_MARKER]
+    ends = [index for index, line in enumerate(lines) if line.strip() == SIGNING_END_MARKER]
+    if len(starts) != 1 or len(ends) != 1 or starts[0] >= ends[0]:
+        raise ValueError(
+            f"The template needs one {SIGNING_START_MARKER} line followed by one "
+            f"{SIGNING_END_MARKER} line"
+        )
+    start, end = starts[0], ends[0]
+    inner = SIGNED_NOTICE.rstrip("\n").split("\n") if signed else lines[start + 1 : end]
+    return "\n".join([*lines[:start], *inner, *lines[end + 1 :]])
+
+
 def render_release_body(
     template: str,
     *,
@@ -275,10 +343,19 @@ def render_release_body(
     zip_name: str,
     sha256: str,
     flagged_placeholders: Sequence[str],
+    signed: bool = False,
 ) -> str:
-    """Fill the ``{{name}}`` tokens of ``template``; raise :class:`ValueError` on a leftover."""
+    """Fill the ``{{name}}`` tokens of ``template``; raise :class:`ValueError` on a leftover.
+
+    A template that has the signing markers is resolved first (see
+    :func:`apply_signing_notice`); one without them is filled as it is, unless ``signed`` is
+    true, which then raises :class:`ValueError`.
+    """
     flagged = ", ".join(f"`{name}`" for name in flagged_placeholders) or "none"
+    if SIGNING_START_MARKER in template or SIGNING_END_MARKER in template or signed:
+        template = apply_signing_notice(template, signed=signed)
     values = {
+        "policy_url": policy_url(version),
         "version": version,
         "pyside_version": pyside_version,
         "qt_version": qt_version,
@@ -362,6 +439,11 @@ def _command_prerelease_flag(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _command_print_version(_args: argparse.Namespace) -> int:
+    print(read_version())
+    return 0
+
+
 def _command_release_body(args: argparse.Namespace) -> int:
     pyside_version, qt_version = read_qt_versions()
     body = render_release_body(
@@ -372,6 +454,7 @@ def _command_release_body(args: argparse.Namespace) -> int:
         zip_name=args.zip.name,
         sha256=sha256_file(args.zip),
         flagged_placeholders=read_flagged_placeholders(),
+        signed=args.signed,
     )
     _write_text(args.out, body)
     print(args.out)
@@ -398,10 +481,18 @@ def build_parser() -> argparse.ArgumentParser:
     flag = commands.add_parser("prerelease-flag", help="print --prerelease below 1.0.0")
     flag.set_defaults(handler=_command_prerelease_flag)
 
+    version = commands.add_parser("print-version", help="print the package version")
+    version.set_defaults(handler=_command_print_version)
+
     body = commands.add_parser("release-body", help="fill the release-notes template")
     body.add_argument("--template", type=Path, required=True)
     body.add_argument("--out", type=Path, required=True)
     body.add_argument("--zip", type=Path, required=True)
+    body.add_argument(
+        "--signed",
+        action="store_true",
+        help="say that the executable was signed (only when the signing step ran)",
+    )
     body.set_defaults(handler=_command_release_body)
     return parser
 
