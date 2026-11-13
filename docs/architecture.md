@@ -461,8 +461,12 @@ fictitious.
 ## 14. Packaging and release
 
 - `scripts/build_exe.py` builds the one-folder bundle with PyInstaller (`--onedir --windowed
-  --noupx`), removes unwanted Qt libraries and writes the third-party licence folder with
-  `scripts/collect_licenses.py`. That folder also carries the third-party notices of Qt in full
+  --noupx`), removes unwanted Qt libraries and the Universal CRT files (`ucrtbase.dll`,
+  `api-ms-win-*.dll`: Windows 10 and 11 always use their own copy) and writes the third-party
+  licence folder with `scripts/collect_licenses.py`. The Visual C++ runtime files stay in the
+  bundle; `licenses\MSVC-RUNTIME.md` lists every one found, case-insensitively, and says they are
+  Microsoft's files, not covered by the GPL, redistributed unmodified under Microsoft's terms.
+  That folder also carries the third-party notices of Qt in full
   (`QT-THIRD-PARTY-NOTICES.txt`). A maintainer generates them with
   `scripts/fetch_qt_attributions.py` from the `qt_attribution.json` files of the Qt source
   repositories (`qtbase`, `qtsvg`, `qtcharts`, `qtimageformats`, `qtvirtualkeyboard`) at the tag of

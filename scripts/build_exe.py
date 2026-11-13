@@ -11,8 +11,9 @@
 
 The functions are importable (the packaging tests load this file by path, since ``scripts/`` is
 not a package): :func:`build`, :func:`package_data_files`, :func:`prune_bundle`,
-:func:`write_version_file`, :func:`bundle_size_report` and the tables
-:data:`UNWANTED_FILE_PATTERNS` / :data:`UNWANTED_PLUGIN_DIRS`.
+:func:`write_version_file`, :func:`remove_system_runtime`, :func:`bundle_size_report` and the
+tables :data:`UNWANTED_FILE_PATTERNS` / :data:`UNWANTED_PLUGIN_DIRS` /
+:data:`UNWANTED_SYSTEM_RUNTIME_PATTERNS`.
 
 The Windows version resource of the executable is generated from ``__version__`` into the work
 folder (``version/version_info.txt``) and passed to PyInstaller with ``--version-file``; it is
@@ -157,6 +158,19 @@ UNWANTED_FILE_PATTERNS: tuple[str, ...] = (
     "QtWebEngineProcess*.exe",
     "qpdf.dll",  # the image-format plug-in that needs Qt6Pdf.dll
     "qtwebengine*.qm",
+)
+
+#: The Universal CRT (``ucrtbase.dll``) and the ``api-ms-win-*`` forwarders that PyInstaller copies
+#: from the build machine. File-name patterns (case-insensitive), deleted at any depth below
+#: ``_internal`` after the build and logged one by one (:func:`remove_system_runtime`). The
+#: supported systems are Windows 10 (1809 or later) and Windows 11 (PLAN.md section 8), where the
+#: Universal CRT and the API sets are part of the operating system and the system copy is always
+#: used, even when the application ships one. Leaving them out means the bundle redistributes no
+#: Windows SDK component (Q21). If an older Windows is ever supported, drop this table and list
+#: the files in ``packaging/licenses/MSVC-RUNTIME.md`` instead.
+UNWANTED_SYSTEM_RUNTIME_PATTERNS: tuple[str, ...] = (
+    "ucrtbase*.dll",
+    "api-ms-win-*.dll",
 )
 
 #: Folders (POSIX paths relative to ``_internal``) deleted after the build: the plug-in folders
@@ -494,6 +508,32 @@ def prune_bundle(bundle: Path) -> int:
     return removed
 
 
+def _matches_system_runtime(name: str) -> bool:
+    lowered = name.lower()
+    return any(
+        fnmatch.fnmatchcase(lowered, pattern.lower())
+        for pattern in UNWANTED_SYSTEM_RUNTIME_PATTERNS
+    )
+
+
+def remove_system_runtime(bundle: Path) -> list[str]:
+    """Delete the Universal CRT files from ``<bundle>/_internal``; return their POSIX paths.
+
+    The paths are relative to ``bundle`` and sorted. See :data:`UNWANTED_SYSTEM_RUNTIME_PATTERNS`
+    for why the files are not shipped. The Visual C++ runtime files (``vcruntime*``, ``msvcp*``)
+    are kept: the target systems do not include them.
+    """
+    internal = bundle / INTERNAL_DIR_NAME
+    if not internal.is_dir():
+        raise BuildError(f"No {INTERNAL_DIR_NAME} folder in {bundle}")
+    removed: list[str] = []
+    for path in sorted(internal.rglob("*")):
+        if (path.is_file() or path.is_symlink()) and _matches_system_runtime(path.name):
+            removed.append(path.relative_to(bundle).as_posix())
+            path.unlink()
+    return sorted(removed)
+
+
 def bundle_size_bytes(bundle: Path) -> int:
     """Return the total size in bytes of all files below ``bundle``."""
     return sum(path.stat().st_size for path in bundle.rglob("*") if path.is_file())
@@ -570,6 +610,10 @@ def build(dist_dir: Path, work_dir: Path) -> Path:
     if not (bundle / f"{APP_NAME}.exe").is_file():
         raise BuildError(f"PyInstaller did not produce {bundle / (APP_NAME + '.exe')}")
     pruned = prune_bundle(bundle)
+    system_runtime = remove_system_runtime(bundle)
+    print(f"removed {len(system_runtime)} Universal CRT file(s) (the system copy is used):")
+    for name in system_runtime:
+        print(f"  {name}")
     licenses_dir = bundle / LICENSES_DIR_NAME
     license_entries = _load_collect_licenses_script().collect(
         licenses_dir, repo_root=REPO_ROOT, bundle_dir=bundle

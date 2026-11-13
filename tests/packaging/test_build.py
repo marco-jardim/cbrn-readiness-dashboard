@@ -394,9 +394,9 @@ def test_licence_index_lists_only_the_distributions_that_are_in_the_bundle(
 
 
 def test_msvc_runtime_notice_names_every_runtime_file_in_the_bundle(bundle_dir: Path) -> None:
-    """P9-07: every vcruntime*, msvcp* and concrt* file of the bundle is named in the notice."""
+    """P9-07, Q21: every Microsoft runtime file of the bundle (any letter case) is named."""
     notice = (bundle_dir / "licenses" / "MSVC-RUNTIME.md").read_text(encoding="utf-8")
-    patterns = ("vcruntime*", "msvcp*", "concrt*")
+    patterns = ("vcruntime*", "msvcp*", "concrt*", "ucrtbase*", "api-ms-win-*")
     found = [
         path.relative_to(bundle_dir).as_posix()
         for path in _files(bundle_dir)
@@ -406,6 +406,37 @@ def test_msvc_runtime_notice_names_every_runtime_file_in_the_bundle(bundle_dir: 
     missing = [name for name in found if f"`{name}`" not in notice]
     assert not missing, f"runtime files not named in licenses/MSVC-RUNTIME.md: {missing}"
     assert "{{" not in notice
+
+
+def test_bundle_has_no_universal_crt(bundle_dir: Path) -> None:
+    """Q21: Windows 10/11 always use the system Universal CRT, so none is shipped (PLAN.md 8)."""
+    offenders = [
+        path.relative_to(bundle_dir).as_posix()
+        for path in _files(bundle_dir)
+        if path.name.lower() == "ucrtbase.dll" or path.name.lower().startswith("api-ms-win-")
+    ]
+    assert not offenders, f"Universal CRT files in the bundle: {offenders}"
+
+
+def test_remove_system_runtime_deletes_only_the_universal_crt(
+    build_script: ModuleType, tmp_path: Path
+) -> None:
+    """The removal is case-insensitive, lists what it deleted and keeps the VC++ runtime."""
+    bundle = tmp_path / "bundle"
+    gone = [
+        "_internal/ucrtbase.dll",
+        "_internal/api-ms-win-crt-runtime-l1-1-0.dll",
+        "_internal/API-MS-WIN-core-sysinfo-l1-2-0.dll",
+    ]
+    kept = ["_internal/VCRUNTIME140.dll", "_internal/PySide6/MSVCP140.dll", "cbrn-dashboard.exe"]
+    for relative in [*gone, *kept]:
+        path = bundle / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+    removed: list[str] = build_script.remove_system_runtime(bundle)
+    assert removed == sorted(gone)
+    assert all(not (bundle / relative).exists() for relative in gone)
+    assert all((bundle / relative).is_file() for relative in kept)
 
 
 def test_bundle_has_no_ts_catalogues(bundle_dir: Path) -> None:

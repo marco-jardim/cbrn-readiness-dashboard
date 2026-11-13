@@ -330,24 +330,55 @@ def test_msvc_notice_names_every_runtime_file_of_a_bundle(
         "_internal/PySide6/MSVCP140_1.dll",
         "_internal/PySide6/concrt140.dll",
         "_internal/PySide6/Qt6Core.dll",
+        "_internal/shiboken6/MSVCP140.dll",
+        "_internal/shiboken6/VCRUNTIME140.dll",
+        "_internal/shiboken6/VCRUNTIME140_1.dll",
+        "_internal/UCRTBASE.dll",
+        "_internal/api-ms-win-crt-runtime-l1-1-0.dll",
+        "_internal/API-MS-WIN-core-sysinfo-l1-2-0.dll",
     ):
         path = bundle / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"x")
     files = script.msvc_runtime_files(bundle)
-    assert files == [
-        "_internal/PySide6/MSVCP140_1.dll",
-        "_internal/PySide6/concrt140.dll",
-        "_internal/PySide6/msvcp140.dll",
-        "_internal/VCRUNTIME140_1.dll",
-        "_internal/vcruntime140.dll",
-    ]
+    assert files == sorted(
+        [
+            "_internal/PySide6/MSVCP140_1.dll",
+            "_internal/PySide6/concrt140.dll",
+            "_internal/PySide6/msvcp140.dll",
+            "_internal/UCRTBASE.dll",
+            "_internal/VCRUNTIME140_1.dll",
+            "_internal/vcruntime140.dll",
+            "_internal/API-MS-WIN-core-sysinfo-l1-2-0.dll",
+            "_internal/api-ms-win-crt-runtime-l1-1-0.dll",
+            "_internal/shiboken6/MSVCP140.dll",
+            "_internal/shiboken6/VCRUNTIME140.dll",
+            "_internal/shiboken6/VCRUNTIME140_1.dll",
+        ]
+    )
     template = (SOURCES / "MSVC-RUNTIME.md").read_text(encoding="utf-8")
     text = script.render_msvc_notice(template, files)
     for relative in files:
         assert f"`{relative}`" in text
     assert "Qt6Core" not in text
     assert script.msvc_runtime_files(None) is None
+
+
+def test_msvc_notice_states_the_microsoft_terms(script: ModuleType) -> None:
+    """Q21: the notice says whose files these are, under which terms, and what is not shipped."""
+    template = (SOURCES / "MSVC-RUNTIME.md").read_text(encoding="utf-8")
+    text = script.render_msvc_notice(template, ["_internal/vcruntime140.dll"])
+    flat = " ".join(text.split())
+    assert "not** covered by the GPL-3.0" in flat
+    assert "redistributed unmodified" in flat
+    assert "separate Microsoft component" in flat
+    assert "notices that are inside the files are kept" in flat
+    assert "No Microsoft trademark is used in the name of this program" in flat
+    assert "Windows 10 (version 1809 or later) and Windows 11" in flat
+    assert "always uses its own copy" in flat
+    assert "https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution" in text
+    assert "https://learn.microsoft.com/en-us/cpp/windows/universal-crt-deployment" in text
+    assert "LicenseRef-Microsoft-VC-Redist" in text
 
 
 def test_msvc_notice_template_must_keep_its_token(script: ModuleType) -> None:

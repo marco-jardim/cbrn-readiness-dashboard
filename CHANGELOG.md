@@ -49,6 +49,11 @@ The work of phases 8 to 10 of the plan, on top of the first preliminary version:
 - Qt third-party notices now shipped in full: `licenses\QT-THIRD-PARTY-NOTICES.txt` holds the
   notice and licence text of every component documented in the Qt source release of the bundled
   version, and the build fails when that file is not for the bundled Qt version.
+- Microsoft runtime files in the bundle: the build no longer ships the Universal CRT
+  (`ucrtbase.dll` and the `api-ms-win-*` files), because Windows 10 and 11 always use their own
+  copy; `licenses\MSVC-RUNTIME.md` now lists every Visual C++ runtime file in any letter case (the
+  `shiboken6` copies included) and states that these are Microsoft's files, not covered by the GPL,
+  redistributed unmodified under Microsoft's terms.
 
 ### Placeholders still flagged in `domain/config.py`
 
@@ -122,7 +127,7 @@ records no answer to any of them.
 - Q18: answered and applied locally
 - Q19: open
 - Q20: open
-- Q21: open
+- Q21: answered and implemented in task T9.2
 - Q22: answered and implemented in task T9.2
 - Q23: open
 - Q24: open
@@ -144,17 +149,16 @@ message, one `type="unfinished"` translation); a test compares it with the files
 
 - The executable and the files beside it are unsigned. Windows SmartScreen, Smart App Control,
   AppLocker or WDAC may warn about or block them (see the install guides).
-- The release workflow has never run, so the zip, the checksums, the per-file manifest and the
-  draft release have not been produced by it.
-- The repository is public, so the build-provenance attestation is expected to work. The first
-  tag is the first real run of the workflow, so this is still to be confirmed (Q23 stays open).
+- The release workflow ran once, for the tag `v1.0.0`: it produced the zip, the checksums, the
+  per-file manifest, the build-provenance attestation (checked with `gh attestation verify`) and
+  a draft release. The draft has not been published.
+- The Visual C++ runtime files are redistributed under Microsoft's terms (see
+  `licenses\MSVC-RUNTIME.md`); the full Visual Studio licence text was not reviewed by counsel.
 - The warning about writing reports or CSV exports to removable media is never shown, because the
   application does not detect removable drives.
-- The wording about the redistribution of the Microsoft Visual C++ runtime in the bundled licence
-  notice (`licenses\MSVC-RUNTIME.md`, which points to Microsoft's published terms) has not been
-  confirmed.
 - A read-only database on a network (UNC) path was never tried on a real network share.
-- The branch protection of the repository is not configured from the repository itself.
+- The branch protection of `main` is a setting of the hosting site; it cannot be checked from
+  the repository's files.
 - The manual smoke test has not been run, the manual test script for the committee has not been
   run either, and the built zip has not been tried on a clean Windows machine without
   administrator rights.
@@ -309,7 +313,8 @@ of pending messages is recorded in this entry.
   notice (`licenses\MSVC-RUNTIME.md`, which points to Microsoft's published terms) has not been
   confirmed.
 - A read-only database on a network (UNC) path was never tried on a real network share.
-- The branch protection of the repository is not configured from the repository itself.
+- The branch protection of `main` is a setting of the hosting site; it cannot be checked from
+  the repository's files.
 - The manual smoke test has not been run, and the built zip has not been tried on a clean Windows
   machine without administrator rights.
 - The indicators are not institutionally validated, and no target exists until the committee

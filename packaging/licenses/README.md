@@ -25,7 +25,8 @@ notices of the software the bundle contains, and the offer of the corresponding 
   inside Qt, for the bundled Qt version. `QT-THIRD-PARTY.md` explains it and also points to Qt's
   own list of licences.
 - `OPENSSL.md` describes where OpenSSL is included.
-- `MSVC-RUNTIME.md` describes the Microsoft Visual C++ runtime files in the bundle.
+- `MSVC-RUNTIME.md` describes the Microsoft Visual C++ runtime files in the bundle (Microsoft's
+  files, not covered by the GPL; the Universal CRT is not shipped).
 - `SOURCE-OFFER.md` names the source release of the bundled Qt and PySide6 version and
   contains the written offer of source.
 

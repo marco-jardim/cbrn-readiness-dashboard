@@ -349,8 +349,7 @@ def test_the_unfinished_count_stated_equals_the_count_found() -> None:
     "needle",
     [
         "unsigned",
-        "has never run",
-        "to be confirmed",
+        "draft",
         "visual c++ runtime",
         "unc",
         "branch protection",

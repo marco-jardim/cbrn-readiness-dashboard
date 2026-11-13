@@ -110,8 +110,16 @@ CPYTHON_LICENSE_FILE = f"{CPYTHON_NOTICES_DIR}/LICENSE.cpython.txt"
 OPENSSL_BUNDLED_LICENSE_FILE = f"{CPYTHON_NOTICES_DIR}/LICENSE.openssl-3.txt"
 PYINSTALLER_NOTICE_FILE = "pyinstaller/COPYING.txt"
 MSVC_NOTICE_NAME = "MSVC-RUNTIME.md"
-#: File-name patterns (lower case) of the Visual C++ runtime files the notice must name (P9-07).
-MSVC_RUNTIME_PATTERNS: tuple[str, ...] = ("vcruntime*", "msvcp*", "concrt*")
+#: File-name patterns (lower case, matched against the lower-cased name) of the Microsoft runtime
+#: files the notice must name (P9-07, Q21). The Universal CRT patterns are a safety net: the build
+#: removes those files (``scripts/build_exe.py``), but any that is still bundled must be listed.
+MSVC_RUNTIME_PATTERNS: tuple[str, ...] = (
+    "vcruntime*",
+    "msvcp*",
+    "concrt*",
+    "ucrtbase*",
+    "api-ms-win-*",
+)
 MSVC_FILES_TOKEN = "{{msvc_files}}"
 LOCK_FILE_NAME = "uv.lock"
 STATIC_NOTICES: tuple[str, ...] = (
@@ -880,18 +888,20 @@ def render_package_sources(dists: Sequence[Distribution], repo_root: Path) -> st
 
 
 def msvc_runtime_files(bundle_dir: Path | None) -> list[str] | None:
-    """Return the sorted POSIX paths (relative to ``bundle_dir``) of the Visual C++ runtime files.
+    """Return the sorted POSIX paths (relative to ``bundle_dir``) of the Microsoft runtime files.
 
-    ``None`` when there is no bundle to scan.
+    Every file whose name matches :data:`MSVC_RUNTIME_PATTERNS`, case-insensitively, at any depth
+    (every copy is listed: ``_internal``, ``PySide6`` and ``shiboken6`` each have their own).
+    Linked folders are followed. ``None`` when there is no bundle to scan.
     """
     if bundle_dir is None:
         return None
-    found = [
-        path.relative_to(bundle_dir).as_posix()
-        for path in bundle_dir.rglob("*")
-        if path.is_file()
-        and any(fnmatch.fnmatchcase(path.name.lower(), p) for p in MSVC_RUNTIME_PATTERNS)
-    ]
+    found: list[str] = []
+    for folder, _dirs, names in os.walk(bundle_dir, followlinks=True):
+        for name in names:
+            lowered = name.lower()
+            if any(fnmatch.fnmatchcase(lowered, pattern) for pattern in MSVC_RUNTIME_PATTERNS):
+                found.append((Path(folder) / name).relative_to(bundle_dir).as_posix())
     return sorted(found)
 
 
@@ -1110,7 +1120,9 @@ def collect(
                 None,
                 MSVC_CHOSEN,
                 (static[MSVC_NOTICE_NAME],),
-                "Redistributed unmodified; MSVC-RUNTIME.md names every runtime file found.",
+                "Microsoft files, not covered by the GPL; redistributed unmodified under "
+                "Microsoft's Visual Studio redistribution terms. MSVC-RUNTIME.md names every "
+                "runtime file found.",
             ),
             LicenseEntry(
                 PROJECT_NAME,

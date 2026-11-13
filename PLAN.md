@@ -2392,6 +2392,7 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Until answered: the links are generated from the patterns and the written offer covers the Qt and PySide6 source of the bundled versions.
 
 **Q21 — Visual C++ runtime notice.** Is the wording of `MSVC-RUNTIME.md` (the runtime files are redistributed unmodified, with a pointer to Microsoft's terms, and the file list is written from the files found in the bundle) what Microsoft's redistribution terms require? (Phase 9 QA; the generated file list is finding P9-07)
+- Status: answered and implemented in task T9.2
 - Answered by: the project owner.
 - Confirms: T9.2 (the Visual C++ runtime notice).
 - Until answered: the notice is shipped with that wording, unconfirmed.
