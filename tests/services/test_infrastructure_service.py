@@ -1145,6 +1145,31 @@ def test_as_of_views_equal_the_domain_results_with_a_stored_configuration(
     assert availability["DEMO-TYPE"] == 4  # the degraded A002 now counts
 
 
+def test_alert_inputs_feed_the_domain_to_the_same_rows_as_the_page(
+    filled: _Filled, db: DatabaseConnection, clock: FixedClock
+) -> None:
+    service = filled.service
+    inputs = service.alert_inputs()
+    assert inputs.rules == InfrastructureRules()  # the default configuration
+    # ALL types, the inactive DEMO-OFF included, exactly as asset_rows passes them
+    codes = {asset_type.code for asset_type in inputs.types}
+    assert "DEMO-OFF" in codes
+    stored = service.list_types(include_inactive=True)
+    assert [t.active for t in stored if t.code == "DEMO-OFF"] == [False]
+    assert codes == {t.code for t in stored}
+    assert len(inputs.assets) == _count(db, "asset")
+    assert len(inputs.status_events) == _count(db, "asset_status_event")
+    assert len(inputs.maintenance) == _count(db, "maintenance_event")
+    rows = rules.asset_rows(
+        inputs.assets, inputs.types, inputs.status_events, inputs.maintenance, AS_OF, inputs.rules
+    )
+    assert rows == service.asset_rows(AS_OF)
+
+    config = ReadinessConfig().with_changes(maintenance_warning_days=16)
+    save_config(WriteContext(db, clock, OPERATOR), config)
+    assert service.alert_inputs().rules == InfrastructureRules(maintenance_warning_days=16)
+
+
 def test_asset_history_is_sorted_by_date(service: InfrastructureService) -> None:
     type_id = _user_type(service)
     asset_id = _asset(service, "DEMO-A001", type_id, in_service_from="2025-12-01")

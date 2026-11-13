@@ -40,12 +40,14 @@ from cbrn_dashboard.domain import personnel as rules
 from cbrn_dashboard.domain.dates import InvalidDateError, format_iso_date, parse_iso_date
 from cbrn_dashboard.domain.indicators import IndicatorValue, encode_dimension
 from cbrn_dashboard.domain.personnel import (
+    Certificate,
     CertStatus,
     DegreeLevel,
     DegreeStatus,
     PersonnelRules,
     PpeLevel,
     StaffLevelRow,
+    StaffMember,
 )
 from cbrn_dashboard.services.errors import (
     CODE_IMMUTABLE,
@@ -102,6 +104,7 @@ __all__ = [
     "DegreeInput",
     "DegreeView",
     "LevelSummary",
+    "PersonnelAlertInputs",
     "PersonnelService",
     "StaffDetail",
     "StaffInput",
@@ -288,6 +291,15 @@ class LevelSummary:
     valid: int
     expiring: int
     retraining_needed: int
+
+
+@dataclass(frozen=True)
+class PersonnelAlertInputs:
+    """Domain objects and rules the certificate alerts are computed from (T6.2)."""
+
+    staff: tuple[StaffMember, ...]
+    certificates: tuple[Certificate, ...]
+    rules: PersonnelRules
 
 
 def course_label(course: CourseView, lang: str) -> str:
@@ -1087,6 +1099,17 @@ class PersonnelService:
 
     def _domain_certificates(self) -> list[rules.Certificate]:
         return [repo.certificate_to_domain(row) for row in repo.list_certificates(self._conn)]
+
+    def alert_inputs(self) -> PersonnelAlertInputs:
+        """The domain inputs of the certificate alerts (T6.2), with the configured rules.
+
+        Built with the same loaders, converters and rules as the as-of views above.
+        """
+        return PersonnelAlertInputs(
+            staff=tuple(self._domain_staff()),
+            certificates=tuple(self._domain_certificates()),
+            rules=self._rules(),
+        )
 
     def level_rows(self, as_of: date) -> list[StaffLevelRow]:
         """One row per active person and level with the status on ``as_of`` (domain rule)."""

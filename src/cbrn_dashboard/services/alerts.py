@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Alert service: the alerts as of a date, computed on demand (PLAN.md T6.2, section 5.5).
+
+Qt-free and read-only. Alerts are never stored (X7: no acknowledgement or snooze): every call
+gathers the inputs from the personnel and infrastructure services (the very same domain objects and
+configuration-derived rules those services use for their own as-of views) and the readings from
+:meth:`~cbrn_dashboard.services.indicators.IndicatorService.evaluate`, then calls the rule functions
+of ``domain/alerts.py``. No rule is implemented here, so the alerts, the pages and the indicators
+cannot disagree. A past as-of date gives the alerts of that date from the records known today.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from datetime import date
+
+from cbrn_dashboard.domain import alerts as rules
+from cbrn_dashboard.domain.alerts import Alert, Severity
+from cbrn_dashboard.domain.indicators import IndicatorRegistry, Module
+from cbrn_dashboard.services.indicators import IndicatorService
+from cbrn_dashboard.services.infrastructure import InfrastructureService
+from cbrn_dashboard.services.personnel import PersonnelService
+
+__all__ = ["AlertService"]
+
+
+class AlertService:
+    """The alerts of PLAN 5.5 for an as-of date, sorted by severity and then due date."""
+
+    def __init__(
+        self,
+        *,
+        personnel: PersonnelService,
+        infrastructure: InfrastructureService,
+        indicators: IndicatorService,
+    ) -> None:
+        self._personnel = personnel
+        self._infrastructure = infrastructure
+        self._indicators = indicators
+
+    def alerts(self, as_of: date) -> list[Alert]:
+        """Every alert on ``as_of``: critical first, then by due date (undated last)."""
+        people = self._personnel.alert_inputs()
+        assets = self._infrastructure.alert_inputs()
+        return rules.all_alerts(
+            staff=people.staff,
+            certs=people.certificates,
+            personnel_rules=people.rules,
+            assets=assets.assets,
+            asset_types=assets.types,
+            status_events=assets.status_events,
+            maintenance=assets.maintenance,
+            infrastructure_rules=assets.rules,
+            readings=self._indicators.evaluate(as_of),
+            registry=self._registry(),
+            d=as_of,
+        )
+
+    def _registry(self) -> IndicatorRegistry:
+        """The indicator service's registry, rebuilt from its public ``definitions()``."""
+        registry = IndicatorRegistry()
+        for definition in self._indicators.definitions():
+            registry.register(definition)
+        return registry
+
+    def alerts_filtered(
+        self,
+        as_of: date,
+        *,
+        module: Module | None = None,
+        severity: Severity | None = None,
+    ) -> list[Alert]:
+        """:meth:`alerts` restricted to one module and/or one severity (order kept)."""
+        return [
+            alert
+            for alert in self.alerts(as_of)
+            if (module is None or alert.module is module)
+            and (severity is None or alert.severity is severity)
+        ]
+
+    def counts(self, as_of: date) -> Mapping[Severity, int]:
+        """The number of alerts per severity on ``as_of`` (always all three keys)."""
+        return rules.count_by_severity(self.alerts(as_of))
+
+    def has_actionable(self, as_of: date) -> bool:
+        """True when at least one alert on ``as_of`` is a warning or critical (not info only)."""
+        return rules.has_actionable(self.alerts(as_of))

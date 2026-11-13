@@ -21,6 +21,7 @@ from cbrn_dashboard.app import AppHandle, StartupHook, clock_is_suspect
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.paths import DATABASE_FILE_NAME, LocationWarning
 from cbrn_dashboard.prefs import PreferencesStore
+from cbrn_dashboard.services.personnel import CourseInput, StaffInput
 from cbrn_dashboard.storage import repository
 from cbrn_dashboard.storage.db import HotJournalError, open_database
 from cbrn_dashboard.storage.repository import WriteContext
@@ -32,7 +33,7 @@ from cbrn_dashboard.ui.shell.instance_lock import LOCK_FILE_NAME, InstanceLock, 
 from cbrn_dashboard.ui.shell.main_window import MainWindow
 from cbrn_dashboard.ui.shell.registry import DialogSpec, PageSpec, SettingsSectionSpec
 from tests.ui._fakes import FakePrompts, create_database, expect_handle, snapshot
-from tests.ui.conftest import StartApp
+from tests.ui.conftest import NOW, StartApp
 
 pytestmark = pytest.mark.ui
 
@@ -739,15 +740,65 @@ def test_close_uninstalls_the_exception_hook(started_app: StartApp) -> None:
 # --------------------------------------------------------------------------- context and window
 
 
-def test_the_context_has_the_exercises_service_over_the_open_database(
-    app_context: AppContext,
-) -> None:
-    assert app_context.services.exercises is not None
+def test_the_context_has_the_services_over_the_open_database(app_context: AppContext) -> None:
+    services = app_context.services
+    assert services.personnel is not None
+    assert services.infrastructure is not None
+    assert services.exercises is not None
+    assert services.budget is not None
+    assert services.indicators is not None
+    assert services.alerts is not None
     assert not app_context.read_only
     assert not app_context.is_demo
     assert not app_context.clock_suspect
     app_context.set_operator_label("operator")
     assert app_context.operator_label() == "operator"
+
+
+def test_the_services_share_the_connection_and_the_clock_of_the_context(
+    app_context: AppContext,
+) -> None:
+    services = app_context.services
+    assert services.personnel is not None
+    assert services.infrastructure is not None
+    assert services.exercises is not None
+    assert services.budget is not None
+    assert services.indicators is not None
+    for service in (
+        services.personnel,
+        services.infrastructure,
+        services.exercises,
+        services.budget,
+        services.indicators,
+    ):
+        assert service._conn is app_context.conn
+        assert service._clock is app_context.clock
+
+    # the indicator and alert services read what the module services wrote
+    services.personnel.create_staff(StaffInput("DEMO-P001", "2020-01-01"))
+    assert services.alerts is not None
+    assert services.alerts.alerts(date(2026, 3, 5)) == []
+    assert services.indicators.evaluate(date(2026, 3, 5))
+
+
+def test_the_operator_label_reaches_the_writes_of_the_services(app_context: AppContext) -> None:
+    assert app_context.conn is not None
+    assert app_context.services.personnel is not None
+
+    def last_operator() -> object:
+        assert app_context.conn is not None
+        row = app_context.conn.execute(
+            "SELECT operator, at_utc FROM change_log ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert row[1] == NOW
+        return row[0]
+
+    app_context.services.personnel.create_course(CourseInput("DEMO-C1", "Curso Demo"))
+    assert last_operator() == ""
+    # the label is read when a write happens, not when the services are built
+    app_context.set_operator_label("op-demo")
+    app_context.services.personnel.create_course(CourseInput("DEMO-C2", "Curso Demo 2"))
+    assert last_operator() == "op-demo"
 
 
 def test_data_changed_is_emitted_by_notify(app_context: AppContext) -> None:
@@ -773,7 +824,13 @@ def test_a_context_without_a_database_has_no_services(
         preferences=PreferencesStore(tmp_path, writable=False),
         translator_manager=app_context.translator_manager,
     )
-    assert bare.services.exercises is None
+    services = bare.services
+    assert services.personnel is None
+    assert services.infrastructure is None
+    assert services.exercises is None
+    assert services.budget is None
+    assert services.indicators is None
+    assert services.alerts is None
     assert not bare.is_demo
     assert not bare.read_only
     window = MainWindow(bare)

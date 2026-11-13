@@ -773,6 +773,29 @@ def test_configuration_is_read_on_each_call(
     assert narrow_expiring == set()
 
 
+def test_alert_inputs_are_the_domain_objects_and_the_stored_rules(
+    db: DatabaseConnection, clock: FixedClock, service: PersonnelService
+) -> None:
+    staff_id = service.create_staff(_staff())
+    cert_id = service.add_certificate(staff_id, _cert("A", "2025-01-10", "2026-03-20"))
+    service.set_no_renewal(cert_id, "2026-03-10")
+
+    inputs = service.alert_inputs()
+    assert [(person.id, person.identifier) for person in inputs.staff] == [(staff_id, "DEMO-P001")]
+    [cert] = inputs.certificates
+    assert (cert.id, cert.staff_id, cert.level) == (cert_id, staff_id, PpeLevel.A)
+    assert (cert.valid_until, cert.no_renewal_from) == (date(2026, 3, 20), date(2026, 3, 10))
+    assert inputs.rules == _domain_rules(ReadinessConfig())
+    # the same objects feed the page's own views
+    assert domain.expiring_list(inputs.staff, inputs.certificates, AS_OF, inputs.rules) == (
+        service.expiring_list(AS_OF)
+    )
+
+    config = ReadinessConfig().with_changes(cert_warning_days=10)
+    _save_config(db, clock, config)
+    assert service.alert_inputs().rules == _domain_rules(config)
+
+
 # --------------------------------------------------------------------------- certificates
 
 

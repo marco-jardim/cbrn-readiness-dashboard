@@ -37,7 +37,15 @@ from cbrn_dashboard.domain.dates import (
     parse_iso_date,
 )
 from cbrn_dashboard.domain.indicators import IndicatorValue, decode_dimension
-from cbrn_dashboard.domain.infrastructure import AssetStatus, MaintenanceKind
+from cbrn_dashboard.domain.infrastructure import (
+    Asset,
+    AssetStatus,
+    AssetType,
+    InfrastructureRules,
+    MaintenanceEvent,
+    MaintenanceKind,
+    StatusEvent,
+)
 from cbrn_dashboard.services.errors import (
     CODE_IMMUTABLE,
     INVALID_CODE,
@@ -85,6 +93,7 @@ __all__ = [
     "AssetTypeInput",
     "AssetTypeView",
     "AssetView",
+    "InfrastructureAlertInputs",
     "InfrastructureService",
     "MaintenanceView",
     "StatusEventView",
@@ -270,6 +279,17 @@ class _AssetFields:
     in_service_until: date | None
     maintenance_interval_days: int | None
     notes: str | None
+
+
+@dataclass(frozen=True)
+class InfrastructureAlertInputs:
+    """Domain objects and rules the maintenance alerts are computed from (T6.2)."""
+
+    assets: tuple[Asset, ...]
+    types: tuple[AssetType, ...]
+    status_events: tuple[StatusEvent, ...]
+    maintenance: tuple[MaintenanceEvent, ...]
+    rules: InfrastructureRules
 
 
 @dataclass(frozen=True)
@@ -908,6 +928,20 @@ class InfrastructureService:
         data = self._snapshot()
         return rules.asset_rows(
             data.assets, data.types, data.status_events, data.maintenance, as_of, self._rules()
+        )
+
+    def alert_inputs(self) -> InfrastructureAlertInputs:
+        """The domain inputs of the maintenance alerts (T6.2), with the configured rules.
+
+        Same snapshot, ALL types (as in :meth:`asset_rows`) and rules as the as-of views.
+        """
+        data = self._snapshot()
+        return InfrastructureAlertInputs(
+            assets=tuple(data.assets),
+            types=tuple(data.types),
+            status_events=tuple(data.status_events),
+            maintenance=tuple(data.maintenance),
+            rules=self._rules(),
         )
 
     def maintenance_due_lists(self, as_of: date) -> rules.MaintenanceDueLists:

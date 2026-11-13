@@ -23,7 +23,12 @@ from shiboken6 import isValid
 from cbrn_dashboard.clock import Clock
 from cbrn_dashboard.paths import DataLocation
 from cbrn_dashboard.prefs import PreferencesStore
+from cbrn_dashboard.services.alerts import AlertService
+from cbrn_dashboard.services.budget import BudgetService
 from cbrn_dashboard.services.exercises import ExercisesService
+from cbrn_dashboard.services.indicators import IndicatorService
+from cbrn_dashboard.services.infrastructure import InfrastructureService
+from cbrn_dashboard.services.personnel import PersonnelService
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
@@ -36,22 +41,51 @@ type EditTarget = QAction | QWidget
 
 @dataclass
 class Services:
-    """One attribute per module service; ``None`` while no database is open.
+    """One attribute per service; ``None`` while no database is open.
 
-    T2.4 (personnel), T3.4 (infrastructure), T5.4 (budget) and the later services add ONE line
-    each here and one line in :func:`build_services`.
+    Later tasks (T6.5 dashboard, T7.x backup, T8.x snapshots and reports) add ONE line each here
+    and one line in :func:`build_services`.
     """
 
+    personnel: PersonnelService | None = None
+    infrastructure: InfrastructureService | None = None
     exercises: ExercisesService | None = None
+    budget: BudgetService | None = None
+    indicators: IndicatorService | None = None
+    alerts: AlertService | None = None
 
 
 def build_services(
     conn: DatabaseConnection | None, clock: Clock, operator: Callable[[], str]
 ) -> Services:
-    """The services over ``conn`` (all ``None`` without a connection)."""
+    """The services over ``conn`` (all ``None`` without a connection).
+
+    All of them share the connection, the clock and the operator-label callable.
+    """
     if conn is None:
         return Services()
-    return Services(exercises=ExercisesService(conn, clock, operator))
+    personnel = PersonnelService(conn, clock, operator)
+    infrastructure = InfrastructureService(conn, clock, operator)
+    exercises = ExercisesService(conn, clock, operator)
+    budget = BudgetService(conn, clock, operator)
+    indicators = IndicatorService(
+        conn,
+        clock,
+        operator,
+        personnel=personnel,
+        infrastructure=infrastructure,
+        exercises=exercises,
+        budget=budget,
+    )
+    alerts = AlertService(personnel=personnel, infrastructure=infrastructure, indicators=indicators)
+    return Services(
+        personnel=personnel,
+        infrastructure=infrastructure,
+        exercises=exercises,
+        budget=budget,
+        indicators=indicators,
+        alerts=alerts,
+    )
 
 
 class AppContext(QObject):
