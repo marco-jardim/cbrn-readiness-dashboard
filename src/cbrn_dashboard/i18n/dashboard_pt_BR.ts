@@ -161,7 +161,6 @@
     </message>
     <message>
         <source>Valid qualifications</source>
-        <extracomment>Status -&gt; colour, all from the Okabe-Ito palette of the chart adapter. Status -&gt; (shape, filled). Every status has its own shape: colour is never the only cue.</extracomment>
         <translation type="unfinished">Habilitações válidas</translation>
     </message>
     <message>
@@ -174,7 +173,6 @@
     </message>
     <message>
         <source>person</source>
-        <extracomment>The indicator codes that have a name (for the completeness test).</extracomment>
         <translation type="unfinished">pessoa</translation>
     </message>
     <message>
@@ -191,7 +189,6 @@
     </message>
     <message>
         <source>qualification</source>
-        <extracomment>The unit noun of a tile: (singular, plural). The number itself stays in the value label, so the nouns are plain messages (a Qt numerus message must contain %n); the singular is for 1 in the three languages.</extracomment>
         <translation type="unfinished">habilitação</translation>
     </message>
     <message>
@@ -296,7 +293,6 @@
     </message>
     <message>
         <source>The data is read-only: nothing was saved.</source>
-        <extracomment>The snapshot origins that have a label.</extracomment>
         <translation type="unfinished">Os dados estão em modo somente leitura: nada foi salvo.</translation>
     </message>
     <message>
@@ -317,7 +313,6 @@
     </message>
     <message>
         <source>Show as table</source>
-        <extracomment>Tiles per row inside a module group.</extracomment>
         <translation type="unfinished">Mostrar como tabela</translation>
     </message>
     <message>

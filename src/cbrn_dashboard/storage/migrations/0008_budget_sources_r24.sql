@@ -8,8 +8,22 @@
 -- OPCW_TRUST_FUND is deleted when no budget entry uses it. Otherwise it is kept, with its
 -- entries and their execution rows, as an INACTIVE user-defined source whose former names become
 -- its labels, so no recorded amount is lost. A source COMAER that a user already created is
--- promoted to built-in and active. This migration changes rows only, not tables, and does not
--- touch migration 0005.
+-- promoted to built-in and active, and its own labels are cleared because built-in sources use
+-- the translated default names. Source codes are case-sensitive: only the exact code COMAER is
+-- promoted, a code such as comaer stays a separate user-defined source. This migration changes
+-- rows only, not tables, and does not touch migration 0005.
+--
+-- COMAER is inserted BEFORE the Trust Fund is deleted. The id column has no AUTOINCREMENT, so an
+-- id freed by the delete would be reused, and the new source would inherit the change history
+-- (keyed by entity and entity id) of the removed one.
+
+INSERT INTO funding_source (code, built_in, active) VALUES ('COMAER', 1, 1)
+ON CONFLICT (code) DO UPDATE SET
+    built_in = 1,
+    active = 1,
+    label_pt_br = NULL,
+    label_en_us = NULL,
+    label_es_es = NULL;
 
 DELETE FROM funding_source
 WHERE code = 'OPCW_TRUST_FUND'
@@ -22,6 +36,3 @@ SET built_in = 0,
     label_en_us = 'OPCW Trust Fund',
     label_es_es = 'Fondo Fiduciario de la OPAQ'
 WHERE code = 'OPCW_TRUST_FUND';
-
-INSERT INTO funding_source (code, built_in, active) VALUES ('COMAER', 1, 1)
-ON CONFLICT (code) DO UPDATE SET built_in = 1, active = 1;

@@ -53,7 +53,15 @@ Also already in the source tree, although the plan assigns them to version 1.0: 
 pages, the install guides in three languages, `docs/architecture.md`, `docs/indicators.md`,
 `docs/data-protection.md`, `docs/import-templates.md` and `docs/demo-walkthrough.md`. They were
 implemented in the same run as the MVP and are not separately scoped or reviewed as a release.
-The About dialog and the in-app help are not part of this entry.
+The About dialog and the in-app help are also part of this entry.
+
+Also in this entry:
+
+- The built-in funding sources are DIRSA and COMAER (requirement R24, migration 0008). The OPCW
+  Trust Fund is no longer built in: it is removed when no budget entry uses it, and otherwise kept
+  as an inactive user-defined source so no recorded amount is lost.
+- The PPE qualification wording of the interface and the documents.
+- The anonymised report is for internal use.
 
 ### Placeholders still flagged in `domain/config.py`
 

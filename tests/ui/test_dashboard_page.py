@@ -52,6 +52,7 @@ from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from tests.ui._fakes import FakePrompts
 from tests.ui._walk import assert_fully_translated, find_untranslated
+from tests.ui.test_accessibility import tab_order_mismatch
 
 pytestmark = pytest.mark.ui
 
@@ -613,6 +614,25 @@ def test_changing_the_as_of_date_updates_tiles_charts_and_counts(
     app_context.set_as_of(AS_OF)  # and back again, the USD panel returns
     assert [p.key for p in page.chart_panels()] == list(CHARTS_AS_OF)
     assert _cells(_panel(page, "budget_USD")) == CHARTS_AS_OF["budget_USD"].rows
+
+
+def test_the_tab_chain_follows_the_layout_after_charts_come_and_go(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    _seed(app_context)
+    page = _page(app_context, qtbot)
+    assert tab_order_mismatch(page) == []
+
+    app_context.set_as_of(EARLIER)  # the USD chart disappears
+    assert page.chart_panel("budget_USD") is None
+    assert tab_order_mismatch(page) == []
+
+    app_context.set_as_of(AS_OF)  # and a new USD chart is added again
+    assert page.chart_panel("budget_USD") is not None
+    assert tab_order_mismatch(page) == []
+    for panel in page.chart_panels():
+        assert panel.parent() is not None
+        assert panel.parent() is page.scroll_area.widget()
 
 
 def test_a_data_change_is_shown_and_nothing_is_cached(

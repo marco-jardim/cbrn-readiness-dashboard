@@ -46,11 +46,11 @@ __all__ = [
     "interval_text",
 ]
 
-#: A missing value in a cell (data, not a translatable text).
+# A missing value in a cell (data, not a translatable text).
 NOT_RECORDED = "-"
 
-#: The icon shape and palette colour of an asset status (D23): the look of the dashboard status
-#: it matches, so one vocabulary of shapes and colours is used everywhere.
+# The icon shape and palette colour of an asset status (D23): the look of the dashboard status
+# it matches, so one vocabulary of shapes and colours is used everywhere.
 ASSET_STATUS_LOOK: dict[AssetStatus, IndicatorStatus] = {
     AssetStatus.OPERATIONAL: IndicatorStatus.OK,
     AssetStatus.DEGRADED: IndicatorStatus.WARNING,
@@ -209,6 +209,14 @@ def _history_details(row: HistoryRow, lang: str) -> str:
     )
 
 
+def _history_details_icon(row: HistoryRow) -> QIcon | None:
+    """The status icon of a status event (D23); a maintenance record has no status."""
+    if row.status is None:
+        return None
+    look = ASSET_STATUS_LOOK.get(row.status.status)
+    return None if look is None else QIcon(status_pixmap(look.value))
+
+
 def _history_note(row: HistoryRow) -> str:
     event = row.status if row.status is not None else row.maintenance
     return "" if event is None else (event.note or "")
@@ -232,6 +240,7 @@ class HistoryModel(ModuleTableModel):
             "details",
             lambda: QCoreApplication.translate("Infrastructure", "Details"),
             lambda row, lang: _history_details(row, lang),
+            icon=_history_details_icon,
         ),
         Column[Any](
             "note",

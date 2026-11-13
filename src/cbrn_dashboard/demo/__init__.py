@@ -220,10 +220,13 @@ def creation_day(conn: DatabaseConnection) -> date | None:
 def is_outdated(conn: DatabaseConnection, clock: Clock) -> bool:
     """Whether the demo data was created on a day other than the clock's local date.
 
-    A database that stores no creation day (the day cannot be known) is not outdated.
+    Demo data that stores no creation day (written before the day was stored, or not a date) is
+    outdated as well: its day cannot be known. A database without demo data is never outdated.
     """
+    if app_meta.get(conn, DEMO_SEED_KEY) is None:
+        return False
     created = creation_day(conn)
-    return created is not None and created != clock.local_date()
+    return created is None or created != clock.local_date()
 
 
 def _probe_is_demo(path: Path) -> bool:

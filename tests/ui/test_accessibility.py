@@ -28,6 +28,7 @@ import tomllib
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -61,12 +62,13 @@ from pytestqt.qtbot import QtBot
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain.alerts import Severity
 from cbrn_dashboard.domain.indicators import IndicatorStatus
-from cbrn_dashboard.domain.infrastructure import AssetStatus
+from cbrn_dashboard.domain.infrastructure import AssetStatus, MaintenanceKind
 from cbrn_dashboard.domain.personnel import CertStatus
+from cbrn_dashboard.services.infrastructure import MaintenanceView, StatusEventView
 from cbrn_dashboard.ui.alerts.labels import severity_icon
 from cbrn_dashboard.ui.dashboard.labels import STATUS_COLOURS, status_pixmap
 from cbrn_dashboard.ui.dashboard.page import DashboardPage
-from cbrn_dashboard.ui.infrastructure.models import ASSET_STATUS_LOOK
+from cbrn_dashboard.ui.infrastructure.models import ASSET_STATUS_LOOK, HistoryModel, HistoryRow
 from cbrn_dashboard.ui.personnel.models import CERT_STATUS_LOOK
 from cbrn_dashboard.ui.shell import registry
 from cbrn_dashboard.ui.shell.banners import BannerArea, BannerCode
@@ -357,11 +359,16 @@ STATUS_COLUMNS = frozenset(
     {
         ("AlertsModel", "severity"),
         ("AssetsModel", "status"),
+        ("HistoryModel", "details"),
         ("StaffModel", "level_a"),
         ("StaffModel", "level_b"),
         ("StaffModel", "level_c"),
     }
 )
+
+#: Status columns that hold a status in only some rows (the asset history: a status event shows
+#: its status, a maintenance record shows its kind). The icon belongs to the status rows only.
+MIXED_STATUS_COLUMNS = frozenset({("HistoryModel", "details")})
 
 #: Columns named "status" that are NOT a readiness status: a switch (active / inactive, enabled /
 #: disabled) or the progress of a degree. Their text says everything; an icon would suggest a
@@ -547,13 +554,41 @@ def test_status_columns_have_text_and_an_icon_and_nothing_else_does(walk: Walk) 
                     index = model.index(row, column_index)
                     text = str(index.data(Qt.ItemDataRole.DisplayRole))
                     icon = index.data(Qt.ItemDataRole.DecorationRole)
-                    if has_icon_column:
+                    if pair in MIXED_STATUS_COLUMNS:
+                        # status rows show text plus icon, the other rows text only
+                        shown = isinstance(icon, QIcon) and not icon.isNull()
+                        status_row = model.rows()[row].status is not None
+                        assert shown == status_row, (pair, row, text)
+                        assert has_letters(text) or not status_row, (pair, row, text)
+                    elif has_icon_column:
                         # text plus icon, or neither (a person with no status shows a dash)
                         shown = isinstance(icon, QIcon) and not icon.isNull()
                         assert shown == has_letters(text), (pair, row, text)
                     else:
                         assert icon is None, (pair, row)
     assert found == STATUS_COLUMNS  # the walk reached every status table
+
+
+def test_the_asset_history_shows_an_icon_with_each_status_event(qapp: QApplication) -> None:
+    day = date(2026, 3, 1)
+    rows = [
+        HistoryRow(day, status=StatusEventView(1, 1, day, status, None)) for status in AssetStatus
+    ]
+    service = MaintenanceView(1, 1, day, MaintenanceKind.PREVENTIVE, None, None)
+    rows.append(HistoryRow(day, maintenance=service))
+    model = HistoryModel()
+    model.set_rows(rows)
+    column = [c.key for c in model.COLUMNS].index("details")
+    icons = []
+    for row in range(model.rowCount()):
+        index = model.index(row, column)
+        assert has_letters(str(index.data(Qt.ItemDataRole.DisplayRole))), row
+        icons.append(index.data(Qt.ItemDataRole.DecorationRole))
+    status_icons = icons[:-1]
+    assert all(isinstance(icon, QIcon) and not icon.isNull() for icon in status_icons)
+    images = [icon.pixmap(16, 16).toImage() for icon in status_icons]
+    assert all(a != b for index, a in enumerate(images) for b in images[index + 1 :])
+    assert icons[-1] is None  # a maintenance record has no status
 
 
 def test_the_demo_status_tables_have_rows_to_check(walk: Walk) -> None:
@@ -733,8 +768,9 @@ def test_no_font_is_fixed_in_pixels_so_the_os_font_scale_is_respected(walk: Walk
     assert problems == {}
 
 
+@pytest.mark.parametrize("lang", ["en-US", "pt-BR"])
 def test_every_page_and_dialog_opens_at_scale_factor_2_without_a_qt_warning(
-    qm_dir: Path, tmp_path: Path
+    qm_dir: Path, tmp_path: Path, lang: str
 ) -> None:
     """A child process with ``QT_SCALE_FACTOR=2`` opens the window, every page and every dialog.
 
@@ -751,7 +787,7 @@ def test_every_page_and_dialog_opens_at_scale_factor_2_without_a_qt_warning(
     data_dir.mkdir()
     environment = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_SCALE_FACTOR": "2"}
     done = subprocess.run(
-        [sys.executable, "-m", "tests.ui._scale_probe", str(data_dir), str(qm_dir)],
+        [sys.executable, "-m", "tests.ui._scale_probe", str(data_dir), str(qm_dir), lang],
         cwd=REPO_ROOT,
         env=environment,
         capture_output=True,
@@ -763,9 +799,7 @@ def test_every_page_and_dialog_opens_at_scale_factor_2_without_a_qt_warning(
     report = json.loads(done.stdout.strip().splitlines()[-1])
     assert report["pages"] == len(registry.pages())
     assert report["dialogs"] == len(registry.dialogs())
-    # The ratio the screen reports is recorded in the report; it is NOT asserted to be 2.0, because
-    # whether the offscreen platform applies QT_SCALE_FACTOR to its screen is not established.
-    assert report["ratio"] > 0
+    assert report["ratio"] == 2.0  # the offscreen screen applies QT_SCALE_FACTOR
     unexpected = [
         message
         for message in report["messages"]

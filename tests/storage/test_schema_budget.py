@@ -424,6 +424,7 @@ def test_before_0008_the_trust_fund_is_a_built_in_source(at_seven: DatabaseConne
 
 def test_0008_deletes_an_unused_trust_fund_and_adds_comaer(at_seven: DatabaseConnection) -> None:
     dirsa_entry = _add_entry(at_seven, source_id=_source_id(at_seven, "DIRSA"))
+    removed_id = _source_id(at_seven, "OPCW_TRUST_FUND")
     _migrate_to_latest(at_seven)
 
     assert _sources(at_seven) == [
@@ -433,6 +434,8 @@ def test_0008_deletes_an_unused_trust_fund_and_adds_comaer(at_seven: DatabaseCon
     assert _count(at_seven, "budget_entry") == 1
     assert at_seven.execute("SELECT id FROM budget_entry").fetchone()[0] == dirsa_entry
     assert at_seven.execute("PRAGMA foreign_key_check").fetchall() == []
+    # A fresh id: reusing the removed id would inherit its change_log history (P10-01).
+    assert _source_id(at_seven, "COMAER") != removed_id
 
 
 def test_0008_keeps_a_used_trust_fund_as_an_inactive_user_source(
@@ -477,7 +480,7 @@ def test_0008_promotes_an_existing_user_source_comaer(at_seven: DatabaseConnecti
     _migrate_to_latest(at_seven)
 
     assert _sources(at_seven) == [
-        ("COMAER", 1, 1, "Meu COMAER", None, None),
+        ("COMAER", 1, 1, None, None, None),
         ("DIRSA", 1, 1, None, None, None),
     ]
     assert _source_id(at_seven, "COMAER") == comaer

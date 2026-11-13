@@ -75,6 +75,7 @@ from cbrn_dashboard.ui.shell.widgets import (
     EditAction,
     action_row,
     apply_change,
+    apply_tab_order,
     current_language,
     make_edit_action,
     make_table_view,
@@ -88,7 +89,7 @@ __all__ = [
     "page_title",
 ]
 
-#: Tiles per row inside a module group.
+# Tiles per row inside a module group.
 _TILE_COLUMNS = 3
 
 
@@ -313,6 +314,7 @@ class DashboardPage(QWidget):
         self.charts_layout = QVBoxLayout()
 
         content = QWidget()
+        self._content = content
         content_layout = QVBoxLayout(content)
         content_layout.addWidget(self.alerts_box)
         content_layout.addWidget(self.tiles_caption)
@@ -438,6 +440,8 @@ class DashboardPage(QWidget):
                 self.alert_icons[severity].setAccessibleName(text)
             self._show_charts(data.charts, names)
         self._update_actions()
+        # Tiles and charts come and go: the Tab chain follows the layout again.
+        apply_tab_order(self)
 
     def _show_tiles(self, tiles: tuple[Tile, ...], names: DisplayNames) -> None:
         _clear(self.tiles_layout)
@@ -449,7 +453,7 @@ class DashboardPage(QWidget):
             group = by_module.get(module)
             if not group:
                 continue
-            box = QGroupBox(module_title(module.value))
+            box = QGroupBox(module_title(module.value), self._content)
             box.setObjectName(f"module_{module.value.lower()}")
             grid = QGridLayout(box)
             for index, tile in enumerate(group):
@@ -470,7 +474,9 @@ class DashboardPage(QWidget):
         for spec in specs:
             panel = self._panels.get(spec.key)
             if panel is None:
-                panel = ChartPanel(spec.key)
+                # Created inside the scroll content, not reparented later: a widget without a
+                # parent first gets its place in the Tab chain apart from the page.
+                panel = ChartPanel(spec.key, self._content)
                 self._panels[spec.key] = panel
             panel.set_content(spec, names)
             self.charts_layout.addWidget(panel)

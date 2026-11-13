@@ -13,7 +13,7 @@
     </message>
     <message>
         <source>The PPE level is not valid.</source>
-        <translation type="unfinished">El nivel de EPI no es válido.</translation>
+        <translation type="unfinished">El nivel de EPP no es válido.</translation>
     </message>
     <message>
         <source>The text is not valid.</source>

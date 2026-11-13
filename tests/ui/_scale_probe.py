@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Child process of the ``QT_SCALE_FACTOR=2`` test (PLAN.md T10.4, ``test_accessibility.py``).
 
-Run as ``python -m tests.ui._scale_probe <data folder> <compiled catalogue folder>`` with
-``QT_QPA_PLATFORM=offscreen`` and ``QT_SCALE_FACTOR=2`` in the environment. The Qt scale factor is
-read when the application object is created, so the test cannot change it in its own process.
+Run as ``python -m tests.ui._scale_probe <data folder> <compiled catalogue folder> [language]``
+(language: ``en-US`` when omitted) with ``QT_QPA_PLATFORM=offscreen`` and ``QT_SCALE_FACTOR=2``
+in the environment. The Qt scale factor is read when the application object is created, so the
+test cannot change it in its own process.
 
 The probe collects every Qt warning, critical and fatal message through ``qInstallMessageHandler``
 (installed before the application object exists), starts the real window on the demo database,
@@ -39,8 +40,9 @@ def _collect(kind: QtMsgType, _context: QMessageLogContext, message: str) -> Non
 def main(argv: list[str]) -> int:
     data_dir = Path(argv[1])
     qm_dir = Path(argv[2])
+    lang = argv[3] if len(argv) > 3 else "en-US"
     qInstallMessageHandler(_collect)
-    options = CliOptions(data_dir=str(data_dir), lang="en-US", demo=True)
+    options = CliOptions(data_dir=str(data_dir), lang=lang, demo=True)
     location = DataLocation(path=data_dir, source=LocationSource.CLI, writable=True)
     result = start(
         options,

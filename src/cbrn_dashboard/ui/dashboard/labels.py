@@ -137,7 +137,7 @@ _INDICATOR_NAMES: dict[str, Callable[[], str]] = {
     "BUD_EXEC_RATE": lambda: QCoreApplication.translate("Dashboard", "Budget execution rate"),
 }
 
-#: The indicator codes that have a name (for the completeness test).
+# The indicator codes that have a name (for the completeness test).
 INDICATOR_CODES: tuple[str, ...] = tuple(_INDICATOR_NAMES)
 
 _PERSON = (
@@ -149,9 +149,9 @@ _UNIT = (
     lambda: QCoreApplication.translate("Dashboard", "units"),
 )
 
-#: The unit noun of a tile: (singular, plural). The number itself stays in the value label, so the
-#: nouns are plain messages (a Qt numerus message must contain %n); the singular is for 1 in the
-#: three languages.
+# The unit noun of a tile: (singular, plural). The number itself stays in the value label, so the
+# nouns are plain messages (a Qt numerus message must contain %n); the singular is for 1 in the
+# three languages.
 _INDICATOR_UNITS: dict[str, tuple[Callable[[], str], Callable[[], str]]] = {
     "PERS_CERT_VALID": _PERSON,
     "PERS_CERT_EXPIRING": (
@@ -355,7 +355,7 @@ def alert_text(severity: str, count: int, lang: str) -> str:
 
 # --------------------------------------------------------------------------- status icons (D23)
 
-#: Status -> colour, all from the Okabe-Ito palette of the chart adapter.
+# Status -> colour, all from the Okabe-Ito palette of the chart adapter.
 STATUS_COLOURS: dict[str, str] = {
     IndicatorStatus.OK.value: PALETTE[2],
     IndicatorStatus.WARNING.value: PALETTE[0],
@@ -364,7 +364,7 @@ STATUS_COLOURS: dict[str, str] = {
     IndicatorStatus.NO_DATA.value: PALETTE[7],
 }
 
-#: Status -> (shape, filled). Every status has its own shape: colour is never the only cue.
+# Status -> (shape, filled). Every status has its own shape: colour is never the only cue.
 _STATUS_SHAPES: dict[str, tuple[str, bool]] = {
     IndicatorStatus.OK.value: ("circle", True),
     IndicatorStatus.WARNING.value: ("triangle", True),
@@ -511,7 +511,7 @@ _ORIGIN_LABELS: dict[str, Callable[[], str]] = {
     "retroactive": lambda: QCoreApplication.translate("Dashboard", "retroactive"),
 }
 
-#: The snapshot origins that have a label.
+# The snapshot origins that have a label.
 ORIGINS: tuple[str, ...] = tuple(_ORIGIN_LABELS)
 
 _ERROR_LABELS: dict[str, Callable[[], str]] = {
@@ -531,7 +531,7 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     ),
 }
 
-#: Every error code the "Record snapshot" action can present (for the completeness test).
+# Every error code the "Record snapshot" action can present (for the completeness test).
 ALL_ERROR_CODES: tuple[str, ...] = tuple(_ERROR_LABELS)
 
 

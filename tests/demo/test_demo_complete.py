@@ -591,13 +591,15 @@ def test_the_creation_day_is_stored_next_to_the_demo_flag(demo: Demo) -> None:
     assert is_outdated(demo.conn, FixedClock.at("2030-06-15T12:00:00Z")) is True
 
 
-def test_a_demo_database_without_a_creation_day_is_not_outdated(demo: Demo, tmp_path: Path) -> None:
+def test_demo_data_without_a_creation_day_is_outdated(demo: Demo, tmp_path: Path) -> None:
+    # Demo data written before the creation day was stored: its day cannot be known (QA P10-09).
     other = open_demo_database(tmp_path, demo.clock)
     try:
         with transaction(other):
             other.execute("DELETE FROM app_meta WHERE key = ?", (DEMO_CREATED_ON_KEY,))
         assert creation_day(other) is None
-        assert is_outdated(other, FixedClock.at("2030-06-15T12:00:00Z")) is False
+        assert is_outdated(other, demo.clock) is True
+        assert is_outdated(other, FixedClock.at("2030-06-15T12:00:00Z")) is True
     finally:
         other.close()
 

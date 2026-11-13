@@ -236,7 +236,6 @@
     </message>
     <message>
         <source>Not set</source>
-        <extracomment>A missing value in a cell (data, not a translatable text). The icon shape and palette colour of an asset status (D23): the look of the dashboard status it matches, so one vocabulary of shapes and colours is used everywhere.</extracomment>
         <translation type="unfinished">Não definido</translation>
     </message>
     <message numerus="yes">
