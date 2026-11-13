@@ -246,9 +246,6 @@ media are not touched by either.
 - A read-only database on a UNC path (`\\server\share\...`) was never tried on a real network
   share. The way the program builds the read-only address for such a path is covered by a test with
   a made-up path only.
-- The PySide6 wheels used for the bundle carry no SBOM and no third-party attribution files, so the
-  bundle has only a pointer to Qt's list of licences (`licenses\QT-THIRD-PARTY.md`), not the
-  attribution texts.
 - Qt writes the creation date of a PDF report from the system clock; it cannot be set through the
   PDF writer, so two renderings of one report differ in that field.
 - The pt-BR and es-ES translations are drafts and still marked `unfinished`; the committee has not

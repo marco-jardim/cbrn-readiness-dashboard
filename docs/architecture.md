@@ -443,7 +443,14 @@ fictitious.
 
 - `scripts/build_exe.py` builds the one-folder bundle with PyInstaller (`--onedir --windowed
   --noupx`), removes unwanted Qt libraries and writes the third-party licence folder with
-  `scripts/collect_licenses.py`.
+  `scripts/collect_licenses.py`. That folder also carries the third-party notices of Qt in full
+  (`QT-THIRD-PARTY-NOTICES.txt`). A maintainer generates them with
+  `scripts/fetch_qt_attributions.py` from the `qt_attribution.json` files of the Qt source
+  repositories (`qtbase`, `qtsvg`, `qtcharts`, `qtimageformats`, `qtvirtualkeyboard`) at the tag of
+  the bundled Qt version, and commits them under `packaging/licenses/qt-attributions/` together
+  with a list of every URL read and its SHA-256. The collector copies the file and fails when its
+  `Qt version:` header is not the bundled one, so a PySide6 upgrade needs a refresh. The build and
+  the application never use the network for this.
 - `scripts/make_release_zip.py` writes the reproducible zip, `SHA256SUMS.txt` and
   `SHA256-FILES.txt` and fills the release-notes template.
 - The release workflow runs on a version tag in two jobs. The read-only `build` job runs the tests
@@ -461,8 +468,6 @@ fictitious.
 - A read-only database on a UNC path was never tried on a real network share. The read-only
   address is built with an empty authority, and only that construction is tested, with a made-up
   path.
-- The PySide6 wheels carry no SBOM or third-party attribution files, so the bundle holds a pointer
-  to Qt's licence list (`packaging/licenses/QT-THIRD-PARTY.md`) and not the attribution texts.
 - Qt writes the creation date of a PDF from the system clock (section 5).
 - The pt-BR and es-ES translations are drafts (`unfinished`, section 11).
 - The executable is unsigned; the effects are described in the install guides.

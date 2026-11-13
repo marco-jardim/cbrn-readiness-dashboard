@@ -64,7 +64,6 @@ GUIDE_NEEDLES = (
     "portable.ini",
     "CBRN_DASHBOARD_DATA_DIR",
     "unfinished",
-    "SBOM",
     "UNC",
 )
 
@@ -487,6 +486,6 @@ def test_architecture_names_the_layer_rules() -> None:
 # --- the known limits are stated -----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("needle", ["UNC", "SBOM", "system clock", "unfinished"])
+@pytest.mark.parametrize("needle", ["UNC", "system clock", "unfinished"])
 def test_architecture_states_the_known_limits(needle: str) -> None:
     assert needle in _read(ARCHITECTURE)

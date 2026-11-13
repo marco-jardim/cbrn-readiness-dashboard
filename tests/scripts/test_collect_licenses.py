@@ -156,6 +156,62 @@ def test_qt_charts_is_a_separate_entry_with_the_qt_version(
     assert charts.files == ("GPL-3.0.txt", "SOURCE-OFFER.md")
 
 
+def test_qt_entry_lists_the_vendored_notices_of_the_bundled_qt_version(
+    release: ModuleType, collected: Collected
+) -> None:
+    out, entries = collected
+    qt = _entries_by_component(entries)["Qt (core modules and Qt for Python bindings)"]
+    assert "QT-THIRD-PARTY-NOTICES.txt" in qt.files
+    assert "QT-THIRD-PARTY.md" in qt.files
+    _pyside_version, qt_version = release.read_qt_versions()
+    text = (out / "QT-THIRD-PARTY-NOTICES.txt").read_text(encoding="utf-8")
+    assert f"\nQt version: {qt_version}\n" in text
+    assert (out / "QT-THIRD-PARTY-NOTICES.txt").read_bytes() == (
+        SOURCES / "qt-attributions" / "QT-THIRD-PARTY-NOTICES.txt"
+    ).read_bytes().replace(b"\r\n", b"\n")
+    pointer = (out / "QT-THIRD-PARTY.md").read_text(encoding="utf-8")
+    assert "QT-THIRD-PARTY-NOTICES.txt" in pointer
+    assert "https://doc.qt.io/qt-6/licenses-used-in-qt.html" in pointer
+    assert "Known limitation" not in pointer
+
+
+def test_the_vendored_qt_notices_must_exist(script: ModuleType, tmp_path: Path) -> None:
+    with pytest.raises(script.LicenseError, match="Missing vendored Qt notices"):
+        script._copy_qt_notices(tmp_path / "absent.txt", tmp_path / "out", "6.12.0")
+    assert not (tmp_path / "out").exists()
+
+
+def test_the_vendored_qt_notices_must_state_the_bundled_qt_version(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    source = tmp_path / "QT-THIRD-PARTY-NOTICES.txt"
+    source.write_text("Qt third-party notices\n\nQt version: 6.11.2\n", encoding="utf-8")
+    with pytest.raises(script.LicenseError, match=r"for Qt 6\.11\.2.*bundled Qt is 6\.12\.0"):
+        script._copy_qt_notices(source, tmp_path / "out", "6.12.0")
+    source.write_text("no version line here\n", encoding="utf-8")
+    with pytest.raises(script.LicenseError, match="unknown version"):
+        script._copy_qt_notices(source, tmp_path / "out", "6.12.0")
+    source.write_bytes(b"Qt third-party notices\r\n\r\nQt version: 6.12.0\r\n")
+    assert script._copy_qt_notices(source, tmp_path / "out", "6.12.0") == (
+        "QT-THIRD-PARTY-NOTICES.txt"
+    )
+    copied = (tmp_path / "out" / "QT-THIRD-PARTY-NOTICES.txt").read_bytes()
+    assert copied == b"Qt third-party notices\n\nQt version: 6.12.0\n"
+
+
+def test_collect_fails_when_the_bundled_qt_is_not_the_one_of_the_notices(
+    script: ModuleType, tmp_path: Path
+) -> None:
+    with pytest.raises(script.LicenseError, match=r"bundled Qt is 9\.9\.9"):
+        script.collect(
+            tmp_path / "out",
+            repo_root=ROOT,
+            distributions=[],
+            qt_versions=("9.9.9", "9.9.9"),
+            allow_missing_pyinstaller=True,
+        )
+
+
 def test_pyinstaller_entry_carries_the_bootloader_exception(
     script: ModuleType, collected: Collected
 ) -> None:
@@ -181,6 +237,7 @@ def test_pyinstaller_entry_carries_the_bootloader_exception(
         "Unicode-3.0.txt",
         "README.md",
         "QT-THIRD-PARTY.md",
+        "QT-THIRD-PARTY-NOTICES.txt",
         "OPENSSL.md",
         "MSVC-RUNTIME.md",
         "SOURCE-OFFER.md",
@@ -332,7 +389,14 @@ def test_index_json_is_sorted_and_matches_index_md(collected: Collected) -> None
 
 def test_generated_files_use_unix_line_ends(collected: Collected) -> None:
     out, _entries = collected
-    for name in ("index.json", "INDEX.md", "SOURCE-OFFER.md", "README.md", "OPENSSL.md"):
+    for name in (
+        "index.json",
+        "INDEX.md",
+        "SOURCE-OFFER.md",
+        "README.md",
+        "OPENSSL.md",
+        "QT-THIRD-PARTY-NOTICES.txt",
+    ):
         assert b"\r" not in (out / name).read_bytes(), name
 
 

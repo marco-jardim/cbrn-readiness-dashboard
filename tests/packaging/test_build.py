@@ -323,12 +323,22 @@ def test_bundle_has_licenses_folder_with_index(bundle_dir: Path) -> None:
     folder = bundle_dir / "licenses"
     assert folder.is_dir(), "no licenses folder at the bundle root"
     assert not (_internal(bundle_dir) / "licenses").exists()
-    for name in ("index.json", "INDEX.md", "GPL-3.0.txt", "LGPL-3.0.txt", "SOURCE-OFFER.md"):
+    for name in (
+        "index.json",
+        "INDEX.md",
+        "GPL-3.0.txt",
+        "LGPL-3.0.txt",
+        "SOURCE-OFFER.md",
+        "QT-THIRD-PARTY.md",
+        "QT-THIRD-PARTY-NOTICES.txt",
+    ):
         path = folder / name
         assert path.is_file(), f"missing {path}"
         assert path.stat().st_size > 0, f"empty {path}"
     index = json.loads((folder / "index.json").read_text(encoding="utf-8"))
     components = {item["component"].lower(): item for item in index}
+    qt_files = components["qt (core modules and qt for python bindings)"]["files"]
+    assert "QT-THIRD-PARTY-NOTICES.txt" in qt_files
     assert components["qt charts"]["chosen"] == "GPL-3.0-only"
     assert components["pyside6"]["chosen"] == "LGPL-3.0-only"
     missing = [
@@ -338,6 +348,17 @@ def test_bundle_has_licenses_folder_with_index(bundle_dir: Path) -> None:
         if not (folder / relative).is_file()
     ]
     assert not missing, f"index entries without a file: {missing}"
+
+
+def test_bundle_qt_notices_are_those_of_the_bundled_qt_version(bundle_dir: Path) -> None:
+    """Q22: the third-party notices of Qt travel with the Qt DLLs, for the same Qt version."""
+    from PySide6 import QtCore
+
+    text = (bundle_dir / "licenses" / "QT-THIRD-PARTY-NOTICES.txt").read_text(encoding="utf-8")
+    assert f"\nQt version: {QtCore.qVersion()}\n" in text
+    assert "Components: " in text
+    pointer = (bundle_dir / "licenses" / "QT-THIRD-PARTY.md").read_text(encoding="utf-8")
+    assert "QT-THIRD-PARTY-NOTICES.txt" in pointer
 
 
 def _collect_licenses_script() -> ModuleType:

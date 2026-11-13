@@ -260,9 +260,6 @@ Las copias cifradas guardadas en otros medios no se ven afectadas en ninguno de 
 - Una base de datos de solo lectura en una ruta UNC (`\\servidor\recurso\...`) nunca se probó en un
   recurso compartido de red real. La forma en que el programa construye la dirección de solo
   lectura para esa ruta solo está cubierta por una prueba con una ruta inventada.
-- Las ruedas (wheels) de PySide6 usadas para el paquete no incluyen SBOM ni archivos de atribución
-  de terceros; por eso el paquete solo lleva un puntero a la lista de licencias de Qt
-  (`licenses\QT-THIRD-PARTY.md`), no los textos de atribución.
 - Qt escribe la fecha de creación de un informe PDF a partir del reloj del sistema; no se puede
   fijar mediante el escritor de PDF, de modo que dos generaciones del mismo informe difieren en ese
   campo.

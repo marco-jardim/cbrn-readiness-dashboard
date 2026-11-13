@@ -252,9 +252,6 @@ em outras mídias não são tocadas por nenhuma das duas formas.
 - Um banco somente leitura em um caminho UNC (`\\servidor\compartilhamento\...`) nunca foi testado
   em um compartilhamento de rede real. A forma como o programa monta o endereço somente leitura
   para esse caminho é coberta apenas por um teste com um caminho inventado.
-- As rodas (wheels) do PySide6 usadas no pacote não trazem SBOM nem arquivos de atribuição de
-  terceiros; assim, o pacote contém apenas um ponteiro para a lista de licenças do Qt
-  (`licenses\QT-THIRD-PARTY.md`), e não os textos de atribuição.
 - O Qt grava a data de criação de um relatório PDF a partir do relógio do sistema; ela não pode ser
   definida pelo gerador de PDF, de modo que duas gerações do mesmo relatório diferem nesse campo.
 - As traduções para pt-BR e es-ES são rascunhos e continuam marcadas como `unfinished`; a comissão

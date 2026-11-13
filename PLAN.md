@@ -2397,6 +2397,7 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Until answered: the notice is shipped with that wording, unconfirmed.
 
 **Q22 — Qt third-party attributions.** The PySide6 wheels the bundle is built from ship no SBOM and no attribution files, so `QT-THIRD-PARTY.md` carries a pointer to Qt's "Licenses Used in Qt" page and to the Qt source release instead of the attribution texts that T9.2 asks for. Is the pointer acceptable, or must the attribution texts be taken from the Qt source release? (Phase 9 QA)
+- Status: answered and implemented in task T9.2
 - Answered by: the project owner.
 - Confirms: T9.2 and §8 (Qt's third-party attributions).
 - Until answered: the pointer is shipped, recorded as a known limitation.

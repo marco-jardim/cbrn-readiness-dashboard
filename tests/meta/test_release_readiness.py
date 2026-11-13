@@ -339,7 +339,6 @@ def test_the_unfinished_count_stated_equals_the_count_found() -> None:
         "unsigned",
         "has never run",
         "to be confirmed",
-        "pointer only",
         "visual c++ runtime",
         "unc",
         "branch protection",

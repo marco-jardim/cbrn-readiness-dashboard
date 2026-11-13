@@ -21,7 +21,9 @@ notices of the software the bundle contains, and the offer of the corresponding 
   CPython's own licence (which includes the PSF-2.0 text) and the notices of the libraries
   built into it (OpenSSL, SQLite, bzip2, liblzma, libffi, expat, mpdecimal, zlib).
 - `pyinstaller/COPYING.txt` is PyInstaller's licence notice, including its bootloader exception.
-- `QT-THIRD-PARTY.md` points to the third-party notices of Qt.
+- `QT-THIRD-PARTY-NOTICES.txt` holds the notices and licence texts of the third-party code
+  inside Qt, for the bundled Qt version. `QT-THIRD-PARTY.md` explains it and also points to Qt's
+  own list of licences.
 - `OPENSSL.md` describes where OpenSSL is included.
 - `MSVC-RUNTIME.md` describes the Microsoft Visual C++ runtime files in the bundle.
 - `SOURCE-OFFER.md` names the source release of the bundled Qt and PySide6 version and

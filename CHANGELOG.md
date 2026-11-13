@@ -46,6 +46,9 @@ The work of phases 8 to 10 of the plan, on top of the first preliminary version:
 - The reference documents: install guides in three languages, `docs/architecture.md`,
   `docs/indicators.md`, `docs/data-protection.md`, `docs/import-templates.md` and the manual test
   script for the committee (`docs/manual-test-script.pt-BR.md`).
+- Qt third-party notices now shipped in full: `licenses\QT-THIRD-PARTY-NOTICES.txt` holds the
+  notice and licence text of every component documented in the Qt source release of the bundled
+  version, and the build fails when that file is not for the bundled Qt version.
 
 ### Placeholders still flagged in `domain/config.py`
 
@@ -120,7 +123,7 @@ records no answer to any of them.
 - Q19: open
 - Q20: open
 - Q21: open
-- Q22: open
+- Q22: answered and implemented in task T9.2
 - Q23: open
 - Q24: open
 
@@ -145,8 +148,6 @@ message, one `type="unfinished"` translation); a test compares it with the files
   draft release have not been produced by it.
 - The provenance attestation may need a public repository, or a GitHub plan that supports it for
   private repositories. This is to be confirmed.
-- Qt's third-party attributions are a pointer only (`licenses\QT-THIRD-PARTY.md`): the PySide6
-  wheels carry no SBOM or attribution files.
 - The wording about the redistribution of the Microsoft Visual C++ runtime in the bundled licence
   notice (`licenses\MSVC-RUNTIME.md`, which points to Microsoft's published terms) has not been
   confirmed.

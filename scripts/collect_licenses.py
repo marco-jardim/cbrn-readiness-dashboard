@@ -8,7 +8,9 @@
 What is written (see :func:`collect`): the licence texts of every runtime distribution found
 through ``importlib.metadata``; the project's own GPL-3.0 text; the LGPL-3.0, Apache-2.0 and
 Unicode-3.0 texts; the notices of the CPython distribution; PyInstaller's bootloader-exception
-notice; the static notices of ``packaging/licenses/``; ``SOURCE-OFFER.md``; and the index
+notice; the static notices of ``packaging/licenses/``; the vendored third-party notices of Qt
+(``QT-THIRD-PARTY-NOTICES.txt``, written by ``scripts/fetch_qt_attributions.py``, checked against
+the bundled Qt version); ``SOURCE-OFFER.md``; and the index
 (``index.json`` for programs, ``INDEX.md`` for people). The output is deterministic: sorted,
 ``\\n`` line ends for generated files, no timestamps.
 
@@ -118,6 +120,12 @@ STATIC_NOTICES: tuple[str, ...] = (
     "OPENSSL.md",
     "README.md",
 )
+#: The vendored third-party notices of Qt (written by ``scripts/fetch_qt_attributions.py``), kept
+#: in ``packaging/licenses/qt-attributions/`` and copied to the bundle's licence folder.
+QT_NOTICES_NAME = "QT-THIRD-PARTY-NOTICES.txt"
+QT_NOTICES_SOURCE = Path("qt-attributions") / QT_NOTICES_NAME
+_QT_NOTICES_VERSION = re.compile(r"^Qt version: (\S+)[ \t]*$", re.MULTILINE)
+_QT_NOTICES_HEADER_CHARS = 4000
 SOURCE_OFFER_TEMPLATE = "SOURCE-OFFER.template.md"
 SOURCE_OFFER_NAME = "SOURCE-OFFER.md"
 INDEX_JSON_NAME = "index.json"
@@ -738,6 +746,33 @@ def _copy_text_notice(source: Path, out_dir: Path, relative: str) -> str:
     return relative
 
 
+def qt_notices_version(text: str) -> str | None:
+    """Return the ``Qt version:`` stated in the header of the vendored Qt notices, or ``None``."""
+    match = _QT_NOTICES_VERSION.search(text[:_QT_NOTICES_HEADER_CHARS])
+    return match.group(1) if match is not None else None
+
+
+def _copy_qt_notices(source: Path, out_dir: Path, qt_version: str) -> str:
+    """Copy the vendored Qt notices after checking that they are those of ``qt_version``.
+
+    Raise :class:`LicenseError` when the file is missing, states no Qt version, or states another
+    one than the bundled Qt (a PySide6 upgrade needs ``scripts/fetch_qt_attributions.py`` again).
+    """
+    if not source.is_file():
+        raise LicenseError(
+            f"Missing vendored Qt notices: {source}; "
+            f"run 'uv run python scripts/fetch_qt_attributions.py --qt-version {qt_version}'"
+        )
+    stated = qt_notices_version(source.read_text(encoding="utf-8"))
+    if stated != qt_version:
+        raise LicenseError(
+            f"{source} is for Qt {stated or 'an unknown version'}, but the bundled Qt is "
+            f"{qt_version}; run 'uv run python scripts/fetch_qt_attributions.py "
+            f"--qt-version {qt_version}' and commit the result"
+        )
+    return _copy_text_notice(source, out_dir, QT_NOTICES_NAME)
+
+
 def _collect_distribution(dist: Distribution, out_dir: Path, repo_root: Path) -> LicenseEntry:
     name = _dist_name(dist)
     declared, chosen = resolve_license(dist)
@@ -932,7 +967,8 @@ def collect(
     ``distributions`` defaults to :func:`runtime_distributions`. ``qt_versions`` is
     ``(PySide6 version, Qt version)``, read from the installed PySide6 when ``None``. Raise
     :class:`LicenseError` when a distribution has no allowed licence, an input file is missing,
-    or PyInstaller is not installed (unless ``allow_missing_pyinstaller``).
+    the vendored Qt notices are missing or state another Qt version than ``qt_versions``, or
+    PyInstaller is not installed (unless ``allow_missing_pyinstaller``).
 
     ``bundle_dir`` is the built (and pruned) bundle. When given, a distribution that has no file
     in it (:func:`distribution_is_bundled`) gets no row and no licence folder, and the Visual C++
@@ -1001,6 +1037,9 @@ def collect(
         render_msvc_notice(msvc_template, msvc_runtime_files(bundle_dir)),
     )
 
+    # (6b) the vendored third-party notices of Qt, for the exact bundled Qt version
+    qt_notices = _copy_qt_notices(sources_dir / QT_NOTICES_SOURCE, out_dir, qt_version)
+
     # (7) the source offer
     project_version = _project_version(repo_root)
     template = _require_file(sources_dir / SOURCE_OFFER_TEMPLATE).read_text(encoding="utf-8")
@@ -1025,9 +1064,10 @@ def collect(
                 qt_version,
                 QT_DECLARED,
                 "LGPL-3.0-only",
-                (lgpl, static["QT-THIRD-PARTY.md"], SOURCE_OFFER_NAME),
+                (lgpl, static["QT-THIRD-PARTY.md"], qt_notices, SOURCE_OFFER_NAME),
                 "Qt core modules and the Qt for Python bindings are used under the LGPL. "
-                "The Qt DLLs in _internal\\PySide6\\ are separate files.",
+                "The Qt DLLs in _internal\\PySide6\\ are separate files. "
+                f"{QT_NOTICES_NAME} holds the notices of the third-party code inside Qt.",
             ),
             LicenseEntry(
                 COMPONENT_QT_CHARTS,
