@@ -158,6 +158,10 @@
         <translation>A maintenance record of this kind already exists on this date.</translation>
     </message>
     <message>
+        <source>This is the only status change of the asset and cannot be deleted. Correct it instead.</source>
+        <translation>This is the only status change of the asset and cannot be deleted. Correct it instead.</translation>
+    </message>
+    <message>
         <source>The value has the wrong type.</source>
         <translation>The value has the wrong type.</translation>
     </message>
@@ -207,6 +211,10 @@
         <translation>Not in service</translation>
     </message>
     <message>
+        <source>Status unknown (data quality)</source>
+        <translation>Status unknown (data quality)</translation>
+    </message>
+    <message>
         <source>Overdue</source>
         <translation>Overdue</translation>
     </message>
@@ -217,6 +225,10 @@
     <message>
         <source>Schedule unknown</source>
         <translation>Schedule unknown</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
     </message>
     <message>
         <source>Not set</source>
@@ -335,10 +347,6 @@
         <translation>Every number of days</translation>
     </message>
     <message>
-        <source>days</source>
-        <translation>days</translation>
-    </message>
-    <message>
         <source>Description</source>
         <translation>Description</translation>
     </message>
@@ -349,6 +357,14 @@
     <message>
         <source>In service from</source>
         <translation>In service from</translation>
+    </message>
+    <message>
+        <source>In service until</source>
+        <translation>In service until</translation>
+    </message>
+    <message>
+        <source>Set the last day in service</source>
+        <translation>Set the last day in service</translation>
     </message>
     <message>
         <source>Maintenance interval</source>

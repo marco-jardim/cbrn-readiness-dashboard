@@ -32,6 +32,7 @@ from cbrn_dashboard.ui.infrastructure.labels import (
     basis_label,
     code_label,
     error_label,
+    join_labels,
     kind_label,
     status_label,
     type_display,
@@ -530,9 +531,8 @@ def test_retiring_and_deleting_an_asset_ask_for_confirmation(
 def test_the_a05_switch_changes_the_availability_summary(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
-    config = getattr(app_context.services, "config", None)
-    if config is None:
-        pytest.skip("the context has no configuration service (services.config is None)")
+    config = app_context.services.config
+    assert config is not None
     _add_asset(app_context, status="degraded")
     page = InfrastructurePage(app_context)
     qtbot.addWidget(page)
@@ -552,12 +552,14 @@ def test_the_a05_switch_changes_the_availability_summary(
 def test_the_a05_placeholder_badge_and_confirm_button(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
-    config = getattr(app_context.services, "config", None)
-    if config is None:
-        pytest.skip("the context has no configuration service (services.config is None)")
+    config = app_context.services.config
+    assert config is not None
     field = "degraded_counts_as_available"
-    if config.badge_for_field(field) is None:
-        pytest.skip("the A05 placeholder is already confirmed in this database")
+    placeholder = config.badge_for_field(field)
+    if placeholder is None:  # confirmed in this database: un-confirm it through the service API
+        placeholder = next(item.id for item in config.placeholders() if field in item.fields)
+        config.unconfirm(placeholder)
+    assert config.badge_for_field(field) == placeholder
     section = InfrastructureSettingsSection(app_context)
     qtbot.addWidget(section)
     assert section.badge_label.text() == "Placeholder - to be confirmed"
@@ -683,6 +685,124 @@ def test_the_interval_editor_distinguishes_not_set_from_zero(
     editor.set_value(None)
     assert editor.value() is None
     assert editor.mode_combo.currentText() == "Not set"
+
+
+def test_the_days_suffix_follows_the_plural_and_a_large_interval_is_kept(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    dialog = TypeDialog(app_context)
+    qtbot.addWidget(dialog)
+    editor = dialog.interval
+    editor.set_value(1)
+    assert editor.days_spin.suffix() == " day"
+    editor.set_value(45)
+    assert editor.days_spin.suffix() == " days"
+    editor.set_value(40_000)  # above the usual maximum: shown and kept, never clamped
+    assert editor.value() == 40_000
+    assert editor.days_spin.maximum() >= 40_000
+    editor.set_value(30)
+    assert editor.value() == 30
+    app_context.translator_manager.set_language("pt_BR")
+    editor.set_value(1)
+    assert editor.days_spin.suffix() == " dia"
+    editor.set_value(2)
+    assert editor.days_spin.suffix() == " dias"
+
+
+def test_flags_are_joined_with_the_translated_separator(app_context: AppContext) -> None:
+    assert join_labels([]) == ""
+    assert join_labels(["a"]) == "a"
+    assert join_labels(["a", "b", "c"]) == "a, b, c"
+    app_context.translator_manager.set_language("pt_BR")
+    assert join_labels(["a", "b", "c"]) == "a; b; c"
+
+
+def test_the_asset_dialog_corrects_and_clears_the_last_day_in_service(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    asset_id = _add_asset(app_context, start=date(2026, 1, 1))
+    service.retire_asset(asset_id, date(2026, 2, 1))
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    page.assets_view.selectRow(0)
+    page.edit_asset()
+    dialog = _open_dialog(page, AssetDialog)
+    assert dialog.until_check.isChecked()
+    assert dialog.until_edit.isEnabled()
+    assert dialog.until_edit.date() == QDate(2026, 2, 1)
+    dialog.until_edit.setDate(QDate(2026, 2, 15))
+    dialog.accept()
+    assert service.get_asset(asset_id).asset.in_service_until == date(2026, 2, 15)
+
+    page.assets_view.selectRow(0)
+    page.edit_asset()
+    again = _open_dialog(page, AssetDialog)
+    assert again.until_edit.date() == QDate(2026, 2, 15)
+    again.until_check.setChecked(False)
+    assert not again.until_edit.isEnabled()
+    again.accept()
+    assert service.get_asset(asset_id).asset.in_service_until is None
+    assert _by_tag(page)["DEMO-A001"]["flags"] != "Not in service"
+
+
+def test_moving_in_service_from_past_a_set_last_day_shows_the_field_with_the_error(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    asset_id = _add_asset(app_context, start=date(2026, 1, 1))
+    _service(app_context).retire_asset(asset_id, date(2026, 2, 1))
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    page.assets_view.selectRow(0)
+    page.edit_asset()
+    dialog = _open_dialog(page, AssetDialog)
+    dialog.from_edit.setDate(QDate(2026, 3, 1))
+    assert dialog.until_check.isVisibleTo(dialog)
+    assert dialog.until_check.isChecked()
+    dialog.accept()
+    assert _warnings(fake_prompts) == [
+        "The last day in service cannot be before the first day in service."
+    ]
+
+
+def test_an_in_service_asset_without_a_status_is_flagged_as_a_data_quality_issue(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    asset_id = _add_asset(app_context, start=date(2026, 4, 1))
+    service.update_asset(
+        asset_id,
+        AssetInput(
+            tag="DEMO-A001",
+            type_id=_type_view(app_context, "bed").id,
+            in_service_from=date(2026, 1, 1),
+        ),
+    )
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    cells = _by_tag(page)["DEMO-A001"]
+    assert cells["status"] == "Unknown"
+    assert cells["flags"] == "Status unknown (data quality), Schedule unknown"
+    app_context.translator_manager.set_language("pt_BR")
+    pt_cells = _by_tag(page)["DEMO-A001"]
+    assert pt_cells["flags"] != cells["flags"]
+    assert ";" in pt_cells["flags"]
+
+
+def test_the_only_status_entry_of_an_asset_cannot_be_deleted(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    asset_id = _add_asset(app_context)
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    page.assets_view.selectRow(0)
+    page.history_view.selectRow(0)
+    fake_prompts.script("confirm", True)
+    page.delete_entry_action.trigger()
+    assert _warnings(fake_prompts) == [error_label("ONLY_STATUS_EVENT")]
+    assert len(service.asset_history(asset_id).status_events) == 1
+    assert page.history_model.rowCount() == 1
 
 
 # --------------------------------------------------------------------------- read-only, no service

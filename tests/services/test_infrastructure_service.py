@@ -48,6 +48,7 @@ from cbrn_dashboard.services.infrastructure import (
     INVALID_STATUS,
     NEGATIVE_INTERVAL,
     NEXT_DUE_BEFORE_PERFORMED,
+    ONLY_STATUS_EVENT,
     STATUS_DATE_TAKEN,
     TEXT_TOO_LONG,
     TYPE_IN_USE,
@@ -959,7 +960,9 @@ class _Filled:
     types: list[AssetType]
     status_events: list[StatusEvent]
     maintenance: list[MaintenanceEvent]
-    active_types: list[AssetType]
+    # the types the indicators list: every type except DEMO-OFF, which is inactive and has no
+    # asset at all (the service must not be the source of this list)
+    listed_types: list[AssetType]
 
 
 @pytest.fixture
@@ -981,8 +984,9 @@ def filled(service: InfrastructureService) -> _Filled:
     ids["A007"] = _asset(service, "DEMO-A007", demo, "2025-10-01", interval=365)
     ids["A008"] = _asset(service, "DEMO-A008", bed, "2025-01-01", in_service_until="2026-02-28")
     ids["A009"] = _asset(service, "DEMO-A009", bay, "2026-04-01")
-    ids["A010"] = _asset(service, "DEMO-A010", bed, "2026-01-01")
-    service.delete_status_event(service.get_asset(ids["A010"]).status_events[0].id)
+    # A010: created later than its first status event, then moved earlier -> unknown status
+    ids["A010"] = _asset(service, "DEMO-A010", bed, "2026-04-01")
+    service.update_asset(ids["A010"], _input(bed, tag="DEMO-A010", in_service_from="2026-01-01"))
 
     service.change_status(ids["A002"], "2026-02-01", "degraded")
     service.change_status(ids["A007"], "2026-03-06", "out_of_service")
@@ -1035,6 +1039,7 @@ def filled(service: InfrastructureService) -> _Filled:
         StatusEvent(ids["A007"], _d("2026-03-06"), out),
         StatusEvent(ids["A008"], _d("2025-01-01"), operational),
         StatusEvent(ids["A009"], _d("2026-04-01"), operational),
+        StatusEvent(ids["A010"], _d("2026-04-01"), operational),
     ]
     preventive = MaintenanceKind.PREVENTIVE
     maintenance = [
@@ -1053,8 +1058,8 @@ def filled(service: InfrastructureService) -> _Filled:
         AssetType("DEMO-EMPTY", None),
         AssetType("DEMO-OFF", None),
     ]
-    active_types = [t for t in types if t.code != "DEMO-OFF"]
-    return _Filled(service, assets, types, status_events, maintenance, active_types)
+    listed_types = [t for t in types if t.code != "DEMO-OFF"]
+    return _Filled(service, assets, types, status_events, maintenance, listed_types)
 
 
 def _assert_equals_domain(fx: _Filled, domain_rules: InfrastructureRules) -> None:
@@ -1067,7 +1072,7 @@ def _assert_equals_domain(fx: _Filled, domain_rules: InfrastructureRules) -> Non
         )
         assert service.data_quality(as_of) == rules.data_quality(fx.assets, fx.status_events, as_of)
         expected = rules.indicator_values(
-            fx.assets, fx.active_types, fx.status_events, fx.maintenance, as_of, domain_rules
+            fx.assets, fx.listed_types, fx.status_events, fx.maintenance, as_of, domain_rules
         )
         assert service.indicator_values(as_of) == expected
         expected_availability = [
@@ -1168,6 +1173,66 @@ def test_alert_inputs_feed_the_domain_to_the_same_rows_as_the_page(
     config = ReadinessConfig().with_changes(maintenance_warning_days=16)
     save_config(WriteContext(db, clock, OPERATOR), config)
     assert service.alert_inputs().rules == InfrastructureRules(maintenance_warning_days=16)
+
+
+def test_assets_of_a_deactivated_type_still_count_in_every_view(
+    service: InfrastructureService,
+) -> None:
+    gone = _user_type(service, "DEMO-GONE", interval=30)
+    _user_type(service, "DEMO-OFF", active=False)  # inactive, no asset: left out
+    x1 = _asset(service, "DEMO-X1", gone, "2025-12-01")  # due 2025-12-31: overdue
+    x2 = _asset(service, "DEMO-X2", gone, "2025-12-01")
+    service.record_maintenance(x2, "2026-03-01", "preventive", "2026-06-01")
+    x3 = _asset(service, "DEMO-X3", gone, "2025-12-01", "out_of_service", interval=0)
+    service.deactivate_type(gone)
+    assert not [t for t in service.list_types() if t.code == "DEMO-GONE"]  # no longer offered
+
+    values = {
+        (value.code, decode_dimension(value.dimension)["type"]): value
+        for value in service.indicator_values(AS_OF)
+    }
+    available = values[("INFRA_AVAILABLE", "DEMO-GONE")]
+    assert available.value == 2.0  # X1 and X2 operational, X3 out of service
+    assert available.context == {"in_service": 3.0}
+    assert values[("INFRA_MAINT_OVERDUE", "DEMO-GONE")].value == 1.0  # X1
+    assert ("INFRA_AVAILABLE", "DEMO-OFF") not in values
+    assert ("INFRA_MAINT_OVERDUE", "DEMO-OFF") not in values
+
+    summary = {a.type_code: (a.available, a.in_service) for a in service.availability(AS_OF)}
+    assert summary["DEMO-GONE"] == (2, 3)
+    assert "DEMO-OFF" not in summary
+
+    inputs = service.alert_inputs()
+    rows = rules.asset_rows(
+        inputs.assets, inputs.types, inputs.status_events, inputs.maintenance, AS_OF, inputs.rules
+    )
+    gone_rows = [row for row in rows if row.type_code == "DEMO-GONE" and row.in_service]
+    assert len(gone_rows) == 3  # the alerts see the same three assets
+    assert [row.tag for row in gone_rows if row.overdue] == ["DEMO-X1"]
+    assert [row.tag for row in service.maintenance_due_lists(AS_OF).overdue] == ["DEMO-X1"]
+
+    # once every asset is retired the inactive type drops out; before that it is still listed
+    for asset_id in (x1, x2, x3):
+        service.retire_asset(asset_id, "2026-03-01")
+    assert "DEMO-GONE" not in {a.type_code for a in service.availability(AS_OF)}
+    february = service.availability(date(2026, 2, 15))
+    assert {a.type_code: (a.available, a.in_service) for a in february}["DEMO-GONE"] == (2, 3)
+
+
+def test_the_only_status_event_of_an_asset_cannot_be_deleted(
+    service: InfrastructureService, db: DatabaseConnection
+) -> None:
+    type_id = _user_type(service)
+    asset_id = _asset(service, "DEMO-A001", type_id, in_service_from="2025-12-01")
+    (only,) = service.asset_history(asset_id).status_events
+    _refused(db, lambda: service.delete_status_event(only.id), ONLY_STATUS_EVENT, "event_id")
+    second = service.change_status(asset_id, "2026-01-01", "degraded")
+    service.delete_status_event(second)  # not the only one any more
+    _refused(db, lambda: service.delete_status_event(only.id), ONLY_STATUS_EVENT)
+    assert [e.id for e in service.asset_history(asset_id).status_events] == [only.id]
+    # deleting the whole asset still removes its events
+    service.delete_asset(asset_id)
+    assert _count(db, "asset_status_event") == 0
 
 
 def test_asset_history_is_sorted_by_date(service: InfrastructureService) -> None:

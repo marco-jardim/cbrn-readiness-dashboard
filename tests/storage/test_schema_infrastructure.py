@@ -283,6 +283,103 @@ def test_zero_and_null_interval_on_an_asset_are_accepted(migrated_db: DatabaseCo
     assert rows == {"DEMO-A001": 0, "DEMO-A002": None, "DEMO-A003": 90}
 
 
+# --------------------------------------------------------------------------- dates (P3-04)
+
+BAD_DATES = ("2025-1-01", "2025/01/01", "01-01-2025", "20250101", "2025-01-01T00:00:00", "", "x")
+
+
+@pytest.mark.parametrize("bad", BAD_DATES)
+def test_asset_dates_must_be_iso_shaped(migrated_db: DatabaseConnection, bad: str) -> None:
+    type_id = _type_id(migrated_db, "bed")
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO asset (type_id, tag, in_service_from) VALUES (?, 'DEMO-A001', ?)",
+            (type_id, bad),
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO asset (type_id, tag, in_service_from, in_service_until)"
+            " VALUES (?, 'DEMO-A002', '2025-01-01', ?)",
+            (type_id, bad),
+        )
+
+
+@pytest.mark.parametrize("bad", BAD_DATES)
+def test_event_dates_must_be_iso_shaped(migrated_db: DatabaseConnection, bad: str) -> None:
+    asset_id = _add_asset(migrated_db, "DEMO-A001")
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO asset_status_event (asset_id, effective_on, status)"
+            " VALUES (?, ?, 'operational')",
+            (asset_id, bad),
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO maintenance_event (asset_id, performed_on, kind)"
+            " VALUES (?, ?, 'inspection')",
+            (asset_id, bad),
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO maintenance_event (asset_id, performed_on, kind, next_due_on)"
+            " VALUES (?, '2025-03-01', 'inspection', ?)",
+            (asset_id, bad),
+        )
+
+
+def test_asset_in_service_until_before_from_is_rejected(migrated_db: DatabaseConnection) -> None:
+    type_id = _type_id(migrated_db, "bed")
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO asset (type_id, tag, in_service_from, in_service_until)"
+            " VALUES (?, 'DEMO-A001', '2025-06-01', '2025-05-31')",
+            (type_id,),
+        )
+    asset_id = _add_asset(migrated_db, "DEMO-A002")
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "UPDATE asset SET in_service_until = '2024-12-31' WHERE id = ?", (asset_id,)
+        )
+
+
+def test_asset_in_service_until_on_or_after_from_or_null_is_accepted(
+    migrated_db: DatabaseConnection,
+) -> None:
+    type_id = _type_id(migrated_db, "bed")
+    cases = (("DEMO-A001", "2025-06-01"), ("DEMO-A002", "2026-01-01"), ("DEMO-A003", None))
+    for tag, until in cases:
+        migrated_db.execute(
+            "INSERT INTO asset (type_id, tag, in_service_from, in_service_until)"
+            " VALUES (?, ?, '2025-06-01', ?)",
+            (type_id, tag, until),
+        )
+    assert _count(migrated_db, "asset", "1 = 1", ()) == 3
+
+
+def test_next_due_before_performed_is_rejected(migrated_db: DatabaseConnection) -> None:
+    asset_id = _add_asset(migrated_db, "DEMO-A001")
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO maintenance_event (asset_id, performed_on, kind, next_due_on)"
+            " VALUES (?, '2025-03-01', 'preventive', '2025-02-28')",
+            (asset_id,),
+        )
+
+
+def test_next_due_on_or_after_performed_or_null_is_accepted(
+    migrated_db: DatabaseConnection,
+) -> None:
+    asset_id = _add_asset(migrated_db, "DEMO-A001")
+    cases = (("preventive", "2025-03-01"), ("corrective", "2025-09-01"), ("inspection", None))
+    for kind, due in cases:
+        migrated_db.execute(
+            "INSERT INTO maintenance_event (asset_id, performed_on, kind, next_due_on)"
+            " VALUES (?, '2025-03-01', ?, ?)",
+            (asset_id, kind, due),
+        )
+    assert _count(migrated_db, "maintenance_event", "asset_id = ?", (asset_id,)) == 3
+
+
 # --------------------------------------------------------------------------- assets and types
 
 

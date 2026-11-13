@@ -6,6 +6,8 @@ Each dialog builds the service input in ``submit()``, calls the service through 
 Tags, locations, notes and user-defined type labels are data, flagged with ``i18nData``.
 """
 
+import re
+
 from PySide6.QtCore import QCoreApplication, QDate, QEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -54,6 +56,8 @@ __all__ = [
 ]
 
 _MAX_DAYS = 36_500
+_SPIN_LIMIT = 2_147_483_647  # the largest value a QSpinBox holds
+_NUMBER = re.compile(r"[0-9](?:[0-9.,\u00a0\u202f ]*[0-9])?")  # the number Qt puts in for %n
 _MODE_NOT_SET = 0
 _MODE_NONE = 1
 _MODE_DAYS = 2
@@ -89,6 +93,7 @@ class IntervalEditor(QWidget):
         self.days_spin = QSpinBox(self)
         self.days_spin.setRange(1, _MAX_DAYS)
         self.days_spin.setEnabled(False)
+        self.days_spin.valueChanged.connect(self._update_suffix)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.mode_combo, 1)
@@ -111,11 +116,23 @@ class IntervalEditor(QWidget):
         elif days == 0:
             self.mode_combo.setCurrentIndex(self.mode_combo.findData(_MODE_NONE))
         else:
-            self.days_spin.setValue(days)
+            # A stored interval above the usual maximum is shown as it is, never clamped.
+            shown = min(days, _SPIN_LIMIT)
+            self.days_spin.setMaximum(max(_MAX_DAYS, shown))
+            self.days_spin.setValue(shown)
             self.mode_combo.setCurrentIndex(self.mode_combo.findData(_MODE_DAYS))
 
     def _mode_changed(self, *_args: object) -> None:
         self.days_spin.setEnabled(self.mode_combo.currentData() == _MODE_DAYS)
+
+    def _update_suffix(self, *_args: object) -> None:
+        """The unit after the number, in the plural form of the current value (``%n day(s)``)."""
+        text = QCoreApplication.translate(
+            "Infrastructure", "%n day(s)", None, self.days_spin.value()
+        )
+        suffix = _NUMBER.sub("", text, count=1)
+        if suffix != self.days_spin.suffix():
+            self.days_spin.setSuffix(suffix)
 
     def retranslate(self) -> None:
         if self._inherit:
@@ -129,7 +146,7 @@ class IntervalEditor(QWidget):
         self.mode_combo.setItemText(
             _MODE_DAYS, QCoreApplication.translate("Infrastructure", "Every number of days")
         )
-        self.days_spin.setSuffix(" " + QCoreApplication.translate("Infrastructure", "days"))
+        self._update_suffix()
         apply_locale(self.days_spin, current_language(self.context))
 
     def changeEvent(self, event: QEvent) -> None:
@@ -168,6 +185,10 @@ class AssetDialog(FormDialog):
         self.description_edit = QLineEdit(self)
         self.location_edit = QLineEdit(self)
         self.from_edit = _date_edit(self, to_qdate(context.as_of))
+        self.until_check = QCheckBox(self)
+        self.until_edit = _date_edit(self, to_qdate(context.as_of))
+        self.until_edit.setEnabled(False)
+        self.until_check.toggled.connect(self.until_edit.setEnabled)
         self.interval = IntervalEditor(context, self, inherit=True)
         self.status_combo = QComboBox(self)
         self.status_combo.addItem("", None)
@@ -188,6 +209,11 @@ class AssetDialog(FormDialog):
             lambda: QCoreApplication.translate("Infrastructure", "In service from"), self.from_edit
         )
         self.add_field(
+            lambda: QCoreApplication.translate("Infrastructure", "In service until"),
+            self.until_edit,
+        )
+        self.form.addRow(self.until_check)
+        self.add_field(
             lambda: QCoreApplication.translate("Infrastructure", "Maintenance interval"),
             self.interval,
         )
@@ -207,6 +233,9 @@ class AssetDialog(FormDialog):
         self.description_edit.setText(asset.description or "")
         self.location_edit.setText(asset.location or "")
         self.from_edit.setDate(to_qdate(asset.in_service_from))
+        if asset.in_service_until is not None:
+            self.until_edit.setDate(to_qdate(asset.in_service_until))
+            self.until_check.setChecked(True)
         self.interval.set_value(asset.maintenance_interval_days)
 
     def retranslate(self) -> None:
@@ -226,7 +255,11 @@ class AssetDialog(FormDialog):
             self.status_combo.setItemText(
                 index, status_label(str(self.status_combo.itemData(index)))
             )
+        self.until_check.setText(
+            QCoreApplication.translate("Infrastructure", "Set the last day in service")
+        )
         apply_locale(self.from_edit, self.language)
+        apply_locale(self.until_edit, self.language)
 
     def submit(self) -> bool:
         service = self.context.services.infrastructure
@@ -234,11 +267,12 @@ class AssetDialog(FormDialog):
             return False
         type_data = self.type_combo.currentData()
         asset = self._asset
+        until = from_qdate(self.until_edit.date()) if self.until_check.isChecked() else None
         data = AssetInput(
             tag=self.tag_edit.text(),
             type_id=None if type_data is None else int(type_data),
             in_service_from=from_qdate(self.from_edit.date()),
-            in_service_until=None if asset is None else asset.in_service_until,
+            in_service_until=until,
             description=self.description_edit.text(),
             location=self.location_edit.text(),
             maintenance_interval_days=self.interval.value(),

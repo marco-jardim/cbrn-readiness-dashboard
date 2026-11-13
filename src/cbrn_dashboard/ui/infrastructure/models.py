@@ -23,6 +23,7 @@ from cbrn_dashboard.ui.infrastructure.labels import (
     basis_label,
     code_label,
     flag_labels,
+    join_labels,
     kind_label,
     status_label,
     type_display,
@@ -113,7 +114,7 @@ class AssetsModel(ModuleTableModel):
         Column[Any](
             "flags",
             lambda: QCoreApplication.translate("Infrastructure", "Flags"),
-            lambda row, lang: ", ".join(flag_labels(row.row)),
+            lambda row, lang: join_labels(flag_labels(row.row)),
         ),
     )
 

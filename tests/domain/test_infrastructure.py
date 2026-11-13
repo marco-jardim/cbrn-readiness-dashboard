@@ -601,6 +601,21 @@ def test_asset_rows_cover_all_assets_sorted_by_type_then_tag() -> None:
     assert by_tag["DEMO-A001"].days_to_due is None
 
 
+def test_asset_row_available_requires_in_service() -> None:
+    assets = [
+        make_asset(1, "DEMO-A001", until=days(-1)),  # retired
+        make_asset(2, "DEMO-A002", start=days(1)),  # not yet in service
+        make_asset(3, "DEMO-A003"),
+    ]
+    events = [status_event(IN_SERVICE, OPERATIONAL, asset_id=n) for n in (1, 2, 3)]
+    rows = {r.tag: r for r in asset_rows(assets, ALL_TYPES, events, [], D, RULES)}
+    assert [(r.in_service, r.status, r.available) for r in rows.values()] == [
+        (False, OPERATIONAL, False),
+        (False, OPERATIONAL, False),
+        (True, OPERATIONAL, True),
+    ]
+
+
 def test_asset_rows_days_to_due_is_signed() -> None:
     assets = [make_asset(1, "DEMO-A001"), make_asset(2, "DEMO-A002"), make_asset(3, "DEMO-A003")]
     records = [

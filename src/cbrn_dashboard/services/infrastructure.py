@@ -82,6 +82,7 @@ __all__ = [
     "IN_SERVICE_UNTIL_BEFORE_FROM",
     "NEGATIVE_INTERVAL",
     "NEXT_DUE_BEFORE_PERFORMED",
+    "ONLY_STATUS_EVENT",
     "STATUS_DATE_TAKEN",
     "TAG_MAX_LENGTH",
     "TEXT_TOO_LONG",
@@ -117,6 +118,7 @@ STATUS_DATE_TAKEN = "STATUS_DATE_TAKEN"
 INVALID_MAINTENANCE_KIND = "INVALID_MAINTENANCE_KIND"
 NEXT_DUE_BEFORE_PERFORMED = "NEXT_DUE_BEFORE_PERFORMED"
 DUPLICATE_MAINTENANCE = "DUPLICATE_MAINTENANCE"
+ONLY_STATUS_EVENT = "ONLY_STATUS_EVENT"
 
 #: Longest asset tag, in characters.
 TAG_MAX_LENGTH = 64
@@ -814,10 +816,16 @@ class InfrastructureService:
             )
 
     def delete_status_event(self, event_id: int) -> None:
-        """Delete a status event (a correction)."""
+        """Delete a status event (a correction); never the only one of an asset.
+
+        ``ONLY_STATUS_EVENT``: without any event the status would silently become ``unknown``
+        (D26); correct the event instead.
+        """
         self._require_writable()
         with _translated(), transaction(self._conn):
-            self._status_row(event_id)
+            row = self._status_row(event_id)
+            only = len(repo.list_status_events(self._conn, row.asset_id)) <= 1
+            require(not only, ONLY_STATUS_EVENT, "event_id")
             repo.delete_status_event(self._ctx(), event_id)
 
     # ----- maintenance events
@@ -957,11 +965,18 @@ class InfrastructureService:
         return rules.data_quality(data.assets, data.status_events, as_of)
 
     def indicator_values(self, as_of: date) -> list[IndicatorValue]:
-        """The infrastructure indicator values for ALL active types (input of the indicators)."""
+        """The infrastructure indicator values (input of the indicators).
+
+        One value per active type and per inactive type that still has an asset in service on
+        ``as_of`` (deactivating a type only stops NEW assets, section 5.1); an inactive type
+        without such an asset is left out.
+        """
         data = self._snapshot()
+        active_codes = {asset_type.code for asset_type in data.active_types}
+        in_use = {asset.type_code for asset in data.assets if rules.is_in_service(asset, as_of)}
         return rules.indicator_values(
             data.assets,
-            data.active_types,
+            [t for t in data.types if t.code in active_codes or t.code in in_use],
             data.status_events,
             data.maintenance,
             as_of,
@@ -969,7 +984,7 @@ class InfrastructureService:
         )
 
     def availability(self, as_of: date) -> list[TypeAvailability]:
-        """Per active type, by code: assets in service and available on ``as_of``.
+        """Per active type or type with assets in service, by code: in service and available.
 
         Taken from ``INFRA_AVAILABLE`` of :meth:`indicator_values`; "available" is not "free"
         (A01: no occupancy is tracked).

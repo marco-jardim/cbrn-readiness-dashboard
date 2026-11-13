@@ -158,6 +158,10 @@
         <translation type="unfinished">Já existe um registro de manutenção deste tipo nesta data.</translation>
     </message>
     <message>
+        <source>This is the only status change of the asset and cannot be deleted. Correct it instead.</source>
+        <translation type="unfinished">Esta é a única mudança de situação do ativo e não pode ser excluída. Corrija-a em vez disso.</translation>
+    </message>
+    <message>
         <source>The value has the wrong type.</source>
         <translation type="unfinished">O valor tem o tipo errado.</translation>
     </message>
@@ -207,6 +211,10 @@
         <translation type="unfinished">Não está em serviço</translation>
     </message>
     <message>
+        <source>Status unknown (data quality)</source>
+        <translation type="unfinished">Situação desconhecida (qualidade dos dados)</translation>
+    </message>
+    <message>
         <source>Overdue</source>
         <translation type="unfinished">Vencida</translation>
     </message>
@@ -217,6 +225,10 @@
     <message>
         <source>Schedule unknown</source>
         <translation type="unfinished">Prazo desconhecido</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation type="unfinished">%1; %2</translation>
     </message>
     <message>
         <source>Not set</source>
@@ -335,10 +347,6 @@
         <translation type="unfinished">A cada número de dias</translation>
     </message>
     <message>
-        <source>days</source>
-        <translation type="unfinished">dias</translation>
-    </message>
-    <message>
         <source>Description</source>
         <translation type="unfinished">Descrição</translation>
     </message>
@@ -349,6 +357,14 @@
     <message>
         <source>In service from</source>
         <translation type="unfinished">Em serviço desde</translation>
+    </message>
+    <message>
+        <source>In service until</source>
+        <translation type="unfinished">Em serviço até</translation>
+    </message>
+    <message>
+        <source>Set the last day in service</source>
+        <translation type="unfinished">Definir o último dia em serviço</translation>
     </message>
     <message>
         <source>Maintenance interval</source>

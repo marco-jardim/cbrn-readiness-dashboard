@@ -40,6 +40,7 @@ from cbrn_dashboard.services.infrastructure import (
     INVALID_STATUS,
     NEGATIVE_INTERVAL,
     NEXT_DUE_BEFORE_PERFORMED,
+    ONLY_STATUS_EVENT,
     STATUS_DATE_TAKEN,
     TEXT_TOO_LONG,
     TYPE_IN_USE,
@@ -57,6 +58,7 @@ __all__ = [
     "code_label",
     "error_label",
     "flag_labels",
+    "join_labels",
     "kind_label",
     "status_label",
     "type_display",
@@ -184,6 +186,10 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     DUPLICATE_MAINTENANCE: lambda: QCoreApplication.translate(
         "Infrastructure", "A maintenance record of this kind already exists on this date."
     ),
+    ONLY_STATUS_EVENT: lambda: QCoreApplication.translate(
+        "Infrastructure",
+        "This is the only status change of the asset and cannot be deleted. Correct it instead.",
+    ),
     # configuration service errors (the A05 switch saves a configuration)
     "INVALID_TYPE": lambda: QCoreApplication.translate(
         "Infrastructure", "The value has the wrong type."
@@ -258,11 +264,24 @@ def type_display(asset_type: AssetTypeView, lang: str) -> str:
     return type_label(asset_type, lang)
 
 
+def join_labels(labels: list[str]) -> str:
+    """The texts of ``labels`` as one list, joined with the translated separator."""
+    if not labels:
+        return ""
+    text = labels[0]
+    for label in labels[1:]:
+        joined = QCoreApplication.translate("Infrastructure", "%1, %2")
+        text = joined.replace("%1", text, 1).replace("%2", label, 1)
+    return text
+
+
 def flag_labels(row: AssetRow) -> list[str]:
     """The schedule flags of an asset row as texts (never colour alone, D23)."""
     if not row.in_service:
         return [QCoreApplication.translate("Infrastructure", "Not in service")]
     flags: list[str] = []
+    if row.status is AssetStatus.UNKNOWN:
+        flags.append(QCoreApplication.translate("Infrastructure", "Status unknown (data quality)"))
     if row.overdue:
         flags.append(QCoreApplication.translate("Infrastructure", "Overdue"))
     if row.due_soon:

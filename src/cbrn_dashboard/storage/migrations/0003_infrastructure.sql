@@ -31,11 +31,14 @@ CREATE TABLE asset (
     tag         TEXT NOT NULL UNIQUE,
     description TEXT,
     location    TEXT,
-    in_service_from  TEXT NOT NULL,
-    in_service_until TEXT,
+    in_service_from  TEXT NOT NULL
+        CHECK (in_service_from GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    in_service_until TEXT
+        CHECK (in_service_until GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     maintenance_interval_days INTEGER
         CHECK (maintenance_interval_days >= 0),  -- overrides the type default; 0 = no scheduled maintenance (A06)
-    notes TEXT
+    notes TEXT,
+    CHECK (in_service_until IS NULL OR in_service_until >= in_service_from)  -- ISO text sorts as dates
 ) STRICT;
 
 CREATE INDEX asset_type_id_idx ON asset (type_id);
@@ -44,7 +47,8 @@ CREATE INDEX asset_type_id_idx ON asset (type_id);
 CREATE TABLE asset_status_event (
     id           INTEGER PRIMARY KEY,
     asset_id     INTEGER NOT NULL REFERENCES asset (id) ON DELETE CASCADE,
-    effective_on TEXT NOT NULL,
+    effective_on TEXT NOT NULL
+        CHECK (effective_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     status       TEXT NOT NULL CHECK (status IN ('operational', 'degraded', 'out_of_service')),  -- A05
     note         TEXT,
     UNIQUE (asset_id, effective_on)
@@ -54,9 +58,12 @@ CREATE TABLE asset_status_event (
 CREATE TABLE maintenance_event (
     id           INTEGER PRIMARY KEY,
     asset_id     INTEGER NOT NULL REFERENCES asset (id) ON DELETE CASCADE,
-    performed_on TEXT NOT NULL,                                      -- L76
+    performed_on TEXT NOT NULL                                       -- L76
+        CHECK (performed_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     kind         TEXT NOT NULL CHECK (kind IN ('preventive', 'corrective', 'inspection')),
-    next_due_on  TEXT,
+    next_due_on  TEXT
+        CHECK (next_due_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     note         TEXT,
+    CHECK (next_due_on IS NULL OR next_due_on >= performed_on),
     UNIQUE (asset_id, performed_on, kind)                            -- import natural key (T8.4)
 ) STRICT;

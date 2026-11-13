@@ -128,7 +128,10 @@ class MaintenanceSchedule:
 
 @dataclass(frozen=True)
 class AssetRow:
-    """One asset as shown on the page and in reports; ``days_to_due`` is signed (< 0 = late)."""
+    """One asset as shown on the page and in reports; ``days_to_due`` is signed (< 0 = late).
+
+    ``available`` implies ``in_service``: a retired or not-yet-in-service asset is never available.
+    """
 
     asset_id: int
     tag: str
@@ -275,15 +278,16 @@ def asset_rows(
     rows: list[AssetRow] = []
     for asset in assets:
         status = status_on(events, asset.id, d)
+        in_service = is_in_service(asset, d)
         schedule = maintenance_schedule(asset, types_by_code.get(asset.type_code), records, d)
         rows.append(
             AssetRow(
                 asset_id=asset.id,
                 tag=asset.tag,
                 type_code=asset.type_code,
-                in_service=is_in_service(asset, d),
+                in_service=in_service,
                 status=status,
-                available=is_available(status, rules),
+                available=in_service and is_available(status, rules),
                 last_maintenance_on=schedule.last_maintenance_on,
                 due_on=schedule.due_on,
                 basis=schedule.basis,
