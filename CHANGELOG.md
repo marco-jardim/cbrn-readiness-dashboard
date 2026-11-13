@@ -9,23 +9,28 @@ This file records only the **status** of each open question (open / answered and
 answered and implemented in task Tn), never the content of an answer. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and section 12 of [PLAN.md](PLAN.md).
 
-## [1.0.1] - unreleased
+## [1.0.1] - 2026-11-13
 
 **Version 1.0.0 was withdrawn.** The tag `v1.0.0` was created and the release workflow built it,
 but its draft release was never published and was discarded. Version 1.0.1 replaces it; no
 `1.0.0` file should be used.
 
-**Status of this entry: prepared in the repository, not published.** The version is set to 1.0.1
-in `src/cbrn_dashboard/__init__.py`, but no tag `v1.0.1` exists and no release has been created.
-The release workflow (`.github/workflows/release.yml`) has never run for 1.0.1. A person still has
-to run the full default and packaging test suites, tag `v1.0.1`, start the executable on a clean
-Windows profile without administrator rights, run the manual smoke test
-([docs/smoke-test.pt-BR.md](docs/smoke-test.pt-BR.md)), which has not been executed yet, run the
-manual test script for the committee
-([docs/manual-test-script.pt-BR.md](docs/manual-test-script.pt-BR.md)), which has not been executed
-yet either, and publish the draft release that the workflow creates. This entry must be given a
-date when that happens. No `0.1.0` release was published either: the entry below it is kept as the
-record of what was prepared first.
+**Status of this entry: published.** Version 1.0.1 was published on GitHub on 2026-11-13 as the
+tag `v1.0.1` (commit `1a02e2f`):
+<https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1>. The release
+carries the zip, `SHA256SUMS.txt`, `SHA256-FILES.txt` and the source archives of Qt 6.12.0 and
+PySide6 6.12.0. The owner published it **before** the manual test on a clean Windows profile, by
+decision: the SignPath Foundation open-source programme requires a project that is already
+released. Checks made on the published zip: its SHA-256
+(`bc7bc0f7f96a097281ae453807af1e778b8dbe9f87edc4e42b38661aca1e2f18`) matches `SHA256SUMS.txt`
+(`Get-FileHash`); `gh attestation verify` passed; the frozen self-test passed 12 of 12 checks at
+version 1.0.1; and the bundle holds no Universal CRT files. The manual smoke test
+([docs/smoke-test.pt-BR.md](docs/smoke-test.pt-BR.md)) and the manual test script for the committee
+([docs/manual-test-script.pt-BR.md](docs/manual-test-script.pt-BR.md), with the guide
+[docs/guia-teste-manual.pt-BR.md](docs/guia-teste-manual.pt-BR.md)) have not been executed yet: a
+person still has to start the executable on a clean Windows profile without administrator rights
+and run them, and the result will be recorded in this entry. No `0.1.0` release was published: the
+entry below it is kept as the record of what was prepared first.
 
 **Preliminary version - indicators not institutionally validated.** The placeholders listed below
 are still flagged in code, and the terminology review is pending.
@@ -164,9 +169,9 @@ message, one `type="unfinished"` translation); a test compares it with the files
 
 - The executable and the files beside it are unsigned. Windows SmartScreen, Smart App Control,
   AppLocker or WDAC may warn about or block them (see the install guides).
-- The release workflow ran for the tag `v1.0.0`: it produced the zip, the checksums, the per-file
-  manifest, the build-provenance attestation and a draft release, which was never published and
-  was withdrawn. It will run again for the tag `v1.0.1`; that run has not happened yet.
+- The release workflow ran for the tag `v1.0.0`, whose draft release was never published and was
+  withdrawn, and then for the tag `v1.0.1`, whose release was published on 2026-11-13 before the
+  manual test on a clean profile (see the status above).
 - The Visual C++ runtime files are redistributed under Microsoft's terms (see
   `licenses\MSVC-RUNTIME.md`); the full Visual Studio licence text was not reviewed by counsel.
 - The warning about writing reports or CSV exports to removable media is never shown, because the

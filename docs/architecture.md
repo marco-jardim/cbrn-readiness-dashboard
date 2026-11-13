@@ -490,9 +490,9 @@ fictitious.
   `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`) and the secret `SIGNPATH_API_TOKEN`; it is not active
   until the project is accepted by SignPath. See [CODE-SIGNING-POLICY.md](../CODE-SIGNING-POLICY.md).
 - The version in the source is `1.0.1`, single-sourced in `__init__.py` (hatch reads it, and
-  `uv.lock` records none). The release is prepared in the repository (`CHANGELOG.md`,
-  `docs/smoke-test.pt-BR.md`, `docs/manual-test-script.pt-BR.md`), but nothing is tagged and
-  nothing is published: a person must tag `v1.0.1`, run the smoke test and publish the draft.
+  `uv.lock` records none). The release was published on GitHub on 2026-11-13 as the tag
+  `v1.0.1`, before the manual test (`docs/smoke-test.pt-BR.md`,
+  `docs/manual-test-script.pt-BR.md`), which is still pending; see `CHANGELOG.md`.
   (The draft of 1.0.0 was never published and was withdrawn.)
   See the [install guide](install.en-US.md).
 

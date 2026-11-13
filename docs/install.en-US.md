@@ -10,17 +10,20 @@ zip's first-run notes (`README-first-run.*.txt`) is shorter and says the same.
 
 ## 1. Status of this guide
 
-The version in the source tree is `1.0.1`. It is **prepared** in the repository (changelog and
-manual smoke-test script included), but nothing is tagged, so **no release has been published
-yet and there is no file to download today**. The release workflow
-(`.github/workflows/release.yml`) runs only when a tag `vX.Y.Z` is pushed, builds the bundle, and
-creates a *draft* release (marked pre-release while the version is below 1.0.0). The workflow has
-never run for 1.0.1 (the draft it built for 1.0.0 was never published and was withdrawn). A person publishes the draft after a manual smoke test
-([smoke-test.pt-BR.md](smoke-test.pt-BR.md), in Portuguese), and until then this guide stays true:
-there is no published release.
+The version in the source tree is `1.0.1`. It was **published** on GitHub on 2026-11-13 as the
+tag `v1.0.1`: [release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1).
+The release workflow (`.github/workflows/release.yml`) runs only when a tag `vX.Y.Z` is pushed,
+builds the bundle, and creates a *draft* release that a person publishes (version 1.0.0 was built
+the same way, but its draft was never published and was withdrawn). The owner published 1.0.1
+before the manual test on a clean Windows profile
+([smoke-test.pt-BR.md](smoke-test.pt-BR.md) and
+[manual-test-script.pt-BR.md](manual-test-script.pt-BR.md), in Portuguese), which is **still
+pending**; the result will be recorded in the changelog. On the published zip, the SHA-256 matched
+`SHA256SUMS.txt`, `gh attestation verify` passed and the frozen self-test passed.
 
-Everything below that talks about a download describes what that workflow and the scripts in
-`scripts/` are written to produce. None of it has been tried on a published release.
+Everything below that talks about a download describes the files of that release page and the
+scripts in `scripts/` that produce them. The program has not yet been tried by a person on a clean
+Windows profile.
 
 To try the program today, run it from a source checkout (needs [uv](https://docs.astral.sh/uv/)):
 
@@ -40,8 +43,8 @@ uv run cbrn-dashboard --demo
 
 ## 3. Download
 
-The release page of `https://github.com/marco-jardim/cbrn-readiness-dashboard` will carry three
-files for a version:
+The release page of `https://github.com/marco-jardim/cbrn-readiness-dashboard` carries three
+files for a version (the source archives of Qt and PySide6 are attached too):
 
 | File | Content |
 |---|---|
@@ -226,7 +229,8 @@ To make one, choose **File > Back up...** in the main window, choose where to sa
 type the passphrase twice. To restore one, choose **File > Restore...**, choose the `.cbrnbak`
 file, confirm that all current data will be replaced and type the passphrase. Restore is not
 available in read-only mode; Back up is. **File > Open data folder** shows the local data folder.
-No published version contains these entries yet (section 1).
+Release 1.0.1 contains these entries (section 1); a person has not yet tried them on a clean
+profile.
 
 ## 12. Upgrades
 
@@ -249,7 +253,8 @@ media are not touched by either.
 
 ## 14. Known limits
 
-- No release exists yet (section 1). The executable is unsigned.
+- Release 1.0.1 is published, but its manual test on a clean profile is still pending (section 1).
+  The executable is unsigned.
 - A read-only database on a UNC path (`\\server\share\...`) was never tried on a real network
   share. The way the program builds the read-only address for such a path is covered by a test with
   a made-up path only.

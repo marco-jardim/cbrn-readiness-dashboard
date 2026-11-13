@@ -4,7 +4,7 @@
 |---|---|
 | Repository | `marco-jardim/cbrn-readiness-dashboard` (public) |
 | Licence | GPL-3.0-or-later |
-| Plan status | Draft for review by the project owner and the hospital's CBRN defence committee. Implemented up to T10.5; release v1.0.1 (v1.0.0 was withdrawn) is pending the human and network steps of section 13. |
+| Plan status | Draft for review by the project owner and the hospital's CBRN defence committee. Implemented up to T10.5. Release v1.0.1 (tag `v1.0.1`, commit `1a02e2f`; v1.0.0 was withdrawn) was published on GitHub on 2026-11-13, before the manual test, because the SignPath Foundation open-source programme requires an already released project. Still open from section 13: the manual test on a clean Windows profile (item 10, `docs/manual-test-script.pt-BR.md`), the committee's terminology review (Q14, item 6) and the questions of section 12 that the committee has not answered. |
 | Requirements source | Appendix A of the thesis, product "PTT 2" (appendix source lines 55–95, in Portuguese). `Lnn` = line *nn* of that source. The source is not in this repository (the thesis is unpublished), so the R01–R36 quotes and the `Lnn` references cannot be checked from the repository alone. They were checked against `postextual/apendice-a.tex` of the private thesis repository, commit `f8b1d65a76b53019573fb789c09d3d938dbffb59` (2026-11-13), SHA-256 `fbe30bc40ff6ab5ebace449dd3309e2dc2ff8f216d4ad9048c77a83b9c6661c1` (Q18). |
 | Date | 2026-11-12 |
 

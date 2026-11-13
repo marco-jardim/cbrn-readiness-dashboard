@@ -193,15 +193,23 @@ def test_the_readme_states_the_version_and_links_the_release_material() -> None:
 def test_the_readme_states_version_1_0_1() -> None:
     assert __version__ == "1.0.1"
     text = _read(ROOT / "README.md")
-    assert f"Version {__version__} is prepared" in text
+    assert f"Version {__version__} was published on GitHub on 2026-11-13" in text
+    assert f"/releases/tag/v{__version__})" in text
     assert "(docs/manual-test-script.pt-BR.md)" in text
+    assert "still pending" in text
+    assert "unsigned" in text
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_install_guides_state_the_version_as_prepared_and_not_published(language: str) -> None:
+def test_install_guides_state_the_version_as_published_with_the_test_pending(
+    language: str,
+) -> None:
     text = _read(DOCS / f"install.{language}.md")
     assert f"`{__version__}`" in text
     assert "smoke-test.pt-BR.md" in text
+    assert "manual-test-script.pt-BR.md" in text
+    assert "2026-11-13" in text
+    assert f"/releases/tag/v{__version__})" in text
 
 
 def test_the_architecture_document_states_the_version() -> None:
@@ -216,16 +224,25 @@ def test_the_changelog_has_an_entry_for_the_current_version() -> None:
     assert entry.startswith(f"## [{__version__}]")
 
 
-def test_the_changelog_entry_says_that_nothing_was_published() -> None:
+def test_the_changelog_entry_states_its_publication_status() -> None:
     entry = _entry(__version__)
     heading = entry.splitlines()[0]
-    # The entry is dated by the person who publishes the draft, never before.
-    assert "unreleased" in heading.lower() or re.search(r"\d{4}-\d{2}-\d{2}", heading)
     text = _one_line(entry)
-    if "unreleased" in heading.lower():
+    dated = re.fullmatch(rf"## \[{re.escape(__version__)}\] - (\d{{4}}-\d{{2}}-\d{{2}})", heading)
+    if dated is None:
+        # Not published: the heading says so, and the entry says what has not happened.
+        assert heading == f"## [{__version__}] - unreleased"
         assert "no tag" in text
         assert "has never run" in text
         assert "has not been executed yet" in text
+    else:
+        # Dated by the person who publishes, never before: the entry states the publication, links
+        # the release and says whether the manual test was executed (it may come after the date).
+        date = dated.group(1)
+        assert f"was published on github on {date}" in text
+        assert f"releases/tag/v{__version__}" in text
+        assert "status of this entry: published" in text
+        assert "not been executed yet" in text or "was executed on" in text
 
 
 def test_the_changelog_lists_exactly_the_flagged_placeholders() -> None:
@@ -349,7 +366,7 @@ def test_the_unfinished_count_stated_equals_the_count_found() -> None:
     "needle",
     [
         "unsigned",
-        "draft",
+        "published on 2026-11-13",
         "visual c++ runtime",
         "unc",
         "branch protection",

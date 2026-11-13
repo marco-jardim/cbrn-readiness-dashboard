@@ -10,17 +10,21 @@ reales: vea [data-protection.md](data-protection.md) (en inglés).
 
 ## 1. Estado de esta guía
 
-La versión del árbol de código es `1.0.1`. Está **preparada** en el repositorio (con registro de
-cambios y guion de prueba manual), pero no se ha marcado ninguna etiqueta (tag); por tanto,
-**todavía no se ha publicado ninguna versión y hoy no hay ningún archivo que descargar**. El flujo
-de publicación (`.github/workflows/release.yml`) solo se ejecuta cuando se envía una etiqueta
-`vX.Y.Z`, construye el paquete y crea una versión en *borrador* (marcada como prelanzamiento
-mientras la versión sea inferior a 1.0.0). El flujo nunca se ha ejecutado para la 1.0.1 (el borrador de la 1.0.0 nunca se publicó y fue retirado). Una persona publica el
-borrador tras la prueba manual ([smoke-test.pt-BR.md](smoke-test.pt-BR.md), en portugués); hasta
-entonces esta guía sigue siendo cierta: no hay ninguna versión publicada.
+La versión del árbol de código es `1.0.1`. Se **publicó** en GitHub el 2026-11-13 con la etiqueta
+`v1.0.1`: [página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1).
+El flujo de publicación (`.github/workflows/release.yml`) solo se ejecuta cuando se envía una
+etiqueta `vX.Y.Z`, construye el paquete y crea una versión en *borrador* que una persona publica
+(la 1.0.0 se construyó igual, pero su borrador nunca se publicó y fue retirado). El propietario
+publicó la 1.0.1 antes de la prueba manual en un perfil limpio de Windows
+([smoke-test.pt-BR.md](smoke-test.pt-BR.md) y
+[manual-test-script.pt-BR.md](manual-test-script.pt-BR.md), en portugués), que **sigue
+pendiente**; su resultado se registrará en el registro de cambios. En el zip publicado, el SHA-256
+coincidió con `SHA256SUMS.txt`, `gh attestation verify` fue aprobado y la autoprueba del
+ejecutable empaquetado fue aprobada.
 
-Todo lo que sigue sobre la descarga describe lo que ese flujo y los scripts de `scripts/` están
-escritos para producir. Nada de ello se ha probado con una versión publicada.
+Todo lo que sigue sobre la descarga describe los archivos de esa página y los scripts de
+`scripts/` que los producen. Ninguna persona ha probado todavía el programa en un perfil limpio de
+Windows.
 
 Para probar el programa hoy, ejecútelo desde una copia del código fuente (requiere
 [uv](https://docs.astral.sh/uv/)):
@@ -41,7 +45,7 @@ uv run cbrn-dashboard --demo
 
 ## 3. Descarga
 
-La página de versiones de `https://github.com/marco-jardim/cbrn-readiness-dashboard` llevará tres
+La página de versiones de `https://github.com/marco-jardim/cbrn-readiness-dashboard` lleva tres
 archivos por versión:
 
 | Archivo | Contenido |
@@ -239,8 +243,9 @@ Para crear una, elija **Archivo > Hacer copia de seguridad...** en la ventana pr
 dónde guardar el archivo y escriba la contraseña dos veces. Para restaurar, elija **Archivo >
 Restaurar...**, elija el archivo `.cbrnbak`, confirme que se sustituirán todos los datos actuales
 y escriba la contraseña. Restaurar no está disponible en el modo de solo lectura; la copia de
-seguridad sí. **Archivo > Abrir carpeta de datos** muestra la carpeta de datos local. Ninguna
-versión publicada contiene todavía estas entradas (sección 1).
+seguridad sí. **Archivo > Abrir carpeta de datos** muestra la carpeta de datos local. La
+versión 1.0.1 contiene estas entradas (sección 1); una persona todavía no las ha probado en un
+perfil limpio.
 
 ## 12. Actualizaciones
 
@@ -264,7 +269,8 @@ Las copias cifradas guardadas en otros medios no se ven afectadas en ninguno de 
 
 ## 14. Límites conocidos
 
-- Todavía no existe ninguna versión publicada (sección 1). El ejecutable no está firmado.
+- La versión 1.0.1 está publicada, pero su prueba manual en un perfil limpio sigue pendiente
+  (sección 1). El ejecutable no está firmado.
 - Una base de datos de solo lectura en una ruta UNC (`\\servidor\recurso\...`) nunca se probó en un
   recurso compartido de red real. La forma en que el programa construye la dirección de solo
   lectura para esa ruta solo está cubierta por una prueba con una ruta inventada.
