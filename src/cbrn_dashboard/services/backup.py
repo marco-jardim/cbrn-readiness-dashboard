@@ -78,6 +78,7 @@ from cbrn_dashboard.storage.repository import WriteContext
 from cbrn_dashboard.storage.settings_repo import get_value, load_config, set_value
 
 __all__ = [
+    "BACKUP_TARGET_EXISTS",
     "BACKUP_VERIFY_FAILED",
     "BACKUP_WRITE_FAILED",
     "LAST_ENCRYPTED_KEY",
@@ -89,6 +90,7 @@ __all__ = [
     "BackupService",
     "EncryptedBackupResult",
     "StartupContext",
+    "backup_target",
     "check_passphrase",
     "daily_backup_hook",
     "daily_backup_startup",
@@ -111,6 +113,10 @@ PASSPHRASE_BLOCKLISTED = "PASSPHRASE_BLOCKLISTED"
 BACKUP_VERIFY_FAILED = "BACKUP_VERIFY_FAILED"
 #: The encrypted file could not be written.
 BACKUP_WRITE_FAILED = "BACKUP_WRITE_FAILED"
+#: ``.cbrnbak`` was appended to the chosen name and a file of that name exists (not confirmed).
+BACKUP_TARGET_EXISTS = "BACKUP_TARGET_EXISTS"
+#: Name suffix of the verified-before-use copy; the chosen file is replaced only afterwards.
+_STAGING_SUFFIX = ".new"
 
 #: A passphrase needs at least this many different characters.
 MIN_DISTINCT_CHARACTERS = 6
@@ -185,6 +191,13 @@ def check_passphrase(passphrase: str, confirmation: str | None, *, min_length: i
         raise ServiceError(PASSPHRASE_TOO_FEW_DISTINCT)
     if _blocklist_forms(normalised) & _BLOCKLIST:
         raise ServiceError(PASSPHRASE_BLOCKLISTED)
+
+
+def backup_target(dest: Path) -> Path:
+    """The file an encrypted backup chosen as ``dest`` is written to: ``.cbrnbak`` is appended."""
+    if dest.name.lower().endswith(FILE_EXTENSION):
+        return dest
+    return dest.with_name(dest.name + FILE_EXTENSION)
 
 
 @dataclass(frozen=True)
@@ -311,28 +324,32 @@ class BackupService:
         confirmation: str | None = None,
         *,
         params: ScryptParams = DEFAULT_PARAMS,
+        replace_extended: bool = False,
     ) -> EncryptedBackupResult:
         """Write an encrypted ``.cbrnbak`` copy of the database to ``dest`` (D04).
 
         The passphrase is checked first (:func:`check_passphrase` with the stored P05); a refusal
-        writes nothing. The extension ``.cbrnbak`` is appended to ``dest`` when it is missing. The
-        snapshot is taken in memory, so this works on a read-only connection and writes nothing to
-        the data folder. The written file is read back with the same passphrase and compared with
-        the snapshot; a file that does not read back is deleted and reported as
-        ``BACKUP_VERIFY_FAILED``, a file that cannot be written as ``BACKUP_WRITE_FAILED``. Only
-        after that the time is recorded for the reminder, and only on a writable connection.
-        ``params`` are the scrypt parameters of the new file (tests pass a cheap set).
+        writes nothing. The extension ``.cbrnbak`` is appended to ``dest`` when it is missing
+        (:func:`backup_target`); because the save dialog never saw that final name, an existing
+        file of that name is refused (``BACKUP_TARGET_EXISTS``) unless ``replace_extended`` says
+        the user agreed. The snapshot is taken in memory, so this works on a read-only connection
+        and writes nothing to the data folder. The copy is written beside the target under a
+        staging name and read back with the same passphrase, then compared with the snapshot;
+        only a verified copy replaces the target, so a copy that does not read back (deleted,
+        ``BACKUP_VERIFY_FAILED``) or cannot be written (``BACKUP_WRITE_FAILED``) leaves a previous
+        backup of that name as it was. Only after that the time is recorded for the reminder, and
+        only on a writable connection. ``params`` are the scrypt parameters of the new file (tests
+        pass a cheap set).
         """
         check_passphrase(passphrase, confirmation, min_length=self._config().min_passphrase_length)
-        target = (
-            dest
-            if dest.name.lower().endswith(FILE_EXTENSION)
-            else dest.with_name(dest.name + FILE_EXTENSION)
-        )
+        target = backup_target(dest)
+        if target != dest and not replace_extended and (target.exists() or target.is_symlink()):
+            raise ServiceError(BACKUP_TARGET_EXISTS)
+        staging = target.with_name(target.name + _STAGING_SUFFIX)
         try:
             snapshot, schema_version = database_snapshot_bytes(self._conn)
             write_backup(
-                target,
+                staging,
                 snapshot,
                 passphrase,
                 app_version=__version__,
@@ -340,16 +357,27 @@ class BackupService:
                 params=params,
             )
         except (OSError, sqlite3.Error, DatabaseError) as exc:
+            self._discard(staging)
             log_event("BACKUP.ENCRYPTED_FAILED", level=logging.WARNING)
             raise ServiceError(BACKUP_WRITE_FAILED) from exc
-        if not self._reads_back(target, snapshot, passphrase, params):
-            with contextlib.suppress(OSError):
-                target.unlink(missing_ok=True)
+        if not self._reads_back(staging, snapshot, passphrase, params):
+            self._discard(staging)
             log_event("BACKUP.ENCRYPTED_FAILED", level=logging.WARNING)
             raise ServiceError(BACKUP_VERIFY_FAILED)
+        try:
+            staging.replace(target)  # only now is a previous backup of that name given up
+        except OSError as exc:
+            self._discard(staging)
+            log_event("BACKUP.ENCRYPTED_FAILED", level=logging.WARNING)
+            raise ServiceError(BACKUP_WRITE_FAILED) from exc
         self._record_encrypted_backup()
         log_event("BACKUP.ENCRYPTED_DONE")
         return EncryptedBackupResult(path=target, schema_version=schema_version)
+
+    @staticmethod
+    def _discard(path: Path) -> None:
+        with contextlib.suppress(OSError):
+            path.unlink(missing_ok=True)
 
     @staticmethod
     def _reads_back(target: Path, snapshot: bytes, passphrase: str, params: ScryptParams) -> bool:
@@ -436,15 +464,22 @@ class StartupContext(Protocol):
     @property
     def clock_suspect(self) -> bool: ...
 
+    @property
+    def is_demo(self) -> bool: ...
+
 
 def daily_backup_startup(context: StartupContext) -> None:
-    """``StartupHook.run`` callable: the daily backup of the real database in the data folder."""
+    """``StartupHook.run`` callable: the daily backup of the open database in the data folder.
+
+    The identity (real or demo, hence the backup folder) comes from ``context.is_demo``; the
+    registration in ``app.py`` does not run this hook for a demo database anyway.
+    """
     if context.conn is None:
         return
     daily_backup_hook(
         context.conn,
         context.clock,
         data_dir=context.location.path,
-        identity=DatabaseIdentity.REAL,
+        identity=DatabaseIdentity.DEMO if context.is_demo else DatabaseIdentity.REAL,
         clock_suspect=context.clock_suspect,
     )

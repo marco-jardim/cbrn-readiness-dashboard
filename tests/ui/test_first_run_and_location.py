@@ -21,7 +21,7 @@ from pytestqt.qtbot import QtBot
 from cbrn_dashboard import app as app_module
 from cbrn_dashboard.app import AppHandle, StartupHook, start
 from cbrn_dashboard.cli import CliOptions
-from cbrn_dashboard.clock import FixedClock
+from cbrn_dashboard.clock import Clock, FixedClock
 from cbrn_dashboard.paths import (
     APP_DIR_NAME,
     DATABASE_FILE_NAME,
@@ -34,10 +34,21 @@ from cbrn_dashboard.paths import (
     write_location_pointer,
 )
 from cbrn_dashboard.prefs import PREFS_FILE_NAME, PreferencesStore
-from cbrn_dashboard.services.backup import LAST_ENCRYPTED_KEY
-from cbrn_dashboard.storage.db import open_database
+from cbrn_dashboard.services.backup import LAST_ENCRYPTED_KEY, BackupService
+from cbrn_dashboard.storage import repository
+from cbrn_dashboard.storage.backup import (
+    BackupKind,
+    DatabaseIdentity,
+    create_backup,
+    list_backups,
+)
+from cbrn_dashboard.storage.db import DatabaseConnection, open_database
+from cbrn_dashboard.storage.migrate import load_migrations, migrate
 from cbrn_dashboard.storage.repository import WriteContext
 from cbrn_dashboard.storage.settings_repo import set_value
+from cbrn_dashboard.ui.backup.page import BackupSettingsSection
+from cbrn_dashboard.ui.shell import first_run
+from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.first_run import refresh_backup_reminder
 from tests.ui._fakes import FakePrompts, create_database, expect_handle, snapshot
 from tests.ui._walk import CLOSE_MARK, OPEN_MARK
@@ -56,6 +67,10 @@ OFFER_TEXT = (
     "profile for the next start."
 )
 CHOOSE_TITLE = "Choose the data folder"
+SESSION_ONLY_OFFER_TEXT = (
+    "Do you want to choose another folder for the data? The folder was set by --data-dir or by "
+    "an environment variable, so the choice is used for this session only."
+)
 UNUSABLE_CHOICE_TEXT = "The chosen folder is not writable and has no database. Choose another one."
 NOT_REMEMBERED_TEXT = "The choice could not be remembered, so it is used for this session only."
 NETWORK_TEXT = "The data folder is on a network share, where database locking is unreliable."
@@ -119,6 +134,12 @@ def _pointer_file(profile_root: Path) -> Path:
     return profile_root / APP_DIR_NAME / POINTER_FILE_NAME
 
 
+def _unusable(folder: Path, source: LocationSource = LocationSource.DEFAULT) -> DataLocation:
+    """An unwritable location that came from ``source`` (``launch`` defaults to ``--data-dir``)."""
+    folder.mkdir(parents=True, exist_ok=True)
+    return DataLocation(path=folder, source=source, writable=False)
+
+
 def _banners(handle: AppHandle) -> tuple[str, ...]:
     return handle.window.banners.visible_codes()
 
@@ -172,7 +193,9 @@ def test_an_unusable_folder_offers_a_choice_and_remembers_it(
     fake_prompts.script("confirm", True)
     fake_prompts.script("choose_folder", chosen)
 
-    handle = expect_handle(launch(locked, writable=False, prompts=fake_prompts, hooks=()))
+    handle = expect_handle(
+        launch(locked, location=_unusable(locked), prompts=fake_prompts, hooks=())
+    )
 
     [explanation] = fake_prompts.calls_of("error")
     assert explanation.title == "Cannot start"
@@ -233,7 +256,9 @@ def test_an_unusable_choice_is_refused_and_the_user_may_choose_again(
     fake_prompts.script("confirm", True, True)
     fake_prompts.script("choose_folder", a_file, good)
 
-    handle = expect_handle(launch(locked, writable=False, prompts=fake_prompts, hooks=()))
+    handle = expect_handle(
+        launch(locked, location=_unusable(locked), prompts=fake_prompts, hooks=())
+    )
 
     first, second = fake_prompts.calls_of("error")
     assert first.text == NO_DATABASE_TEXT
@@ -253,8 +278,9 @@ def test_a_choice_that_cannot_be_remembered_is_used_for_the_session_only(
     fake_prompts.script("confirm", True)
     fake_prompts.script("choose_folder", chosen)
 
+    locked = tmp_path / "locked"
     handle = expect_handle(
-        launch(tmp_path / "locked", writable=False, prompts=fake_prompts, hooks=(), environ={})
+        launch(locked, location=_unusable(locked), prompts=fake_prompts, hooks=(), environ={})
     )
 
     [warning] = fake_prompts.calls_of("warning")
@@ -262,6 +288,63 @@ def test_a_choice_that_cannot_be_remembered_is_used_for_the_session_only(
     assert warning.text == NOT_REMEMBERED_TEXT
     assert handle.context.location.path == chosen
     assert not profile_root.exists()
+
+
+@pytest.mark.parametrize("source", [LocationSource.CLI, LocationSource.ENV])
+def test_a_folder_set_by_an_option_is_replaced_for_the_session_only(
+    launch: Launcher,
+    tmp_path: Path,
+    profile_root: Path,
+    fake_prompts: FakePrompts,
+    source: LocationSource,
+) -> None:
+    # --data-dir and the environment variable rank above the pointer (D02): a pointer written now
+    # would be ignored by the next run with the same option and silently followed by a later one.
+    locked = tmp_path / "locked"
+    chosen = tmp_path / "chosen"
+    fake_prompts.script("confirm", True)
+    fake_prompts.script("choose_folder", chosen)
+
+    handle = expect_handle(
+        launch(locked, location=_unusable(locked, source), prompts=fake_prompts, hooks=())
+    )
+
+    [offer] = fake_prompts.calls_of("confirm")
+    assert offer.text == SESSION_ONLY_OFFER_TEXT
+    assert fake_prompts.calls_of("warning") == []
+    assert handle.context.location.path == chosen
+    assert handle.context.location.source is source
+    assert not _pointer_file(profile_root).exists()
+    assert not profile_root.exists()
+    handle.close()
+    again = resolve_data_location(
+        environ={"LOCALAPPDATA": str(profile_root)}, frozen=False, executable=tmp_path / "x.exe"
+    )
+    assert again.source is LocationSource.DEFAULT  # a plain start does not move to the choice
+    assert again.path != chosen
+
+
+@pytest.mark.parametrize("source", [LocationSource.PORTABLE, LocationSource.POINTER])
+def test_an_unusable_portable_or_pointer_folder_is_replaced_through_the_pointer(
+    launch: Launcher,
+    tmp_path: Path,
+    profile_root: Path,
+    fake_prompts: FakePrompts,
+    source: LocationSource,
+) -> None:
+    locked = tmp_path / "locked"
+    chosen = tmp_path / "chosen"
+    fake_prompts.script("confirm", True)
+    fake_prompts.script("choose_folder", chosen)
+
+    location = _unusable(locked, source)
+    expect_handle(launch(locked, location=location, prompts=fake_prompts, hooks=()))
+
+    [offer] = fake_prompts.calls_of("confirm")
+    assert offer.text == OFFER_TEXT
+    assert json.loads(_pointer_file(profile_root).read_text(encoding="utf-8")) == {
+        "data_dir": str(chosen)
+    }
 
 
 def test_the_demo_case_of_an_unusable_folder_is_only_explained(
@@ -362,6 +445,59 @@ def test_a_new_backup_hides_the_reminder(
 
     assert not handle.context.backup_reminder_due
     assert "BACKUP_REMINDER" not in _banners(handle)
+
+
+def test_the_reminder_follows_data_changed_without_a_direct_refresh(
+    launch: Launcher, tmp_path: Path, fake_prompts: FakePrompts
+) -> None:
+    handle = expect_handle(launch(tmp_path, prompts=fake_prompts))
+    assert "BACKUP_REMINDER" in _banners(handle)
+    conn = handle.context.conn
+    assert conn is not None
+    set_value(WriteContext(conn, FixedClock.at(NOW), ""), LAST_ENCRYPTED_KEY, NOW)
+
+    handle.context.notify_data_changed()
+
+    assert not handle.context.backup_reminder_due
+    assert "BACKUP_REMINDER" not in _banners(handle)
+
+
+def test_a_change_of_p09_in_the_backup_section_updates_the_banner(
+    launch: Launcher, tmp_path: Path, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    create_database(tmp_path)
+    _record_backup(tmp_path / DATABASE_FILE_NAME, "2026-02-23T12:00:00Z")  # 10 days before NOW
+    handle = expect_handle(launch(tmp_path, prompts=fake_prompts))
+    assert "BACKUP_REMINDER" not in _banners(handle)  # P09 is 30 days
+    section = BackupSettingsSection(handle.context)
+    qtbot.addWidget(section)
+
+    section.reminder_row.spin.setValue(5)
+    section.save_action.trigger()
+
+    assert handle.context.backup_reminder_due
+    assert "BACKUP_REMINDER" in _banners(handle)
+
+
+@pytest.mark.parametrize("demo", [False, True])
+def test_the_reminder_reads_the_identity_from_the_context(
+    app_context: AppContext, monkeypatch: pytest.MonkeyPatch, demo: bool
+) -> None:
+    seen: list[DatabaseIdentity] = []
+    real = first_run.BackupService
+
+    def spy(
+        conn: DatabaseConnection, clock: Clock, *, data_dir: Path, identity: DatabaseIdentity
+    ) -> BackupService:
+        seen.append(identity)
+        return real(conn, clock, data_dir=data_dir, identity=identity)
+
+    monkeypatch.setattr(first_run, "BackupService", spy)
+    app_context.is_demo = demo
+
+    refresh_backup_reminder(app_context)
+
+    assert seen == [DatabaseIdentity.DEMO if demo else DatabaseIdentity.REAL]
 
 
 def test_the_reminder_is_shown_read_only_and_writes_nothing(
@@ -483,6 +619,59 @@ def test_the_notice_and_the_reminder_follow_the_pseudo_locale(
     reminder = handle.window.banners.text("BACKUP_REMINDER")
     assert reminder.startswith(OPEN_MARK)
     assert reminder.endswith(CLOSE_MARK)
+
+
+# --------------------------------------------------------------------------- pre-migration copy
+
+
+@pytest.mark.parametrize(
+    ("clock_text", "kept"),
+    [
+        ("2026-03-05T12:00:00Z", 4),  # earlier than the newest change record: no rotation
+        ("2026-04-02T12:00:00Z", 3),  # a plausible clock: the pool keeps the last three
+    ],
+)
+def test_the_pre_migration_copy_uses_the_injected_clock_and_a_suspect_clock_skips_rotation(
+    tmp_path: Path, clock_text: str, kept: int
+) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+    path = data / DATABASE_FILE_NAME
+    conn = open_database(path)
+    try:
+        migrate(conn, migrations=load_migrations()[:-1])  # one step behind: a migration is due
+        repository.log_event(
+            WriteContext(conn, FixedClock.at("2026-04-01T12:00:00Z"), ""),
+            "database",
+            "restore",
+            after={},
+        )
+        for day in (1, 2, 3):
+            create_backup(
+                conn,
+                data_dir=data,
+                identity=DatabaseIdentity.REAL,
+                kind=BackupKind.PRE_MIGRATION,
+                clock=FixedClock.at(f"2026-03-0{day}T12:00:00Z"),
+            )
+    finally:
+        conn.close()
+    clock = FixedClock.at(clock_text)
+    location = DataLocation(path=data, source=LocationSource.DEFAULT, writable=True)
+
+    opened = app_module._open_database(
+        CliOptions(data_dir=str(data)),
+        location,
+        clock,
+        path,
+        app_module._Mode.READ_WRITE,
+        lambda: None,  # no build time: only the change log decides
+    )
+    opened.close()
+
+    pool = list_backups(data, DatabaseIdentity.REAL, BackupKind.PRE_MIGRATION)
+    assert len(pool) == kept
+    assert pool[0].created_utc == clock.utc_now()  # named by the injected clock, not the system's
 
 
 # --------------------------------------------------------------------------- the guide

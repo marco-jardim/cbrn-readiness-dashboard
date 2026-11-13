@@ -38,6 +38,7 @@
     </message>
     <message>
         <source>Save settings</source>
+        <extracomment>The three values as last loaded into the spin boxes (``None`` before the first load). The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation type="unfinished">Guardar configuración</translation>
     </message>
     <message>
@@ -129,8 +130,16 @@
         <translation type="unfinished">No se pudo hacer una copia de seguridad de los datos actuales, así que no se restauró nada.</translation>
     </message>
     <message>
+        <source>The current data could not be read, so nothing was restored.</source>
+        <translation type="unfinished">No se pudieron leer los datos actuales, así que no se restauró nada.</translation>
+    </message>
+    <message>
         <source>The restore failed while copying. The previous data was put back.</source>
         <translation type="unfinished">La restauración falló al copiar. Se recuperaron los datos anteriores.</translation>
+    </message>
+    <message>
+        <source>The restore failed while copying and the previous data could NOT be put back. The data may be damaged. Close the program and recover the data from the safety copy %1, which is beside the database in the data folder.</source>
+        <translation type="unfinished">La restauración falló al copiar y los datos anteriores NO se pudieron recuperar. Los datos pueden estar dañados. Cierre el programa y recupere los datos desde la copia de seguridad %1, que está junto a la base de datos en la carpeta de datos.</translation>
     </message>
     <message>
         <source>The data is read-only: nothing was changed.</source>
@@ -159,6 +168,10 @@
     <message>
         <source>The backup file was written but could not be read back, so it was deleted.</source>
         <translation type="unfinished">El archivo de copia se escribió pero no se pudo leer de nuevo, por lo que se eliminó.</translation>
+    </message>
+    <message>
+        <source>A backup file with that name already exists. Choose another name.</source>
+        <translation type="unfinished">Ya existe un archivo de copia con ese nombre. Elija otro nombre.</translation>
     </message>
     <message>
         <source>The number of daily backups is below the allowed minimum.</source>
@@ -214,8 +227,12 @@
         <translation type="unfinished">La ubicación elegida está dentro de la carpeta de datos.</translation>
     </message>
     <message>
-        <source>Prefer removable media kept in a safe place. Continue anyway?</source>
-        <translation type="unfinished">Es preferible usar un medio extraíble guardado en un lugar seguro. ¿Continuar de todos modos?</translation>
+        <source>%1 Prefer removable media kept in a safe place. Continue anyway?</source>
+        <translation type="unfinished">%1 Es preferible usar un medio extraíble guardado en un lugar seguro. ¿Continuar de todos modos?</translation>
+    </message>
+    <message>
+        <source>The file %1 already exists. Replace it?</source>
+        <translation type="unfinished">El archivo %1 ya existe. ¿Reemplazarlo?</translation>
     </message>
     <message>
         <source>Encrypted backup (*.cbrnbak)</source>
@@ -226,24 +243,20 @@
         <translation type="unfinished">La copia de seguridad cifrada se escribió en %1.</translation>
     </message>
     <message>
-        <source>Keep another copy on separate media, away from this computer.</source>
-        <translation type="unfinished">Guarde otra copia en un medio aparte, lejos de este equipo.</translation>
+        <source>The encrypted backup was written to %1. Keep another copy on separate media, away from this computer.</source>
+        <translation type="unfinished">La copia de seguridad cifrada se escribió en %1. Guarde otra copia en un medio aparte, lejos de este equipo.</translation>
     </message>
     <message>
-        <source>Restoring replaces ALL the data now in the application with %1.</source>
-        <translation type="unfinished">La restauración reemplaza TODOS los datos actuales de la aplicación por %1.</translation>
-    </message>
-    <message>
-        <source>A safety copy of the current data is kept first. Continue?</source>
-        <translation type="unfinished">Antes se conserva una copia de seguridad de los datos actuales. ¿Continuar?</translation>
+        <source>Restoring replaces ALL the data now in the application with %1. A safety copy of the current data is kept first. Continue?</source>
+        <translation type="unfinished">La restauración reemplaza TODOS los datos actuales de la aplicación por %1. Antes se conserva una copia de seguridad de los datos actuales. ¿Continuar?</translation>
     </message>
     <message>
         <source>The backup was restored. The previous data was kept as %1.</source>
         <translation type="unfinished">La copia se restauró. Los datos anteriores se conservaron como %1.</translation>
     </message>
     <message>
-        <source>The backup was upgraded from schema version %1 to %2.</source>
-        <translation type="unfinished">La copia se actualizó de la versión de esquema %1 a la %2.</translation>
+        <source>The backup was restored. The previous data was kept as %1. The backup was upgraded from schema version %2 to %3.</source>
+        <translation type="unfinished">La copia se restauró. Los datos anteriores se conservaron como %1. La copia se actualizó de la versión de esquema %2 a la %3.</translation>
     </message>
 </context>
 </TS>

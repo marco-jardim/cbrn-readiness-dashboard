@@ -170,12 +170,24 @@
         <translation type="unfinished">La carpeta de datos no se puede escribir, por lo que no se puede crear la base de datos de demostración.</translation>
     </message>
     <message>
+        <source>Demo data from another day</source>
+        <translation type="unfinished">Datos de demostración de otro día</translation>
+    </message>
+    <message>
+        <source>The demo data was created on %1 and today is %2. Its dates were fitted to the day it was created, so the situations it shows are those of that day. Do you want to create the demo data again for today? Any change you made to the demo data will be lost. Your real data is not touched.</source>
+        <translation type="unfinished">Los datos de demostración se crearon el %1 y hoy es %2. Las fechas se ajustaron al día de la creación, por lo que las situaciones que muestran son las de ese día. ¿Desea crear de nuevo los datos de demostración para hoy? Se perderá cualquier cambio que haya hecho en ellos. Sus datos reales no se modifican.</translation>
+    </message>
+    <message>
         <source>Choose the data folder</source>
         <translation type="unfinished">Elegir la carpeta de datos</translation>
     </message>
     <message>
         <source>Do you want to choose another folder for the data? The choice is remembered in your user profile for the next start.</source>
         <translation type="unfinished">¿Desea elegir otra carpeta para los datos? La elección se recuerda en su perfil de usuario para el próximo inicio.</translation>
+    </message>
+    <message>
+        <source>Do you want to choose another folder for the data? The folder was set by --data-dir or by an environment variable, so the choice is used for this session only.</source>
+        <translation type="unfinished">¿Desea elegir otra carpeta para los datos? La carpeta se definió con --data-dir o con una variable de entorno, por lo que la elección se usa solo para esta sesión.</translation>
     </message>
     <message>
         <source>The chosen folder is not writable and has no database. Choose another one.</source>
@@ -246,8 +258,12 @@
         <translation type="unfinished">Se produjo un error inesperado. Código: %1</translation>
     </message>
     <message>
+        <source>%1 (not recorded: %2)</source>
+        <extracomment>Okabe-Ito colour-blind-safe palette; series take their colours from it in order (cycling). The property the pseudo-locale walker looks for: the widget&apos;s own texts are data. The property of a bar set that lists (comma separated) the positions of its missing values.</extracomment>
+        <translation type="unfinished">%1 (sin registrar: %2)</translation>
+    </message>
+    <message>
         <source>No data</source>
-        <extracomment>Okabe-Ito colour-blind-safe palette; series take their colours from it in order (cycling). The property the pseudo-locale walker looks for: the widget&apos;s own texts are data.</extracomment>
         <translation type="unfinished">Sin datos</translation>
     </message>
     <message>

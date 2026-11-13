@@ -27,7 +27,11 @@ the live database is put back from the safety copy taken first. The sequence is 
    is rotated to the last two;
 9. the validated temporary database is copied into the live one; on ANY failure from here to the
    change-log row, the live database is restored from the safety copy and ``RESTORE_COPY_FAILED``
-   is raised;
+   is raised. When that put-back itself fails (or the put-back copy fails its integrity check),
+   :class:`RollbackFailedError` (``RESTORE_ROLLBACK_FAILED``) is raised instead; it carries the
+   FILE NAME (never a path) of the safety copy, so the message can tell where the data is. While
+   the live database fails its own integrity check the before-restore pool is NOT rotated (step
+   8), so the good safety copy of an earlier attempt is never deleted by later attempts;
 10. ``PRAGMA integrity_check`` and ``user_version`` are checked on the live connection (the same
     handle keeps being used: the backup API copies INTO it);
 11. a ``restore`` row is written to ``change_log`` in the restored database, naming the safety
@@ -97,10 +101,12 @@ __all__ = [
     "DEMO_MISMATCH",
     "INTEGRITY_FAILED",
     "JOURNAL_PRESENT",
+    "LIVE_UNREADABLE",
     "MIGRATION_FAILED",
     "NOT_AN_APPLICATION_DATABASE",
     "OTHER_CONNECTIONS_OPEN",
     "RESTORE_COPY_FAILED",
+    "RESTORE_ROLLBACK_FAILED",
     "SAFETY_COPY_FAILED",
     "TEMP_FILE_FAILED",
     "TMP_DIR_NAME",
@@ -109,6 +115,7 @@ __all__ = [
     "CleanupContext",
     "RestoreResult",
     "RestoreService",
+    "RollbackFailedError",
     "clean_tmp",
     "tmp_cleanup_startup",
 ]
@@ -133,11 +140,23 @@ TRANSACTION_OPEN = "TRANSACTION_OPEN"
 JOURNAL_PRESENT = "JOURNAL_PRESENT"
 SAFETY_COPY_FAILED = "SAFETY_COPY_FAILED"
 RESTORE_COPY_FAILED = "RESTORE_COPY_FAILED"
+#: The current (live) database could not be read before anything was changed.
+LIVE_UNREADABLE = "LIVE_UNREADABLE"
+#: The copy failed AND the safety copy could not be put back: the live data may be damaged.
+RESTORE_ROLLBACK_FAILED = "RESTORE_ROLLBACK_FAILED"
 
 _TEMP_PREFIX = "restore-"
 _TEMP_SUFFIX = ".sqlite3"
 _JOURNAL_SUFFIX = "-journal"
 _KNOWN_FILE_CODES = frozenset({WRONG_PASSPHRASE, CORRUPT_BACKUP, BACKUP_TOO_NEW})
+
+
+class RollbackFailedError(ServiceError):
+    """``RESTORE_ROLLBACK_FAILED``; ``safety_copy_name`` is the file NAME (no path) of the copy."""
+
+    def __init__(self, safety_copy_name: str) -> None:
+        super().__init__(RESTORE_ROLLBACK_FAILED)
+        self.safety_copy_name = safety_copy_name
 
 
 @dataclass(frozen=True)
@@ -154,6 +173,10 @@ class RestoreResult:
 
 def _no_operator() -> str:
     return ""
+
+
+def _never_suspect() -> bool:
+    return False
 
 
 def _remove(path: Path) -> None:
@@ -198,7 +221,9 @@ class RestoreService:
 
     ``identity`` says whether the live database is the real or the demo one (it decides where the
     database file and its safety copies are); ``operator`` returns the optional operator label of
-    the ``change_log`` row.
+    the ``change_log`` row. ``clock_suspect`` says whether the clock sanity check failed for this
+    session: then the before-restore pool is not rotated (D04, T7.1), because the time in the name
+    of the new copy cannot be trusted to order it.
     """
 
     def __init__(
@@ -208,11 +233,13 @@ class RestoreService:
         identity: DatabaseIdentity,
         clock: Clock,
         operator: Callable[[], str] = _no_operator,
+        clock_suspect: Callable[[], bool] = _never_suspect,
     ) -> None:
         self._data_dir = data_dir
         self._identity = identity
         self._clock = clock
         self._operator = operator
+        self._clock_suspect = clock_suspect
 
     # ------------------------------------------------------------------ public
 
@@ -295,6 +322,8 @@ class RestoreService:
     def _write_temporary(self, content: bytes) -> Path:
         """Write the decrypted database to a new unique file in ``<data>/tmp/`` only."""
         folder = self._data_dir / TMP_DIR_NAME
+        if _is_link(folder):  # like ``clean_tmp``: plaintext must not leave the data folder
+            raise ServiceError(TEMP_FILE_FAILED)
         try:
             folder.mkdir(parents=True, exist_ok=True)
             handle_number, name = tempfile.mkstemp(
@@ -318,10 +347,19 @@ class RestoreService:
 
     @staticmethod
     def _open_temporary(path: Path) -> DatabaseConnection:
+        """Open the decrypted copy; SQLite's own temporary data stays in memory."""
         try:
-            return open_database(path)
+            conn = open_database(path)
         except (sqlite3.Error, DatabaseError) as exc:
             raise ServiceError(INTEGRITY_FAILED) from exc
+        try:
+            # Statement journals and sort spills of integrity_check or a migration would otherwise
+            # go to the OS temp folder: plaintext outside ``<data>/tmp/``. This connection only.
+            conn.execute("PRAGMA temp_store=MEMORY")
+        except (sqlite3.Error, DatabaseError) as exc:
+            conn.close()
+            raise ServiceError(INTEGRITY_FAILED) from exc
+        return conn
 
     @staticmethod
     def _safe_integrity(conn: sqlite3.Connection) -> bool:
@@ -340,7 +378,11 @@ class RestoreService:
             backup_is_demo = read_is_demo(temp_conn)
         except (sqlite3.Error, DatabaseError) as exc:
             raise ServiceError(INTEGRITY_FAILED) from exc
-        if backup_is_demo != read_is_demo(live):
+        try:
+            live_is_demo = read_is_demo(live)
+        except (sqlite3.Error, DatabaseError) as exc:
+            raise ServiceError(LIVE_UNREADABLE) from exc
+        if backup_is_demo != live_is_demo:
             raise ServiceError(DEMO_MISMATCH)
 
     @staticmethod
@@ -379,6 +421,10 @@ class RestoreService:
     # ------------------------------------------------------------------ step 8
 
     def _safety_copy(self, live: DatabaseConnection, live_path: Path) -> Path:
+        # Looked at BEFORE the copy is made, on the same state. A damaged live database (for
+        # example after a failed put-back) must not make this attempt push out the older, good
+        # safety copies: rotating would delete the only good one after two more attempts.
+        live_healthy = self._safe_integrity(live)
         try:
             result = create_backup(
                 live,
@@ -392,14 +438,19 @@ class RestoreService:
             raise ServiceError(SAFETY_COPY_FAILED) from exc
         if not result.verified:
             raise ServiceError(SAFETY_COPY_FAILED)
-        rotate(
-            self._data_dir,
-            self._identity,
-            BackupKind.BEFORE_RESTORE,
-            BEFORE_RESTORE_KEEP,
-            protect=result.path,
-            database=live_path,
-        )
+        if not live_healthy:
+            log_event("RESTORE.ROTATION_SKIPPED", level=logging.WARNING)
+        elif self._clock_suspect():
+            log_event("RESTORE.ROTATION_SKIPPED_CLOCK", level=logging.WARNING)
+        else:
+            rotate(
+                self._data_dir,
+                self._identity,
+                BackupKind.BEFORE_RESTORE,
+                BEFORE_RESTORE_KEEP,
+                protect=result.path,
+                database=live_path,
+            )
         return result.path
 
     # ------------------------------------------------------------------ steps 9 to 11
@@ -433,13 +484,18 @@ class RestoreService:
                 },
             )
         except Exception as exc:
-            self._put_back(live, safety)
+            if not self._put_back(live, safety):
+                raise RollbackFailedError(safety.name) from exc
             raise ServiceError(RESTORE_COPY_FAILED) from exc
         return version
 
     @staticmethod
-    def _put_back(live: DatabaseConnection, safety: Path) -> None:
-        """Copy the safety copy back into ``live`` (the same API); never raises."""
+    def _put_back(live: DatabaseConnection, safety: Path) -> bool:
+        """Copy the safety copy back into ``live`` (the same API); ``True`` if it checks out.
+
+        Never raises: a failure, or a put-back copy that fails ``integrity_check``, is logged and
+        reported as ``False``.
+        """
         try:
             if live.in_transaction:
                 live.execute("ROLLBACK")
@@ -450,8 +506,11 @@ class RestoreService:
                 source.close()
             if not _integrity_ok(live):
                 log_event("RESTORE.ROLLBACK_FAILED", level=logging.ERROR)
+                return False
         except Exception as exc:
             log_exception("RESTORE.ROLLBACK_FAILED", exc)
+            return False
+        return True
 
 
 # --------------------------------------------------------------------------- tmp clean-up

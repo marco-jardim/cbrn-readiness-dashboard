@@ -17,6 +17,7 @@ Every text goes through ``QCoreApplication.translate("Shell", ...)`` with a lite
 Log lines carry event codes only.
 """
 
+from functools import partial
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication
@@ -95,17 +96,28 @@ def first_run_startup(context: AppContext) -> None:
 def refresh_backup_reminder(context: AppContext) -> None:
     """Re-read the time of the last encrypted backup and update the reminder flag of ``context``.
 
-    The backup interface calls this after a successful backup, which hides the banner.
+    The backup interface calls this after a successful backup and after a restore, and the
+    start-up hook calls it on every ``data_changed`` (a change of the P09 setting, for one). The
+    identity (real or demo) comes from ``context.is_demo``; callers do not use this for a demo
+    database, which has no reminder.
     """
     conn = context.conn
     if conn is None:
         return
     service = BackupService(
-        conn, context.clock, data_dir=context.location.path, identity=DatabaseIdentity.REAL
+        conn,
+        context.clock,
+        data_dir=context.location.path,
+        identity=DatabaseIdentity.DEMO if context.is_demo else DatabaseIdentity.REAL,
     )
     context.set_backup_reminder(service.encrypted_backup_reminder_due())
 
 
 def backup_reminder_startup(context: AppContext) -> None:
-    """``StartupHook.run``: raise the reminder when the last encrypted backup is too old."""
+    """``StartupHook.run``: raise the reminder when the last encrypted backup is too old.
+
+    The reminder then follows ``data_changed``, so a new backup, a restore or another P09 value is
+    reflected without a restart.
+    """
     refresh_backup_reminder(context)
+    context.data_changed.connect(partial(refresh_backup_reminder, context))

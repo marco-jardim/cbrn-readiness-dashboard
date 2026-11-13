@@ -8,6 +8,7 @@ production ones are far too slow for tests); the prompts are the fake of ``tests
 import ast
 import inspect
 import logging
+import sqlite3
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -20,6 +21,7 @@ from pytestqt.qtbot import QtBot
 from cbrn_dashboard.prefs import PreferencesStore
 from cbrn_dashboard.services import backup as backup_service_module
 from cbrn_dashboard.services import restore as restore_module
+from cbrn_dashboard.services.backup import LAST_ENCRYPTED_KEY
 from cbrn_dashboard.services.config import ConfigService
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.backup import BackupInfo, BackupKind, DatabaseIdentity, list_backups
@@ -31,6 +33,8 @@ from cbrn_dashboard.storage.crypto_backup import (
 )
 from cbrn_dashboard.storage.db import DatabaseConnection, open_database
 from cbrn_dashboard.storage.migrate import open_and_migrate
+from cbrn_dashboard.storage.repository import WriteContext
+from cbrn_dashboard.storage.settings_repo import set_value
 from cbrn_dashboard.ui.backup.actions import BackupActions, DestinationChecks
 from cbrn_dashboard.ui.backup.dialogs import PassphraseDialog
 from cbrn_dashboard.ui.backup.labels import ALL_ERROR_CODES, error_label
@@ -47,6 +51,7 @@ from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from cbrn_dashboard.ui.shell.registry import DialogSpec, SettingsSectionSpec
 from tests.ui._fakes import FakePrompts, snapshot
 from tests.ui._walk import assert_fully_translated
+from tests.ui.conftest import NOW
 
 pytestmark = pytest.mark.ui
 
@@ -90,6 +95,13 @@ EXPECTED_ENGLISH: dict[str, str] = {
         "A safety copy of the current data could not be made, so nothing was restored."
     ),
     "RESTORE_COPY_FAILED": "The restore failed while copying. The previous data was put back.",
+    "RESTORE_ROLLBACK_FAILED": (
+        "The restore failed while copying and the previous data could NOT be put back. The data "
+        "may be damaged. Close the program and recover the data from the safety copy %1, which "
+        "is beside the database in the data folder."
+    ),
+    "LIVE_UNREADABLE": "The current data could not be read, so nothing was restored.",
+    "BACKUP_TARGET_EXISTS": "A backup file with that name already exists. Choose another name.",
     "READ_ONLY": "The data is read-only: nothing was changed.",
     "PASSPHRASE_MISMATCH": "The two passphrases are different.",
     "PASSPHRASE_TOO_SHORT": "The passphrase is too short.",
@@ -401,6 +413,52 @@ def test_a_network_or_cloud_place_or_the_data_folder_asks_before_going_on(
     assert not inside.exists()
 
 
+def test_a_successful_backup_updates_the_backup_reminder(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    actions: BackupActions,
+    anchor: QWidget,
+    tmp_path: Path,
+) -> None:
+    app_context.set_backup_reminder(True)  # as if the start-up hook had raised it
+    _back_up(actions, fake_prompts, anchor, _out(tmp_path) / "mine.cbrnbak")
+    assert not app_context.backup_reminder_due
+
+
+def test_an_existing_file_with_the_appended_extension_is_not_replaced_unasked(
+    fake_prompts: FakePrompts, actions: BackupActions, anchor: QWidget, tmp_path: Path
+) -> None:
+    existing = _out(tmp_path) / "plain.cbrnbak"
+    existing.write_bytes(b"a previous backup")
+    chosen = _out(tmp_path) / "plain"  # the save dialog never saw "plain.cbrnbak"
+    fake_prompts.script("save_file", chosen, chosen)
+    fake_prompts.script("confirm", False, True)
+
+    actions.back_up()  # declined
+    (question,) = fake_prompts.calls_of("confirm")
+    assert question.text == "The file plain.cbrnbak already exists. Replace it?"
+    assert _no_dialog(anchor)
+    assert existing.read_bytes() == b"a previous backup"
+
+    actions.back_up()  # accepted
+    dialog = _dialog(anchor)
+    _fill(dialog, PASSPHRASE)
+    dialog.accept()
+    assert read_backup(existing, PASSPHRASE, allowed_params=ALLOWED).database_bytes
+
+
+def test_a_path_that_reaches_the_data_folder_by_dots_counts_as_inside_it(
+    app_context: AppContext, fake_prompts: FakePrompts, actions: BackupActions, anchor: QWidget
+) -> None:
+    data = app_context.location.path
+    sneaky = data.parent / "elsewhere" / ".." / data.name / "inside.cbrnbak"
+    fake_prompts.script("save_file", sneaky)
+    actions.back_up()
+    (question,) = fake_prompts.calls_of("confirm")
+    assert "The chosen location is inside the data folder." in question.text
+    assert _no_dialog(anchor)
+
+
 def test_the_default_file_name_of_demo_data_starts_with_demo(
     app_context: AppContext, actions: BackupActions
 ) -> None:
@@ -589,6 +647,66 @@ def test_an_open_second_connection_stops_the_restore_with_its_message(
     finally:
         other.close()
     assert text == EXPECTED_ENGLISH["OTHER_CONNECTIONS_OPEN"]
+
+
+def test_a_failed_put_back_is_never_reported_as_put_back(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    actions: BackupActions,
+    anchor: QWidget,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _write_backup(_conn(app_context), _out(tmp_path) / "b.cbrnbak")
+    real_open = restore_module.open_database
+
+    def failing_copy(_source: sqlite3.Connection, _target: sqlite3.Connection) -> None:
+        msg = "injected failure"
+        raise sqlite3.OperationalError(msg)
+
+    def refuse_read_only(path: Path, *, read_only: bool = False) -> DatabaseConnection:
+        if read_only:
+            msg = "injected failure"
+            raise sqlite3.OperationalError(msg)
+        return real_open(path, read_only=read_only)
+
+    monkeypatch.setattr(restore_module, "_copy_into", failing_copy)
+    monkeypatch.setattr(restore_module, "open_database", refuse_read_only)
+    fake_prompts.script("open_file", source)
+    fake_prompts.script("confirm", True)
+    actions.restore()
+    dialog = _dialog(anchor)
+    _fill(dialog, PASSPHRASE)
+    dialog.accept()
+
+    (safety,) = _safety_copies(app_context)
+    (text,) = _warnings(fake_prompts)
+    assert text == EXPECTED_ENGLISH["RESTORE_ROLLBACK_FAILED"].replace("%1", safety.path.name)
+    assert "The previous data was put back." not in text
+    assert str(app_context.location.path) not in text  # the file name only
+    assert dialog.isVisible()
+
+
+def test_a_restore_updates_the_backup_reminder(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    actions: BackupActions,
+    anchor: QWidget,
+    tmp_path: Path,
+) -> None:
+    conn = _conn(app_context)
+    set_value(WriteContext(conn, app_context.clock, ""), LAST_ENCRYPTED_KEY, NOW)
+    source = _write_backup(conn, _out(tmp_path) / "b.cbrnbak")
+    app_context.set_backup_reminder(True)  # as if the start-up hook had raised it
+
+    fake_prompts.script("open_file", source)
+    fake_prompts.script("confirm", True)
+    actions.restore()
+    dialog = _dialog(anchor)
+    _fill(dialog, PASSPHRASE)
+    dialog.accept()
+
+    assert not app_context.backup_reminder_due  # the restored data holds a backup of today
 
 
 # --------------------------------------------------------------------------- read-only mode
@@ -783,13 +901,35 @@ def test_a_value_below_a_hard_floor_is_refused_with_the_message(
     section.save_action.trigger()
     assert _warnings(fake_prompts) == [EXPECTED_ENGLISH["PASSPHRASE_FLOOR"]]
     assert _config(app_context).load().min_passphrase_length == 12
-    assert section.passphrase_row.spin.value() == 12
+    assert section.passphrase_row.spin.value() == 5  # the typed value stays after a refusal
+    assert section.daily_row.spin.value() == 7
+    assert section.is_dirty()
 
     section.daily_row.spin.setValue(1)
     section.passphrase_row.spin.setValue(12)
     section.save_action.trigger()
     assert _warnings(fake_prompts)[-1] == EXPECTED_ENGLISH["BACKUP_FLOOR"]
     assert _config(app_context).load().daily_backups_kept == 7
+
+
+def test_unsaved_typing_survives_a_data_change_and_a_save_reloads(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    section = BackupSettingsSection(app_context)
+    qtbot.addWidget(section)
+    assert not section.is_dirty()
+    section.daily_row.spin.setValue(9)
+    assert section.is_dirty()
+
+    app_context.notify_data_changed()  # another page stored something
+
+    assert section.daily_row.spin.value() == 9
+    section.save_action.trigger()
+    assert _config(app_context).load().daily_backups_kept == 9
+    assert not section.is_dirty()
+    _config(app_context).save(_config(app_context).load().with_changes(daily_backups_kept=4))
+    app_context.notify_data_changed()  # nothing typed: the stored value is shown
+    assert section.daily_row.spin.value() == 4
 
 
 def test_the_placeholder_badges_and_confirm_buttons_follow_the_configuration(
@@ -814,6 +954,60 @@ def test_the_placeholder_badges_and_confirm_buttons_follow_the_configuration(
     assert section.passphrase_row.badge.isHidden()
     assert section.passphrase_row.confirm.isHidden()
     assert not section.daily_row.badge.isHidden()
+
+
+def _corrupt_setting(context: AppContext) -> None:
+    """A stored setting that no longer validates (what a restored older backup can leave)."""
+    _conn(context).execute(
+        "INSERT INTO setting (key, value_json) VALUES (?, ?)",
+        ("config.cert_warning_days", "not json"),
+    )
+
+
+def _repair_setting(context: AppContext) -> None:
+    _conn(context).execute("DELETE FROM setting WHERE key = ?", ("config.cert_warning_days",))
+
+
+def test_an_unreadable_setting_is_explained_and_the_inputs_wait_for_the_repair(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    section = BackupSettingsSection(app_context)
+    qtbot.addWidget(section)
+    inputs = [row.spin for row in (section.passphrase_row, section.daily_row, section.reminder_row)]
+    assert section.config_error_label.isHidden()
+    assert all(spin.isEnabled() for spin in inputs)
+
+    _corrupt_setting(app_context)
+    app_context.notify_data_changed()  # a raising slot would fail the test
+
+    assert not section.config_error_label.isHidden()
+    assert section.config_error_label.text() == "A stored setting cannot be read."
+    assert not any(spin.isEnabled() for spin in inputs)
+    assert not section.save_action.isEnabled()
+    for row in (section.passphrase_row, section.daily_row, section.reminder_row):
+        assert row.badge.isHidden()
+        assert row.confirm.isHidden()
+    assert fake_prompts.calls == []
+
+    _repair_setting(app_context)
+    app_context.notify_data_changed()
+
+    assert section.config_error_label.isHidden()
+    assert all(spin.isEnabled() for spin in inputs)
+    assert section.save_action.isEnabled()
+    assert not section.passphrase_row.badge.isHidden()
+
+
+def test_the_unreadable_setting_message_follows_a_language_switch(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    section = BackupSettingsSection(app_context)
+    qtbot.addWidget(section)
+    _corrupt_setting(app_context)
+    app_context.notify_data_changed()
+    app_context.translator_manager.set_language("pt_BR")
+    portuguese = "Uma configura\u00e7\u00e3o salva n\u00e3o pode ser lida."
+    qtbot.waitUntil(lambda: section.config_error_label.text() == portuguese)
 
 
 def test_the_section_shows_the_last_encrypted_backup(
@@ -931,6 +1125,22 @@ def test_the_section_with_a_recorded_backup_is_translated_in_the_pseudo_locale(
     assert_fully_translated(section)
 
 
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_unreadable_setting_message_is_translated_in_the_pseudo_locale(
+    pseudo_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    pseudo_context.translator_manager.set_language(lang)
+    section = BackupSettingsSection(pseudo_context)
+    qtbot.addWidget(section)
+    assert_fully_translated(section, lang)
+
+    _corrupt_setting(pseudo_context)
+    pseudo_context.notify_data_changed()
+    assert not section.config_error_label.isHidden()
+    assert section.config_error_label.text() != "A stored setting cannot be read."
+    assert_fully_translated(section, lang)
+
+
 def test_the_titles_are_translated(pseudo_context: AppContext) -> None:
     assert settings_section_title() == "\u27e6Backup and restore\u27e7"
 
@@ -992,6 +1202,8 @@ def test_all_error_codes_lists_every_code_of_the_restore_and_backup_services() -
         "JOURNAL_PRESENT",
         "SAFETY_COPY_FAILED",
         "RESTORE_COPY_FAILED",
+        "RESTORE_ROLLBACK_FAILED",
+        "LIVE_UNREADABLE",
     }
     backup_codes = _own_constants(backup_service_module)
     assert {"PASSPHRASE_MISMATCH", "BACKUP_WRITE_FAILED", "BACKUP_VERIFY_FAILED"} <= backup_codes

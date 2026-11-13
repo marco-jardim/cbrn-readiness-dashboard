@@ -170,12 +170,24 @@
         <translation type="unfinished">A pasta de dados não é gravável, portanto o banco de dados de demonstração não pode ser criado.</translation>
     </message>
     <message>
+        <source>Demo data from another day</source>
+        <translation type="unfinished">Dados de demonstração de outro dia</translation>
+    </message>
+    <message>
+        <source>The demo data was created on %1 and today is %2. Its dates were fitted to the day it was created, so the situations it shows are those of that day. Do you want to create the demo data again for today? Any change you made to the demo data will be lost. Your real data is not touched.</source>
+        <translation type="unfinished">Os dados de demonstração foram criados em %1 e hoje é %2. As datas foram ajustadas ao dia da criação, portanto as situações exibidas são as daquele dia. Deseja criar os dados de demonstração novamente para hoje? Qualquer alteração feita nos dados de demonstração será perdida. Seus dados reais não são alterados.</translation>
+    </message>
+    <message>
         <source>Choose the data folder</source>
         <translation type="unfinished">Escolher a pasta de dados</translation>
     </message>
     <message>
         <source>Do you want to choose another folder for the data? The choice is remembered in your user profile for the next start.</source>
         <translation type="unfinished">Deseja escolher outra pasta para os dados? A escolha é lembrada no seu perfil de usuário para a próxima inicialização.</translation>
+    </message>
+    <message>
+        <source>Do you want to choose another folder for the data? The folder was set by --data-dir or by an environment variable, so the choice is used for this session only.</source>
+        <translation type="unfinished">Deseja escolher outra pasta para os dados? A pasta foi definida por --data-dir ou por uma variável de ambiente, portanto a escolha vale apenas para esta sessão.</translation>
     </message>
     <message>
         <source>The chosen folder is not writable and has no database. Choose another one.</source>
@@ -246,8 +258,12 @@
         <translation type="unfinished">Ocorreu um erro inesperado. Código: %1</translation>
     </message>
     <message>
+        <source>%1 (not recorded: %2)</source>
+        <extracomment>Okabe-Ito colour-blind-safe palette; series take their colours from it in order (cycling). The property the pseudo-locale walker looks for: the widget&apos;s own texts are data. The property of a bar set that lists (comma separated) the positions of its missing values.</extracomment>
+        <translation type="unfinished">%1 (não registrado: %2)</translation>
+    </message>
+    <message>
         <source>No data</source>
-        <extracomment>Okabe-Ito colour-blind-safe palette; series take their colours from it in order (cycling). The property the pseudo-locale walker looks for: the widget&apos;s own texts are data.</extracomment>
         <translation type="unfinished">Sem dados</translation>
     </message>
     <message>

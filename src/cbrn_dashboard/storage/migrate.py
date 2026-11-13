@@ -416,11 +416,15 @@ def open_and_migrate(
     backup: bool = True,
     package: str | None = None,
     clock: Clock | None = None,
+    rotate_if: Callable[[DatabaseConnection], bool] | None = None,
 ) -> DatabaseConnection:
     """Open the database at ``path`` and migrate it, backing it up first when it is not empty.
 
     The connection is closed before any error propagates. ``package`` replaces the real migration
     package (for tests); ``clock`` stamps the pre-migration backup (default: the system clock).
+    ``rotate_if`` is asked, with the open connection and before the backup is made, whether the
+    pre-migration pool may be rotated (default: yes); the application answers no for a suspect
+    clock.
     """
     conn = open_database(path)
 
@@ -432,6 +436,7 @@ def open_and_migrate(
             from_version=from_version,
             enabled=backup,
             clock=clock,
+            rotate_pool=True if rotate_if is None else rotate_if(conn),
         )
 
     try:

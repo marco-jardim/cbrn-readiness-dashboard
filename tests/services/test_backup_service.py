@@ -13,6 +13,7 @@ from cbrn_dashboard import __version__
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.services import backup as backup_service
 from cbrn_dashboard.services.backup import (
+    BACKUP_TARGET_EXISTS,
     BACKUP_VERIFY_FAILED,
     BACKUP_WRITE_FAILED,
     LAST_ENCRYPTED_KEY,
@@ -548,6 +549,71 @@ def test_a_file_that_cannot_be_decrypted_is_deleted_and_not_recorded(
     assert caught.value.code == BACKUP_VERIFY_FAILED
     assert list(out_dir.iterdir()) == []
     assert service.last_encrypted_backup() is None
+
+
+def test_a_failed_read_back_keeps_the_previous_backup_of_that_name(
+    service: BackupService, out_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = out_dir / "keep.cbrnbak"
+    service.create_encrypted_backup(target, PASSPHRASE, params=CHEAP)
+    previous = target.read_bytes()
+
+    def broken(path: Path, passphrase: str, **kwargs: object) -> DecryptedBackup:
+        raise WrongPassphraseError
+
+    monkeypatch.setattr(backup_service, "read_backup", broken)
+    with pytest.raises(ServiceError) as caught:
+        service.create_encrypted_backup(target, PASSPHRASE, params=CHEAP)
+
+    assert caught.value.code == BACKUP_VERIFY_FAILED
+    assert target.read_bytes() == previous  # the new file was verified before it replaced anything
+    assert [path.name for path in out_dir.iterdir()] == ["keep.cbrnbak"]
+
+
+def test_a_failed_replacement_keeps_the_previous_backup_of_that_name(
+    service: BackupService, out_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = out_dir / "keep.cbrnbak"
+    service.create_encrypted_backup(target, PASSPHRASE, params=CHEAP)
+    previous = target.read_bytes()
+    real_replace = Path.replace
+
+    def refuse_the_last_step(self: Path, destination: Path) -> Path:
+        if destination == target:
+            raise OSError("destination is locked")
+        return real_replace(self, destination)
+
+    monkeypatch.setattr(Path, "replace", refuse_the_last_step)
+    with pytest.raises(ServiceError) as caught:
+        service.create_encrypted_backup(target, PASSPHRASE, params=CHEAP)
+
+    assert caught.value.code == BACKUP_WRITE_FAILED
+    assert target.read_bytes() == previous
+    assert [path.name for path in out_dir.iterdir()] == ["keep.cbrnbak"]
+
+
+def test_an_existing_file_with_the_appended_extension_is_refused_unless_confirmed(
+    service: BackupService, out_dir: Path
+) -> None:
+    existing = out_dir / "plain.cbrnbak"
+    existing.write_bytes(b"a previous backup")
+
+    with pytest.raises(ServiceError) as caught:
+        service.create_encrypted_backup(out_dir / "plain", PASSPHRASE, params=CHEAP)
+    assert caught.value.code == BACKUP_TARGET_EXISTS
+    assert existing.read_bytes() == b"a previous backup"
+    assert service.last_encrypted_backup() is None
+
+    # A file the user named with the extension was confirmed by the save dialog: replaced.
+    result = service.create_encrypted_backup(existing, PASSPHRASE, params=CHEAP)
+    assert result.path == existing
+    assert read_backup(existing, PASSPHRASE, allowed_params=CHEAP_ALLOWED).database_bytes
+
+    existing.write_bytes(b"another previous backup")
+    result = service.create_encrypted_backup(
+        out_dir / "plain", PASSPHRASE, params=CHEAP, replace_extended=True
+    )
+    assert read_backup(result.path, PASSPHRASE, allowed_params=CHEAP_ALLOWED).database_bytes
 
 
 def test_the_daily_backup_is_unchanged_by_the_new_keyword(

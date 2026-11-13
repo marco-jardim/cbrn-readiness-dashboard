@@ -91,6 +91,14 @@ class BackupSettingsSection(QWidget):
             "backup_reminder_days", "reminder_spin", 0, MAX_WARNING_DAYS
         )
         self._rows = (self.passphrase_row, self.daily_row, self.reminder_row)
+        #: The three values as last loaded into the spin boxes (``None`` before the first load).
+        self._loaded: tuple[int, int, int] | None = None
+        #: The error code of a configuration that cannot be read (``None`` while it can be).
+        self._config_error: str | None = None
+        self.config_error_label = QLabel(self)
+        self.config_error_label.setObjectName("config_error_label")
+        self.config_error_label.setWordWrap(True)
+        self.config_error_label.setVisible(False)
         self.floors_label = QLabel(self)
         self.floors_label.setWordWrap(True)
         self.last_label = QLabel(self)
@@ -104,6 +112,7 @@ class BackupSettingsSection(QWidget):
         self._edit_actions: tuple[EditAction, ...] = (self.save_action,)
 
         layout = QVBoxLayout(self)
+        layout.addWidget(self.config_error_label)
         for row in self._rows:
             line = QHBoxLayout()
             line.addWidget(row.caption)
@@ -173,7 +182,14 @@ class BackupSettingsSection(QWidget):
         for action in self._edit_actions:
             action.retranslate()
         self.backup_actions.retranslate()
+        self._show_config_error()
         self._show_last_backup()
+
+    def _show_config_error(self) -> None:
+        """Show why the settings inputs are off (a configuration that cannot be read)."""
+        code = self._config_error
+        self.config_error_label.setVisible(code is not None)
+        self.config_error_label.setText("" if code is None else error_label(code))
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
@@ -197,20 +213,39 @@ class BackupSettingsSection(QWidget):
         found: object = getattr(self.context.services, "config", None)
         return found if isinstance(found, ConfigService) else None
 
+    def _typed(self) -> tuple[int, int, int]:
+        return (
+            self.passphrase_row.spin.value(),
+            self.daily_row.spin.value(),
+            self.reminder_row.spin.value(),
+        )
+
+    def is_dirty(self) -> bool:
+        """Whether the spin boxes differ from what was last loaded into them (unsaved edits)."""
+        return self._loaded is not None and self._typed() != self._loaded
+
     def refresh(self) -> None:
-        """Show the stored settings with their badges, and the time of the last backup."""
+        """Show the stored settings with their badges, and the time of the last backup.
+
+        The values are loaded into the spin boxes the first time and when they hold no unsaved
+        edit: a ``data_changed`` of another page must not discard what was typed.
+        """
         config = self._config()
         stored = ReadinessConfig()
+        self._config_error = None
         if config is not None:
             try:
                 stored = config.load()
-            except ServiceError:
+            except ServiceError as error:
+                self._config_error = error.code
                 config = None
+        self._show_config_error()
         values = {
             "min_passphrase_length": stored.min_passphrase_length,
             "daily_backups_kept": stored.daily_backups_kept,
             "backup_reminder_days": stored.backup_reminder_days,
         }
+        load_values = not self.is_dirty()
         for row in self._rows:
             row.placeholder = None
             if config is not None:
@@ -218,19 +253,22 @@ class BackupSettingsSection(QWidget):
                     row.placeholder = config.badge_for_field(row.field)
                 except ServiceError:
                     row.placeholder = None
-            row.spin.setValue(values[row.field])
+            if load_values:
+                row.spin.setValue(values[row.field])
             row.badge.setVisible(row.placeholder is not None)
             row.confirm.setVisible(row.placeholder is not None)
             self.context.set_edit_enabled(row.spin, config is not None)
             self.context.set_edit_enabled(row.confirm, config is not None)
         self.context.set_edit_enabled(self.save_action, config is not None)
+        if load_values:
+            self._loaded = self._typed()
         self.backup_actions.update_enabled()
         self._show_last_backup()
 
     # ----- changes
 
     def save_settings(self) -> None:
-        """Store the three values; a refused value is shown translated and the old ones return."""
+        """Store the three values; a refused value is shown translated and the typed ones stay."""
         config = self._config()
         if config is None:
             return
@@ -247,7 +285,8 @@ class BackupSettingsSection(QWidget):
                 )
             )
 
-        if not apply_change(self.context, self, error_label, save):
+        if apply_change(self.context, self, error_label, save):
+            self._loaded = None  # what is typed is now what is stored
             self.refresh()
 
     def _confirm(self, row: _Row) -> None:

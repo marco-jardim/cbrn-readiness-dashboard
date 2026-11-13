@@ -7,11 +7,13 @@ of the configuration fields this section edits has one explicit entry; the backu
 unknown code is shown as itself, never as an exception. No label contains a passphrase or a path.
 """
 
+import re
 from collections.abc import Callable
 
 from PySide6.QtCore import QCoreApplication
 
 from cbrn_dashboard.services.backup import (
+    BACKUP_TARGET_EXISTS,
     BACKUP_VERIFY_FAILED,
     BACKUP_WRITE_FAILED,
     PASSPHRASE_BLOCKLISTED,
@@ -27,10 +29,12 @@ from cbrn_dashboard.services.restore import (
     DEMO_MISMATCH,
     INTEGRITY_FAILED,
     JOURNAL_PRESENT,
+    LIVE_UNREADABLE,
     MIGRATION_FAILED,
     NOT_AN_APPLICATION_DATABASE,
     OTHER_CONNECTIONS_OPEN,
     RESTORE_COPY_FAILED,
+    RESTORE_ROLLBACK_FAILED,
     SAFETY_COPY_FAILED,
     TEMP_FILE_FAILED,
     TRANSACTION_OPEN,
@@ -38,7 +42,24 @@ from cbrn_dashboard.services.restore import (
 )
 from cbrn_dashboard.ui.shell.widgets import label_for
 
-__all__ = ["ALL_ERROR_CODES", "error_label"]
+__all__ = ["ALL_ERROR_CODES", "error_label", "fill_placeholders"]
+
+_PLACEHOLDER = re.compile(r"%([1-9])")
+
+
+def fill_placeholders(text: str, *values: str) -> str:
+    """Replace ``%1``..``%9`` by ``values`` in ONE pass (a translation may reorder them).
+
+    A value that itself contains ``%2`` is inserted as it is, never replaced again; a placeholder
+    without a value is left as it is.
+    """
+
+    def substitute(match: re.Match[str]) -> str:
+        position = int(match.group(1)) - 1
+        return values[position] if position < len(values) else match.group(0)
+
+    return _PLACEHOLDER.sub(substitute, text)
+
 
 _ERROR_LABELS: dict[str, Callable[[], str]] = {
     # restore: the backup file
@@ -79,11 +100,20 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     JOURNAL_PRESENT: lambda: QCoreApplication.translate(
         "Backup", "An unfinished write was found in the data folder. Restart the program."
     ),
+    LIVE_UNREADABLE: lambda: QCoreApplication.translate(
+        "Backup", "The current data could not be read, so nothing was restored."
+    ),
     SAFETY_COPY_FAILED: lambda: QCoreApplication.translate(
         "Backup", "A safety copy of the current data could not be made, so nothing was restored."
     ),
     RESTORE_COPY_FAILED: lambda: QCoreApplication.translate(
         "Backup", "The restore failed while copying. The previous data was put back."
+    ),
+    RESTORE_ROLLBACK_FAILED: lambda: QCoreApplication.translate(
+        "Backup",
+        "The restore failed while copying and the previous data could NOT be put back. The data "
+        "may be damaged. Close the program and recover the data from the safety copy %1, which "
+        "is beside the database in the data folder.",
     ),
     READ_ONLY: lambda: QCoreApplication.translate(
         "Backup", "The data is read-only: nothing was changed."
@@ -106,6 +136,9 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     ),
     BACKUP_VERIFY_FAILED: lambda: QCoreApplication.translate(
         "Backup", "The backup file was written but could not be read back, so it was deleted."
+    ),
+    BACKUP_TARGET_EXISTS: lambda: QCoreApplication.translate(
+        "Backup", "A backup file with that name already exists. Choose another name."
     ),
     # configuration fields of the settings section
     "BACKUP_FLOOR": lambda: QCoreApplication.translate(
@@ -131,6 +164,10 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
 ALL_ERROR_CODES: tuple[str, ...] = tuple(_ERROR_LABELS)
 
 
-def error_label(code: str) -> str:
-    """The translated message of an error code (the code itself when unknown)."""
-    return label_for(_ERROR_LABELS, code)
+def error_label(code: str, *values: str) -> str:
+    """The translated message of an error code (the code itself when unknown).
+
+    ``values`` fill the ``%1`` placeholders of a message that has some (the safety copy of
+    ``RESTORE_ROLLBACK_FAILED``: a file NAME, never a path), in one pass.
+    """
+    return fill_placeholders(label_for(_ERROR_LABELS, code), *values)

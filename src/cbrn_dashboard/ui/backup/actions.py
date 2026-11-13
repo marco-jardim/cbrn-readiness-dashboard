@@ -40,10 +40,10 @@ from cbrn_dashboard.paths import (
     read_file_attributes,
     read_onedrive_mount_points,
 )
-from cbrn_dashboard.services.backup import BackupService
+from cbrn_dashboard.services.backup import BackupService, backup_target
 from cbrn_dashboard.services.config import ConfigService
 from cbrn_dashboard.services.errors import READ_ONLY, ServiceError
-from cbrn_dashboard.services.restore import RestoreService
+from cbrn_dashboard.services.restore import RestoreService, RollbackFailedError
 from cbrn_dashboard.storage.backup import DatabaseIdentity
 from cbrn_dashboard.storage.crypto_backup import (
     ALLOWED_PARAMS,
@@ -52,8 +52,9 @@ from cbrn_dashboard.storage.crypto_backup import (
     ScryptParams,
 )
 from cbrn_dashboard.ui.backup.dialogs import PassphraseDialog, open_dialog
-from cbrn_dashboard.ui.backup.labels import error_label
+from cbrn_dashboard.ui.backup.labels import error_label, fill_placeholders
 from cbrn_dashboard.ui.shell.context import AppContext
+from cbrn_dashboard.ui.shell.first_run import refresh_backup_reminder
 from cbrn_dashboard.ui.shell.widgets import EditAction, make_edit_action
 
 __all__ = ["BackupActions", "DestinationChecks"]
@@ -62,10 +63,24 @@ __all__ = ["BackupActions", "DestinationChecks"]
 # --------------------------------------------------------------------------- the output place
 
 
+def _normalise(path: Path) -> Path:
+    """Absolute and link-resolved (a junction or ``subst`` drive, ``..``); UNC paths unchanged."""
+    absolute = path.absolute()
+    if is_unc_path(absolute):
+        return absolute
+    try:
+        return absolute.resolve()
+    except (OSError, RuntimeError, ValueError):
+        return absolute
+
+
 def _is_inside(path: Path, root: Path) -> bool:
-    """Component-wise, case-insensitive: is ``path`` equal to or below ``root``?"""
-    folded = tuple(part.casefold() for part in path.absolute().parts)
-    base = tuple(part.casefold() for part in root.absolute().parts)
+    """Component-wise, case-insensitive: is ``path`` equal to or below ``root``?
+
+    Both sides are normalised like ``paths._normalise``, so a link does not hide the place.
+    """
+    folded = tuple(part.casefold() for part in _normalise(path).parts)
+    base = tuple(part.casefold() for part in _normalise(root).parts)
     return bool(base) and folded[: len(base)] == base
 
 
@@ -84,7 +99,13 @@ def _is_cloud_synchronised(folder: Path) -> bool:
 
 
 def _media_unknown(_folder: Path) -> bool:
-    """Whether the folder is on removable media: not detectable without ``ctypes``, so ``False``."""
+    """Whether the folder is on removable media: ``False`` always (T7.4 limitation).
+
+    No API the T0.4 guard allows can tell removable from fixed drives: ``QStorageInfo`` has no
+    removable flag (its file system type is no indicator: USB drives are often NTFS), and
+    ``ctypes`` (``GetDriveType``) is forbidden in application code. The advice to keep a copy on
+    separate media is therefore always given after a backup.
+    """
     return False
 
 
@@ -192,6 +213,7 @@ class BackupActions(QObject):
                 identity=self._identity(),
                 clock=self.context.clock,
                 operator=self.context.operator_label,
+                clock_suspect=lambda: self.context.clock_suspect,
             )
         return self._restore
 
@@ -209,8 +231,18 @@ class BackupActions(QObject):
     def _info(self, title: str, text: str) -> None:
         self.context.prompts.info(self.anchor, title, text)
 
-    def _fail(self, title: str, code: str) -> None:
-        self.context.prompts.warning(self.anchor, title, error_label(code))
+    def _fail(self, title: str, error: ServiceError | str) -> None:
+        """Show the message of a code; a failed put-back also names the safety copy (file name)."""
+        if isinstance(error, RollbackFailedError):
+            text = error_label(error.code, error.safety_copy_name)
+        else:
+            text = error_label(error if isinstance(error, str) else error.code)
+        self.context.prompts.warning(self.anchor, title, text)
+
+    def _refresh_reminder(self) -> None:
+        """The time of the last encrypted backup changed (a backup, a restore): redo the banner."""
+        if not self.context.is_demo:  # a demo database has no reminder
+            refresh_backup_reminder(self.context)
 
     # ----- Back up
 
@@ -242,12 +274,24 @@ class BackupActions(QObject):
             )
         if not notes:
             return True
-        notes.append(
+        question = fill_placeholders(
             QCoreApplication.translate(
-                "Backup", "Prefer removable media kept in a safe place. Continue anyway?"
-            )
+                "Backup", "%1 Prefer removable media kept in a safe place. Continue anyway?"
+            ),
+            " ".join(notes),
         )
-        return self.context.prompts.confirm(self.anchor, title, " ".join(notes))
+        return self.context.prompts.confirm(self.anchor, title, question)
+
+    def _replacement_confirmed(self, destination: Path, title: str) -> bool:
+        """``.cbrnbak`` is appended after the save dialog: ask before replacing that other file."""
+        target = backup_target(destination)
+        if target == destination or not (target.exists() or target.is_symlink()):
+            return True
+        question = fill_placeholders(
+            QCoreApplication.translate("Backup", "The file %1 already exists. Replace it?"),
+            target.name,
+        )
+        return self.context.prompts.confirm(self.anchor, title, question)
 
     def back_up(self) -> None:
         """Choose the output file, then ask for the passphrase (twice) and write the backup."""
@@ -260,6 +304,8 @@ class BackupActions(QObject):
             self.anchor, title, self.default_file_name(), file_filter
         )
         if destination is None or not self._destination_accepted(destination, title):
+            return
+        if not self._replacement_confirmed(destination, title):
             return
 
         def write(passphrase: str, confirmation: str | None) -> bool:
@@ -285,18 +331,27 @@ class BackupActions(QObject):
     ) -> bool:
         try:
             result = service.create_encrypted_backup(
-                destination, passphrase, confirmation, params=self.scrypt_params
+                destination,
+                passphrase,
+                confirmation,
+                params=self.scrypt_params,
+                replace_extended=True,  # the user confirmed it in ``_replacement_confirmed``
             )
         except ServiceError as error:
-            self._fail(title, error.code)
+            self._fail(title, error)
             return False
-        text = QCoreApplication.translate("Backup", "The encrypted backup was written to %1.")
-        text = text.replace("%1", str(result.path))
-        if not self.checks.removable(result.path.parent):
-            text += " " + QCoreApplication.translate(
-                "Backup", "Keep another copy on separate media, away from this computer."
+        if self.checks.removable(result.path.parent):
+            pattern = QCoreApplication.translate(
+                "Backup", "The encrypted backup was written to %1."
             )
-        self._info(title, text)
+        else:
+            pattern = QCoreApplication.translate(
+                "Backup",
+                "The encrypted backup was written to %1. "
+                "Keep another copy on separate media, away from this computer.",
+            )
+        self._info(title, fill_placeholders(pattern, str(result.path)))
+        self._refresh_reminder()
         self.context.notify_data_changed()  # the time of the last encrypted backup changed
         return True
 
@@ -316,11 +371,13 @@ class BackupActions(QObject):
         source = self.context.prompts.open_file(self.anchor, title, file_filter)
         if source is None:
             return
-        question = QCoreApplication.translate(
-            "Backup", "Restoring replaces ALL the data now in the application with %1."
-        ).replace("%1", source.name)
-        question += " " + QCoreApplication.translate(
-            "Backup", "A safety copy of the current data is kept first. Continue?"
+        question = fill_placeholders(
+            QCoreApplication.translate(
+                "Backup",
+                "Restoring replaces ALL the data now in the application with %1. "
+                "A safety copy of the current data is kept first. Continue?",
+            ),
+            source.name,
         )
         if not self.context.prompts.confirm(self.anchor, title, question):
             return
@@ -339,20 +396,28 @@ class BackupActions(QObject):
         try:
             result = service.restore(conn, source, passphrase, allowed_params=self.allowed_params)
         except ServiceError as error:
-            self._fail(title, error.code)
+            self._fail(title, error)
             return False
-        text = QCoreApplication.translate(
-            "Backup", "The backup was restored. The previous data was kept as %1."
-        ).replace("%1", result.safety_copy.name)
-        if result.migrated_from is not None:
-            text += " " + (
+        if result.migrated_from is None:
+            text = fill_placeholders(
                 QCoreApplication.translate(
-                    "Backup", "The backup was upgraded from schema version %1 to %2."
-                )
-                .replace("%1", str(result.migrated_from))
-                .replace("%2", str(result.restored_schema_version))
+                    "Backup", "The backup was restored. The previous data was kept as %1."
+                ),
+                result.safety_copy.name,
+            )
+        else:
+            text = fill_placeholders(
+                QCoreApplication.translate(
+                    "Backup",
+                    "The backup was restored. The previous data was kept as %1. "
+                    "The backup was upgraded from schema version %2 to %3.",
+                ),
+                result.safety_copy.name,
+                str(result.migrated_from),
+                str(result.restored_schema_version),
             )
         self._info(title, text)
+        self._refresh_reminder()
         self.context.notify_data_changed()
         return True
 

@@ -170,12 +170,24 @@
         <translation>The data folder is not writable, so the demo database cannot be created.</translation>
     </message>
     <message>
+        <source>Demo data from another day</source>
+        <translation>Demo data from another day</translation>
+    </message>
+    <message>
+        <source>The demo data was created on %1 and today is %2. Its dates were fitted to the day it was created, so the situations it shows are those of that day. Do you want to create the demo data again for today? Any change you made to the demo data will be lost. Your real data is not touched.</source>
+        <translation>The demo data was created on %1 and today is %2. Its dates were fitted to the day it was created, so the situations it shows are those of that day. Do you want to create the demo data again for today? Any change you made to the demo data will be lost. Your real data is not touched.</translation>
+    </message>
+    <message>
         <source>Choose the data folder</source>
         <translation>Choose the data folder</translation>
     </message>
     <message>
         <source>Do you want to choose another folder for the data? The choice is remembered in your user profile for the next start.</source>
         <translation>Do you want to choose another folder for the data? The choice is remembered in your user profile for the next start.</translation>
+    </message>
+    <message>
+        <source>Do you want to choose another folder for the data? The folder was set by --data-dir or by an environment variable, so the choice is used for this session only.</source>
+        <translation>Do you want to choose another folder for the data? The folder was set by --data-dir or by an environment variable, so the choice is used for this session only.</translation>
     </message>
     <message>
         <source>The chosen folder is not writable and has no database. Choose another one.</source>
@@ -246,8 +258,12 @@
         <translation>An unexpected error occurred. Code: %1</translation>
     </message>
     <message>
+        <source>%1 (not recorded: %2)</source>
+        <extracomment>Okabe-Ito colour-blind-safe palette; series take their colours from it in order (cycling). The property the pseudo-locale walker looks for: the widget&apos;s own texts are data. The property of a bar set that lists (comma separated) the positions of its missing values.</extracomment>
+        <translation>%1 (not recorded: %2)</translation>
+    </message>
+    <message>
         <source>No data</source>
-        <extracomment>Okabe-Ito colour-blind-safe palette; series take their colours from it in order (cycling). The property the pseudo-locale walker looks for: the widget&apos;s own texts are data.</extracomment>
         <translation>No data</translation>
     </message>
     <message>

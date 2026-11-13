@@ -26,7 +26,9 @@ The sequence, in order:
 6. the database is opened: the demo database for ``--demo``, a read-only connection in read-only
    mode (refused unless it has the current schema, belongs to this application and, for
    ``--demo``, is a demo database), otherwise the real database, migrated; a refused or unusable
-   database is explained and ends with exit code 1;
+   database is explained and ends with exit code 1. A read-write ``--demo`` start of a demo
+   database created on another day asks once whether to create the demo data again for today
+   (nothing is asked or written in read-only mode);
 7. the clock sanity check: a clock earlier than the newest ``change_log`` row or than the build
    timestamp marks the session ``clock_suspect``;
 8. ``AppContext`` and the main window (with its banners) are built;
@@ -55,7 +57,13 @@ from PySide6.QtWidgets import QApplication
 
 from cbrn_dashboard import __version__, cli
 from cbrn_dashboard.clock import Clock, SystemClock
-from cbrn_dashboard.demo import demo_database_path, open_demo_database
+from cbrn_dashboard.demo import (
+    creation_day,
+    demo_database_path,
+    is_outdated,
+    open_demo_database,
+    recreate_demo_database,
+)
 from cbrn_dashboard.domain.dates import parse_utc_timestamp
 from cbrn_dashboard.i18n import DEFAULT_LANGUAGE
 from cbrn_dashboard.logging_setup import (
@@ -368,6 +376,8 @@ def _open_database(
     clock: Clock,
     database_path: Path,
     mode: _Mode,
+    build_timestamp: Callable[[], datetime | None] = read_build_timestamp,
+    prompts: Prompts | None = None,
 ) -> DatabaseConnection:
     if mode is _Mode.READ_ONLY:
         conn = open_database(database_path, read_only=True)
@@ -380,9 +390,15 @@ def _open_database(
             raise
         return conn
     if options.demo:
-        return open_demo_database(location.path, clock)
+        return _open_demo(location.path, clock, prompts)
+    # The injected clock stamps the pre-migration copy; with a suspect clock (T7.1, D04) the pool
+    # is not rotated, because the time in the name could push out newer, good copies.
     conn = open_and_migrate(
-        location.database_path, data_dir=location.path, identity=DatabaseIdentity.REAL
+        location.database_path,
+        data_dir=location.path,
+        identity=DatabaseIdentity.REAL,
+        clock=clock,
+        rotate_if=lambda opened: not clock_is_suspect(opened, clock, build_timestamp),
     )
     try:
         app_meta.initialise(conn, is_demo=False, created_with=__version__)
@@ -390,6 +406,33 @@ def _open_database(
         conn.close()
         raise
     return conn
+
+
+def _open_demo(data_dir: Path, clock: Clock, prompts: Prompts | None) -> DatabaseConnection:
+    """Open the demo database read-write; offer to create it again when it is from another day.
+
+    The demo data is placed relative to the day it was created and then only ages, so when that day
+    is not today the user is asked once (through ``prompts``) whether to create the demo data again
+    for today. Yes replaces the demo database file (the real database is never touched, see
+    :func:`~cbrn_dashboard.demo.recreate_demo_database`); no keeps it exactly as it is.
+    """
+    conn = open_demo_database(data_dir, clock)
+    try:
+        created = creation_day(conn)
+        if prompts is None or created is None or not is_outdated(conn, clock):
+            return conn
+        wanted = prompts.confirm(
+            None,
+            _title_demo_outdated(),
+            _text_demo_outdated(created.isoformat(), clock.local_date().isoformat()),
+        )
+    except BaseException:
+        conn.close()
+        raise
+    if not wanted:
+        return conn
+    conn.close()
+    return recreate_demo_database(data_dir, clock)
 
 
 def _dispose_manager(manager: TranslatorManager) -> None:
@@ -418,6 +461,21 @@ def _text_no_demo_database() -> str:
     )
 
 
+def _title_demo_outdated() -> str:
+    return QCoreApplication.translate("Shell", "Demo data from another day")
+
+
+def _text_demo_outdated(created: str, today: str) -> str:
+    template = QCoreApplication.translate(
+        "Shell",
+        "The demo data was created on %1 and today is %2. Its dates were fitted to the day it was "
+        "created, so the situations it shows are those of that day. Do you want to create the "
+        "demo data again for today? Any change you made to the demo data will be lost. Your real "
+        "data is not touched.",
+    )
+    return template.replace("%1", created).replace("%2", today)
+
+
 def _text_no_profile_folder() -> str:
     return QCoreApplication.translate(
         "Shell",
@@ -434,6 +492,14 @@ def _text_offer_other_folder() -> str:
         "Shell",
         "Do you want to choose another folder for the data? The choice is remembered in your "
         "user profile for the next start.",
+    )
+
+
+def _text_offer_session_only() -> str:
+    return QCoreApplication.translate(
+        "Shell",
+        "Do you want to choose another folder for the data? The folder was set by --data-dir or "
+        "by an environment variable, so the choice is used for this session only.",
     )
 
 
@@ -571,8 +637,17 @@ def _report_main_failure(exc: Exception, prompts: Prompts | None) -> int:
     return EXIT_FAILED
 
 
+#: The unusable folder came from these sources: they rank above the pointer file (D02), so a
+#: pointer written now would be ignored by the next run with the same option and honoured only by
+#: a later plain start, which would move silently. The choice is then used for this session only.
+_SESSION_ONLY_SOURCES = frozenset({LocationSource.CLI, LocationSource.ENV})
+
+
 def _offer_other_folder(
-    prompts: Prompts, explanation: str, environ: Mapping[str, str] | None
+    prompts: Prompts,
+    explanation: str,
+    environ: Mapping[str, str] | None,
+    source: LocationSource = LocationSource.DEFAULT,
 ) -> DataLocation | None:
     """D02, T7.5: explain an unusable folder and let the user choose another one.
 
@@ -580,10 +655,13 @@ def _offer_other_folder(
     a database; it is remembered in the pointer file of the user profile (never in the unusable
     folder) and returned as the new location. ``None`` when the user declines or cancels. When the
     pointer cannot be written the folder is still used, for this session only, and the user is
-    told so.
+    told so. When ``source`` is ``--data-dir`` or the environment variable (they rank above the
+    pointer) nothing is written at all: the offer says so and the choice is for this session only.
     """
+    session_only = source in _SESSION_ONLY_SOURCES
     prompts.error(None, _title_cannot_start(), explanation)
-    while prompts.confirm(None, _title_cannot_start(), _text_offer_other_folder()):
+    offer = _text_offer_session_only() if session_only else _text_offer_other_folder()
+    while prompts.confirm(None, _title_cannot_start(), offer):
         folder = prompts.choose_folder(None, _title_choose_folder())
         if folder is None:
             return None
@@ -591,6 +669,9 @@ def _offer_other_folder(
         if not (chosen.writable or chosen.database_exists):
             prompts.error(None, _title_choose_folder(), _text_chosen_folder_unusable())
             continue
+        if session_only:
+            log_event("APP.LOCATION_SESSION_ONLY")
+            return replace(chosen, source=source)
         if write_location_pointer(chosen.path, environ=environ):
             log_event("APP.LOCATION_REMEMBERED")
         else:
@@ -675,7 +756,9 @@ def start(
             if options.demo:
                 return _fail(stack, active_prompts, _text_no_demo_database())
             # D02, T7.5: explain, then offer another folder (remembered in the profile pointer).
-            chosen = _offer_other_folder(active_prompts, _text_no_database(), environ)
+            chosen = _offer_other_folder(
+                active_prompts, _text_no_database(), environ, location.source
+            )
             stack.close()
             if chosen is None:
                 return EXIT_FAILED
@@ -708,7 +791,15 @@ def start(
             log_event("APP.START")
 
         try:
-            conn = _open_database(options, location, active_clock, database_path, mode)
+            conn = _open_database(
+                options,
+                location,
+                active_clock,
+                database_path,
+                mode,
+                build_timestamp,
+                active_prompts,
+            )
         except _RefusedError as refused:
             log_event(refused.event)
             return _fail(stack, active_prompts, refused.text)

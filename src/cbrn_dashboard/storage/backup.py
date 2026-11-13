@@ -459,6 +459,7 @@ def backup_before_migration(
     from_version: int,
     enabled: bool = True,
     clock: Clock | None = None,
+    rotate_pool: bool = True,
 ) -> Path | None:
     """Copy a non-empty database before it is migrated; return the new file or ``None``.
 
@@ -469,7 +470,8 @@ def backup_before_migration(
     ``pre-migration-<UTC timestamp>-v<from_version>.sqlite3``. The copy is checked; on success the
     pre-migration pool is rotated to the last :data:`PRE_MIGRATION_KEEP` copies (daily backups
     never touch it). Raises :class:`BackupVerificationError` when the copy fails the check, so the
-    migration does not run without a usable backup.
+    migration does not run without a usable backup. ``rotate_pool=False`` skips the rotation (the
+    caller says so when the clock is suspect: the time in the name cannot order the copies).
     """
     if not enabled:
         return None
@@ -489,11 +491,12 @@ def backup_before_migration(
     if not result.verified:
         msg = "The pre-migration backup failed its integrity check and was removed."
         raise BackupVerificationError(msg)
-    rotate(
-        data_dir,
-        identity,
-        BackupKind.PRE_MIGRATION,
-        PRE_MIGRATION_KEEP,
-        protect=result.path,
-    )
+    if rotate_pool:
+        rotate(
+            data_dir,
+            identity,
+            BackupKind.PRE_MIGRATION,
+            PRE_MIGRATION_KEEP,
+            protect=result.path,
+        )
     return result.path

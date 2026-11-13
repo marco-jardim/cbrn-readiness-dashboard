@@ -497,6 +497,93 @@ def test_the_before_restore_pool_keeps_the_newest_two(env: Env) -> None:
     assert all(path.exists() for path in kept)
 
 
+@pytest.mark.parametrize("how", ["safety copy unreadable", "put-back fails its integrity check"])
+def test_a_failed_put_back_has_its_own_code_and_the_good_safety_copy_survives(
+    env: Env, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    _put(env.live, ("a.one",))
+    backup = _encrypt(env.live, env.root / "out" / "live.cbrnbak")
+    env.live.execute("DELETE FROM setting WHERE key LIKE 'a.%'")
+    _put(env.live, ("b.one", "b.two"))
+    original = _rows(env.live)
+    broken = {"on": False}
+
+    def damage_then_fail(source: sqlite3.Connection, target: sqlite3.Connection) -> None:
+        broken["on"] = True  # from here on the live database fails its own integrity check
+        target.execute("DELETE FROM setting")  # a half-done copy
+        msg = "injected failure"
+        raise sqlite3.OperationalError(msg)
+
+    real_integrity = restore_module._integrity_ok
+    real_open = restore_module.open_database
+
+    def integrity(conn: sqlite3.Connection) -> bool:
+        if broken["on"] and conn is env.live:
+            return False
+        return real_integrity(conn)
+
+    def refuse_read_only(path: Path, *, read_only: bool = False) -> DatabaseConnection:
+        if read_only:
+            msg = "injected failure"
+            raise sqlite3.OperationalError(msg)
+        return real_open(path, read_only=read_only)
+
+    monkeypatch.setattr(restore_module, "_copy_into", damage_then_fail)
+    monkeypatch.setattr(restore_module, "_integrity_ok", integrity)
+    if how == "safety copy unreadable":
+        monkeypatch.setattr(restore_module, "open_database", refuse_read_only)
+
+    with pytest.raises(restore_module.RollbackFailedError) as caught:
+        env.restore(backup)
+
+    (good,) = list_backups(env.data, env.identity, BackupKind.BEFORE_RESTORE)
+    assert caught.value.code == "RESTORE_ROLLBACK_FAILED"
+    assert caught.value.code != "RESTORE_COPY_FAILED"
+    assert caught.value.safety_copy_name == good.path.name  # the name only, never a path
+    assert "\\" not in caught.value.safety_copy_name
+    assert "/" not in caught.value.safety_copy_name
+
+    for _ in range(2):  # two more attempts on the damaged database
+        with pytest.raises(restore_module.RollbackFailedError):
+            env.restore(backup)
+
+    assert good.path.exists()  # the pool would have kept only 2: the good copy must not be rotated
+    assert len(list_backups(env.data, env.identity, BackupKind.BEFORE_RESTORE)) == 3
+    copy = open_database(good.path, read_only=True)
+    try:
+        assert _rows(copy) == original
+    finally:
+        copy.close()
+    assert _leftovers(env.data) == []
+    assert list(env.os_temp.iterdir()) == []
+
+
+def test_a_suspect_clock_skips_the_rotation_of_the_before_restore_pool(env: Env) -> None:
+    backup = _make_backup(env.root, "suspect")
+    service = RestoreService(
+        data_dir=env.data, identity=env.identity, clock=env.clock, clock_suspect=lambda: True
+    )
+    for _ in range(3):
+        service.restore(env.live, backup, PASSPHRASE, allowed_params=ALLOWED)
+    assert len(list_backups(env.data, env.identity, BackupKind.BEFORE_RESTORE)) == 3
+
+
+def test_a_sqlite_error_while_reading_the_live_demo_flag_is_a_coded_error(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backup = _make_backup(env.root, "unreadable")
+    real = restore_module.read_is_demo
+
+    def failing_on_live(conn: sqlite3.Connection) -> bool:
+        if conn is env.live:
+            msg = "injected failure"
+            raise sqlite3.OperationalError(msg)
+        return real(conn)
+
+    monkeypatch.setattr(restore_module, "read_is_demo", failing_on_live)
+    _expect_refused(env, backup, "LIVE_UNREADABLE")
+
+
 # --------------------------------------------------------------------------- the temporary file
 
 
@@ -544,6 +631,34 @@ def test_a_failed_migration_removes_the_temporary_file(
 
     monkeypatch.setattr(restore_module, "migrate", failing)
     _expect_refused(env, backup, "MIGRATION_FAILED")
+
+
+def test_only_the_decrypted_connection_keeps_sqlite_temp_data_in_memory(
+    env: Env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backup = _make_backup(env.root, "tempstore")
+    default = env.live.execute("PRAGMA temp_store").fetchone()[0]
+    seen: dict[str, object] = {}
+    real = restore_module._integrity_ok
+
+    def spy(conn: sqlite3.Connection) -> bool:
+        seen.setdefault(
+            "live" if conn is env.live else "temporary",
+            conn.execute("PRAGMA temp_store").fetchone()[0],
+        )
+        return real(conn)
+
+    monkeypatch.setattr(restore_module, "_integrity_ok", spy)
+    env.restore(backup)
+    assert seen["temporary"] == 2  # MEMORY: no plaintext spill into the OS temp folder
+    assert seen["live"] == default != 2
+
+
+def test_a_tmp_folder_that_is_a_link_is_refused(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    backup = _make_backup(env.root, "linked")
+    monkeypatch.setattr(restore_module, "_is_link", lambda path: path.name == TMP_DIR_NAME)
+    _expect_refused(env, backup, "TEMP_FILE_FAILED")
+    assert not env.tmp_dir.exists()  # nothing was created through the link
 
 
 # --------------------------------------------------------------------------- clean-up

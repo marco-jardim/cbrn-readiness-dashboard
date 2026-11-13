@@ -425,6 +425,15 @@ class _Context:
     clock: Clock
     location: DataLocation
     clock_suspect: bool = False
+    is_demo: bool = False
+
+
+def test_startup_callable_takes_the_identity_from_the_context(data: Path) -> None:
+    location = DataLocation(path=data, source=LocationSource.DEFAULT, writable=True)
+    with closing(make_db(data, identity=DEMO)) as conn:
+        daily_backup_startup(_Context(conn, START, location, is_demo=True))
+    assert len(names(backups_dir(data, DEMO))) == 1
+    assert not backups_dir(data, REAL).exists()
 
 
 def test_startup_callable_backs_up_the_real_database(data: Path) -> None:
@@ -464,6 +473,21 @@ def test_pre_migration_backup_goes_through_the_shared_helper(
         assert [int(row[0]) for row in old.execute("SELECT x FROM a")] == [42]
     assert migrate_module.backup_before_migration is backup_before_migration
     assert migrate_module.DatabaseIdentity is DatabaseIdentity
+
+
+def test_backup_before_migration_can_skip_the_rotation(data: Path) -> None:
+    with closing(make_db(data)) as conn:
+        for index in range(PRE_MIGRATION_KEEP + 2):
+            made = backup_before_migration(
+                conn,
+                data_dir=data,
+                identity=REAL,
+                from_version=1,
+                clock=hour(index),
+                rotate_pool=False,
+            )
+            assert made is not None
+    assert len(list_backups(data, REAL, BackupKind.PRE_MIGRATION)) == PRE_MIGRATION_KEEP + 2
 
 
 def test_backup_before_migration_writes_nothing_when_disabled(data: Path) -> None:

@@ -189,6 +189,7 @@ def test_round_trip_with_cheap_params(backup_file: Path) -> None:
     assert _read(backup_file) == PAYLOAD
 
 
+@pytest.mark.slow
 def test_round_trip_with_the_real_defaults(tmp_path: Path) -> None:
     path = tmp_path / "real.cbrnbak"
     write_backup(path, PAYLOAD, PASSPHRASE, app_version=APP_VERSION, schema_version=SCHEMA_VERSION)

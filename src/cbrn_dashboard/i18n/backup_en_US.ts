@@ -38,6 +38,7 @@
     </message>
     <message>
         <source>Save settings</source>
+        <extracomment>The three values as last loaded into the spin boxes (``None`` before the first load). The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation>Save settings</translation>
     </message>
     <message>
@@ -129,8 +130,16 @@
         <translation>A safety copy of the current data could not be made, so nothing was restored.</translation>
     </message>
     <message>
+        <source>The current data could not be read, so nothing was restored.</source>
+        <translation>The current data could not be read, so nothing was restored.</translation>
+    </message>
+    <message>
         <source>The restore failed while copying. The previous data was put back.</source>
         <translation>The restore failed while copying. The previous data was put back.</translation>
+    </message>
+    <message>
+        <source>The restore failed while copying and the previous data could NOT be put back. The data may be damaged. Close the program and recover the data from the safety copy %1, which is beside the database in the data folder.</source>
+        <translation>The restore failed while copying and the previous data could NOT be put back. The data may be damaged. Close the program and recover the data from the safety copy %1, which is beside the database in the data folder.</translation>
     </message>
     <message>
         <source>The data is read-only: nothing was changed.</source>
@@ -159,6 +168,10 @@
     <message>
         <source>The backup file was written but could not be read back, so it was deleted.</source>
         <translation>The backup file was written but could not be read back, so it was deleted.</translation>
+    </message>
+    <message>
+        <source>A backup file with that name already exists. Choose another name.</source>
+        <translation>A backup file with that name already exists. Choose another name.</translation>
     </message>
     <message>
         <source>The number of daily backups is below the allowed minimum.</source>
@@ -214,8 +227,12 @@
         <translation>The chosen location is inside the data folder.</translation>
     </message>
     <message>
-        <source>Prefer removable media kept in a safe place. Continue anyway?</source>
-        <translation>Prefer removable media kept in a safe place. Continue anyway?</translation>
+        <source>%1 Prefer removable media kept in a safe place. Continue anyway?</source>
+        <translation>%1 Prefer removable media kept in a safe place. Continue anyway?</translation>
+    </message>
+    <message>
+        <source>The file %1 already exists. Replace it?</source>
+        <translation>The file %1 already exists. Replace it?</translation>
     </message>
     <message>
         <source>Encrypted backup (*.cbrnbak)</source>
@@ -226,24 +243,20 @@
         <translation>The encrypted backup was written to %1.</translation>
     </message>
     <message>
-        <source>Keep another copy on separate media, away from this computer.</source>
-        <translation>Keep another copy on separate media, away from this computer.</translation>
+        <source>The encrypted backup was written to %1. Keep another copy on separate media, away from this computer.</source>
+        <translation>The encrypted backup was written to %1. Keep another copy on separate media, away from this computer.</translation>
     </message>
     <message>
-        <source>Restoring replaces ALL the data now in the application with %1.</source>
-        <translation>Restoring replaces ALL the data now in the application with %1.</translation>
-    </message>
-    <message>
-        <source>A safety copy of the current data is kept first. Continue?</source>
-        <translation>A safety copy of the current data is kept first. Continue?</translation>
+        <source>Restoring replaces ALL the data now in the application with %1. A safety copy of the current data is kept first. Continue?</source>
+        <translation>Restoring replaces ALL the data now in the application with %1. A safety copy of the current data is kept first. Continue?</translation>
     </message>
     <message>
         <source>The backup was restored. The previous data was kept as %1.</source>
         <translation>The backup was restored. The previous data was kept as %1.</translation>
     </message>
     <message>
-        <source>The backup was upgraded from schema version %1 to %2.</source>
-        <translation>The backup was upgraded from schema version %1 to %2.</translation>
+        <source>The backup was restored. The previous data was kept as %1. The backup was upgraded from schema version %2 to %3.</source>
+        <translation>The backup was restored. The previous data was kept as %1. The backup was upgraded from schema version %2 to %3.</translation>
     </message>
 </context>
 </TS>
