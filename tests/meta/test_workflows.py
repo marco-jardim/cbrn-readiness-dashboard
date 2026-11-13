@@ -780,3 +780,247 @@ def test_ref_name_check_allows_env_entries_and_flags_scripts() -> None:
     assert ref_name_outside_env(mixed) == ["TAG: ${{ github.ref_name }} extra"]
     assert ref_name_outside_env("concurrency:\n  group: g-${{ github.ref }}\n") == []
     assert ref_name_outside_env("# ${{ github.ref_name }} in a comment\n") == []
+
+
+# --------------------------------------------------------------------------------------------
+# Dependabot (T9.5): helpers
+# --------------------------------------------------------------------------------------------
+
+DEPENDABOT_FILE = ROOT / ".github" / "dependabot.yml"
+REQUIRED_ECOSYSTEMS: tuple[str, ...] = ("github-actions", "uv")
+PYSIDE_FAMILY: tuple[str, ...] = ("pyside6", "pyside6-essentials", "pyside6-addons", "shiboken6")
+
+_ECOSYSTEM_LINE = re.compile(r"^\s*-\s+package-ecosystem:\s*(?P<value>\S.*?)\s*$")
+_INTERVAL_LINE = re.compile(r"^\s*interval:\s*(?P<value>\S.*?)\s*$")
+_UPDATE_TYPES_LINE = re.compile(r"^\s*update-types:\s*\[(?P<items>.*)\]\s*$")
+_IGNORE_NAME_LINE = re.compile(r"^-\s+dependency-name:\s*(?P<value>\S.*?)\s*$")
+_IGNORE_VERSIONS_LINE = re.compile(r"^versions:\s*\[(?P<items>.*)\]\s*$")
+
+
+def read_dependabot() -> str:
+    """Return the text of ``.github/dependabot.yml``."""
+    return DEPENDABOT_FILE.read_text(encoding="utf-8")
+
+
+def _indent(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
+def _sub_block(lines: list[str], key: str, key_indent: int) -> list[str]:
+    """Return the lines nested under the ``key:`` line that sits at ``key_indent``."""
+    for index, line in enumerate(lines):
+        if _indent(line) != key_indent or line.strip() != f"{key}:":
+            continue
+        block: list[str] = []
+        for following in lines[index + 1 :]:
+            if _indent(following) <= key_indent:
+                break
+            block.append(following)
+        return block
+    return []
+
+
+def _split_items(items: str) -> list[str]:
+    return [_unquote(item) for item in items.split(",") if item.strip()]
+
+
+def dependabot_updates(text: str) -> list[dict[str, str]]:
+    """Split the ``updates:`` list of a Dependabot file into one dict per ecosystem entry.
+
+    Keys (a key is absent when the entry does not have the setting):
+
+    - ``package-ecosystem``: the ecosystem name, without quotes;
+    - ``interval``: the ``schedule: interval`` value;
+    - ``update-types``: one group per ``;``, each group a sorted, comma-separated list of the
+      inline ``update-types: [...]`` of a ``groups`` entry;
+    - ``ignore``: the comment-free lines of the ``ignore`` block, stripped, joined by newlines.
+    """
+    entry = top_level_entry(text, "updates")
+    if entry is None:
+        return []
+    chunks: list[list[str]] = []
+    for line in entry[1]:
+        if _ECOSYSTEM_LINE.match(line):
+            chunks.append([line])
+        elif chunks:
+            chunks[-1].append(line)
+    updates: list[dict[str, str]] = []
+    for chunk in chunks:
+        match = _ECOSYSTEM_LINE.match(chunk[0])
+        assert match is not None
+        key_indent = _indent(chunk[0]) + 2
+        update = {"package-ecosystem": _unquote(match.group("value"))}
+        for line in _sub_block(chunk, "schedule", key_indent):
+            interval = _INTERVAL_LINE.match(line)
+            if interval is not None:
+                update["interval"] = _unquote(interval.group("value"))
+        groups: list[str] = []
+        for line in _sub_block(chunk, "groups", key_indent):
+            types = _UPDATE_TYPES_LINE.match(line)
+            if types is not None:
+                groups.append(",".join(sorted(_split_items(types.group("items")))))
+        if groups:
+            update["update-types"] = ";".join(groups)
+        ignore = _sub_block(chunk, "ignore", key_indent)
+        if ignore:
+            update["ignore"] = "\n".join(line.strip() for line in ignore)
+        updates.append(update)
+    return updates
+
+
+def has_grouped_update_types(update: dict[str, str], required: tuple[str, ...]) -> bool:
+    """Tell whether one ``groups`` entry of ``update`` covers all of the ``required`` types."""
+    groups = update.get("update-types", "").split(";")
+    return any(set(required) <= set(group.split(",")) for group in groups if group)
+
+
+def ignored_versions(update: dict[str, str]) -> dict[str, list[str]]:
+    """Return ``{dependency-name: [version specs]}`` from the ``ignore`` block of ``update``."""
+    result: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in update.get("ignore", "").splitlines():
+        name = _IGNORE_NAME_LINE.match(line)
+        if name is not None:
+            current = _unquote(name.group("value"))
+            result.setdefault(current, [])
+            continue
+        versions = _IGNORE_VERSIONS_LINE.match(line)
+        if versions is not None and current is not None:
+            result[current].extend(_split_items(versions.group("items")))
+    return result
+
+
+def dependabot_problems(text: str, required: tuple[str, ...] = REQUIRED_ECOSYSTEMS) -> list[str]:
+    """Return what is wrong with the update entries: a missing ecosystem, schedule or grouping."""
+    updates = dependabot_updates(text)
+    found = [update["package-ecosystem"] for update in updates]
+    problems = [f"ecosystem {name!r} is not configured" for name in required if name not in found]
+    for update in updates:
+        name = update["package-ecosystem"]
+        if update.get("interval") != "weekly":
+            problems.append(f"{name}: no weekly schedule interval")
+        if not has_grouped_update_types(update, ("minor", "patch")):
+            problems.append(f"{name}: no group covering minor and patch updates")
+    return problems
+
+
+# --------------------------------------------------------------------------------------------
+# Dependabot (T9.5): checks on the real file
+# --------------------------------------------------------------------------------------------
+
+
+def test_dependabot_file_exists() -> None:
+    assert DEPENDABOT_FILE.is_file()
+
+
+def test_dependabot_is_version_2() -> None:
+    entry = top_level_entry(read_dependabot(), "version")
+    assert entry is not None, "no top-level 'version:'"
+    assert entry[0] == "2"
+
+
+def test_dependabot_has_no_tabs() -> None:
+    assert "\t" not in read_dependabot()
+
+
+def test_dependabot_configures_exactly_both_ecosystems() -> None:
+    updates = dependabot_updates(read_dependabot())
+    found = sorted(update["package-ecosystem"] for update in updates)
+    assert found == sorted(REQUIRED_ECOSYSTEMS)
+
+
+def test_dependabot_schedules_and_groups_every_ecosystem() -> None:
+    assert dependabot_problems(read_dependabot()) == []
+
+
+def test_dependabot_holds_the_pyside6_family_below_6_13() -> None:
+    (uv,) = [u for u in dependabot_updates(read_dependabot()) if u["package-ecosystem"] == "uv"]
+    ignored = ignored_versions(uv)
+    for name in PYSIDE_FAMILY:
+        assert ">=6.13" in ignored.get(name, []), f"{name} is not ignored from 6.13 on"
+
+
+def test_dependabot_update_pull_requests_run_ci_including_the_packaging_job() -> None:
+    ci = read_workflow("ci.yml")
+    assert "pull_request" in trigger_names(ci)
+    build = [line.strip() for line in job_lines(ci, "build")]
+    assert index_of_run(build, "uv run pytest -m packaging") != -1
+    assert "test" in job_needs(ci, "build")
+
+
+# --------------------------------------------------------------------------------------------
+# Dependabot (T9.5): helper self-tests
+# --------------------------------------------------------------------------------------------
+
+GOOD_DEPENDABOT = (
+    "version: 2\n"
+    "updates:\n"
+    "  # a comment\n"
+    '  - package-ecosystem: "github-actions"\n'
+    '    directory: "/"\n'
+    "    schedule:\n"
+    '      interval: "weekly"\n'
+    "    groups:\n"
+    "      all:\n"
+    '        update-types: ["patch", "minor"]\n'
+    '        patterns: ["*"]\n'
+    "  - package-ecosystem: uv\n"
+    "    schedule:\n"
+    "      interval: weekly\n"
+    "    groups:\n"
+    "      py:\n"
+    "        update-types: [minor, patch]\n"
+    "    ignore:\n"
+    '      - dependency-name: "demo-lib"\n'
+    '        versions: [">=2.0", "1.5.0"]\n'
+    '      - dependency-name: "other-lib"\n'
+    '        versions: [">=3"]\n'
+    "    open-pull-requests-limit: 5\n"
+)
+
+
+def test_dependabot_updates_splits_the_entries_and_reads_their_settings() -> None:
+    first, second = dependabot_updates(GOOD_DEPENDABOT)
+    assert first == {
+        "package-ecosystem": "github-actions",
+        "interval": "weekly",
+        "update-types": "minor,patch",
+    }
+    assert second["package-ecosystem"] == "uv"
+    assert second["interval"] == "weekly"
+    assert second["update-types"] == "minor,patch"
+    assert ignored_versions(second) == {"demo-lib": [">=2.0", "1.5.0"], "other-lib": [">=3"]}
+    assert ignored_versions(first) == {}
+    assert dependabot_updates("version: 2\n") == []
+    assert dependabot_problems(GOOD_DEPENDABOT) == []
+
+
+def test_dependabot_check_reports_a_missing_ecosystem() -> None:
+    only_actions = GOOD_DEPENDABOT.split("  - package-ecosystem: uv\n")[0]
+    assert len(dependabot_updates(only_actions)) == 1
+    assert dependabot_problems(only_actions) == ["ecosystem 'uv' is not configured"]
+    assert dependabot_problems("version: 2\n") == [
+        "ecosystem 'github-actions' is not configured",
+        "ecosystem 'uv' is not configured",
+    ]
+
+
+def test_dependabot_check_reports_an_entry_without_schedule() -> None:
+    no_schedule = GOOD_DEPENDABOT.replace("    schedule:\n      interval: weekly\n", "")
+    assert dependabot_problems(no_schedule) == ["uv: no weekly schedule interval"]
+    daily = GOOD_DEPENDABOT.replace('interval: "weekly"', 'interval: "daily"')
+    assert dependabot_problems(daily) == ["github-actions: no weekly schedule interval"]
+    outside = "updates:\n  - package-ecosystem: uv\ninterval: weekly\n"
+    assert "uv: no weekly schedule interval" in dependabot_problems(outside)
+
+
+def test_dependabot_check_reports_missing_or_split_groups() -> None:
+    py_groups = "    groups:\n      py:\n        update-types: [minor, patch]\n"
+    no_groups = GOOD_DEPENDABOT.replace(py_groups, "")
+    assert dependabot_problems(no_groups) == ["uv: no group covering minor and patch updates"]
+    split = GOOD_DEPENDABOT.replace("[minor, patch]", "[minor]")
+    assert dependabot_problems(split) == ["uv: no group covering minor and patch updates"]
+    update = {"update-types": "minor;major,minor,patch"}
+    assert has_grouped_update_types(update, ("minor", "patch"))
+    assert not has_grouped_update_types({"update-types": "minor;patch"}, ("minor", "patch"))
+    assert not has_grouped_update_types({}, ("minor", "patch"))

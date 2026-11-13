@@ -72,6 +72,17 @@ empty and must keep all placeholders.
 - A rule the plan does not state is declared in `domain/config.py` with a `placeholder` flag,
   and the same commit records it in `PLAN.md`.
 
+## Dependency updates
+
+Dependabot opens weekly pull requests for GitHub Actions and for the uv lockfile.
+
+- Every such pull request runs CI, including the packaging job, and is merged only when green.
+- For an actions update, the reviewer checks that the new commit SHA belongs to the tagged
+  release named in the trailing `# vX.Y.Z` comment. Dependabot can leave that comment stale.
+- The PySide6 upper bound (`<6.13`) is deliberate while Windows 10 is a target. It is revisited
+  at the yearly stack review, and Dependabot is told not to go past it.
+- A dependency whose licence changes is caught by the dependency-licence allow-list test.
+
 ## Reporting problems
 
 Use the bug report template. **Do not paste real data, screenshots of real data, database files
