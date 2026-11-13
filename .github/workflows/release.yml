@@ -1,0 +1,82 @@
+name: Release
+
+# Runs only when a version tag is pushed. It builds the one-folder bundle, zips it reproducibly,
+# attests the zip's build provenance and creates a DRAFT release. Nothing is published here:
+# a person publishes the draft after a manual smoke test of the zip on a clean Windows machine.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      QT_QPA_PLATFORM: offscreen
+    # Elevated permissions are granted to this job only (top level stays read-only).
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+          version: "0.11.7"
+
+      - run: uv sync --locked --all-groups
+
+      # The tag goes through an environment variable, never straight into the script text.
+      - name: Check that the tag is v plus the package version
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: uv run python scripts/make_release_zip.py check-tag --tag "$env:TAG"
+
+      - name: Default test suite
+        run: uv run pytest
+
+      - name: Packaging test suite
+        run: uv run pytest -m packaging
+
+      - name: Build the bundle
+        run: uv run python scripts/build_exe.py --dist-dir dist --work-dir build
+
+      - name: Zip the bundle and write the checksum files
+        run: uv run python scripts/make_release_zip.py package --bundle-dir dist/cbrn-dashboard --out-dir release
+
+      - name: Attest the build provenance of the zip
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release/*.zip
+
+      - name: Write the release notes
+        shell: pwsh
+        run: |
+          $zip = (Get-ChildItem -Path release -Filter '*.zip').FullName
+          uv run python scripts/make_release_zip.py release-body --template .github/release-body.template.md --out release/body.md --zip $zip
+
+      - name: Create the draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $zip = (Get-ChildItem -Path release -Filter '*.zip').FullName
+          $pre = uv run python scripts/make_release_zip.py prerelease-flag
+          if ($LASTEXITCODE -ne 0) { throw "prerelease-flag failed" }
+          $arguments = @($env:TAG, $zip, 'release/SHA256SUMS.txt', 'release/SHA256-FILES.txt')
+          $arguments += @('--draft', '--title', "CBRN Readiness Dashboard $env:TAG", '--notes-file', 'release/body.md')
+          if ($pre) { $arguments += $pre }
+          gh release create @arguments
