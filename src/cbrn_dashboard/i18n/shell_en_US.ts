@@ -27,6 +27,11 @@
         </translation>
     </message>
     <message>
+        <source>Alerts on the as-of date</source>
+        <extracomment>The registry key of the Alerts page (the button of the start-up summary opens it).</extracomment>
+        <translation>Alerts on the as-of date</translation>
+    </message>
+    <message>
         <source>&amp;File</source>
         <translation>&amp;File</translation>
     </message>
@@ -57,6 +62,35 @@
     <message>
         <source>DEMO — fictitious data</source>
         <translation>DEMO — fictitious data</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n critical</source>
+        <translation>
+            <numerusform>%n critical</numerusform>
+            <numerusform>%n critical</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n warning</source>
+        <translation>
+            <numerusform>%n warning</numerusform>
+            <numerusform>%n warning</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n info</source>
+        <translation>
+            <numerusform>%n info</numerusform>
+            <numerusform>%n info</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Alerts: %1, %2, %3</source>
+        <translation>Alerts: %1, %2, %3</translation>
+    </message>
+    <message>
+        <source>Alerts need attention: %1, %2.</source>
+        <translation>Alerts need attention: %1, %2.</translation>
     </message>
     <message>
         <source>Read-only mode: the database cannot be written, so nothing can be changed.</source>
@@ -93,6 +127,11 @@
     <message>
         <source>Preliminary version — indicators not institutionally validated.</source>
         <translation>Preliminary version — indicators not institutionally validated.</translation>
+    </message>
+    <message>
+        <source>Open alerts</source>
+        <extracomment>Emitted when the button of the ``ALERT_SUMMARY`` banner is pressed (open the Alerts page).</extracomment>
+        <translation>Open alerts</translation>
     </message>
     <message>
         <source>Main toolbar</source>

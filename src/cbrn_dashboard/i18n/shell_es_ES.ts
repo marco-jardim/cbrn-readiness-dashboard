@@ -27,6 +27,11 @@
         </translation>
     </message>
     <message>
+        <source>Alerts on the as-of date</source>
+        <extracomment>The registry key of the Alerts page (the button of the start-up summary opens it).</extracomment>
+        <translation type="unfinished">Alertas en la fecha de referencia</translation>
+    </message>
+    <message>
         <source>&amp;File</source>
         <translation type="unfinished">&amp;Archivo</translation>
     </message>
@@ -57,6 +62,35 @@
     <message>
         <source>DEMO — fictitious data</source>
         <translation type="unfinished">DEMO — datos ficticios</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n critical</source>
+        <translation type="unfinished">
+            <numerusform>%n crítica</numerusform>
+            <numerusform>%n críticas</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n warning</source>
+        <translation type="unfinished">
+            <numerusform>%n advertencia</numerusform>
+            <numerusform>%n advertencias</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n info</source>
+        <translation type="unfinished">
+            <numerusform>%n informativa</numerusform>
+            <numerusform>%n informativas</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Alerts: %1, %2, %3</source>
+        <translation type="unfinished">Alertas: %1, %2, %3</translation>
+    </message>
+    <message>
+        <source>Alerts need attention: %1, %2.</source>
+        <translation type="unfinished">Las alertas requieren atención: %1, %2.</translation>
     </message>
     <message>
         <source>Read-only mode: the database cannot be written, so nothing can be changed.</source>
@@ -93,6 +127,11 @@
     <message>
         <source>Preliminary version — indicators not institutionally validated.</source>
         <translation type="unfinished">Versión preliminar — indicadores no validados institucionalmente.</translation>
+    </message>
+    <message>
+        <source>Open alerts</source>
+        <extracomment>Emitted when the button of the ``ALERT_SUMMARY`` banner is pressed (open the Alerts page).</extracomment>
+        <translation type="unfinished">Abrir alertas</translation>
     </message>
     <message>
         <source>Main toolbar</source>

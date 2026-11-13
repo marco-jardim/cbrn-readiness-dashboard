@@ -7,6 +7,18 @@ and the page stack are filled from the page registry; the toolbar holds the as-o
 (D13), bound both ways to ``context.as_of``; the banner area shows the demo, read-only, location,
 clock, backup-reminder and translation banners and the permanent preliminary notice.
 
+The File menu holds "Back up...", "Restore..." and "Open data folder" (T7.4, the actions of
+:class:`~cbrn_dashboard.ui.backup.actions.BackupActions`; the folder is opened by the single helper
+of ``ui/shell/folders.py``) and "Quit".
+
+The status bar holds the alert badge (T6.6): the alert counts by severity for the as-of date. At
+start-up, when warning or critical alerts exist and the start-up summary preference is on, the
+``ALERT_SUMMARY`` banner appears with a button that opens the Alerts page (information-level alerts
+never trigger it). The badge and the banner follow ``as_of_changed`` and ``data_changed``; the
+banner, once shown, stays while warning or critical alerts remain. The counts are read through
+``context.services.alerts`` each time (it is ``None`` without a database, which hides the badge);
+a language change only re-applies the texts of the counts already read.
+
 Every user-visible text is applied in :meth:`MainWindow.retranslate`, which runs once on
 construction and again on every ``LanguageChange`` event, so switching the language retitles the
 whole window live. Texts go through ``QCoreApplication.translate("Shell", ...)`` (never
@@ -32,15 +44,20 @@ from PySide6.QtWidgets import (
 )
 
 from cbrn_dashboard import i18n
+from cbrn_dashboard.domain.alerts import Severity
 from cbrn_dashboard.logging_setup import log_exception
 from cbrn_dashboard.prefs import PreferencesWarning
+from cbrn_dashboard.ui.backup.actions import BackupActions
 from cbrn_dashboard.ui.shell import registry
-from cbrn_dashboard.ui.shell.banners import BannerArea, BannerCode
+from cbrn_dashboard.ui.shell.banners import AlertCounts, BannerArea, BannerCode, alert_badge_text
 from cbrn_dashboard.ui.shell.context import AppContext
+from cbrn_dashboard.ui.shell.folders import open_local_folder
 from cbrn_dashboard.ui.shell.formatting import apply_locale, from_qdate, to_qdate
 from cbrn_dashboard.ui.shell.i18n import app_display_name, language_display_name
 
 _PAGE_KEY_ROLE = Qt.ItemDataRole.UserRole
+#: The registry key of the Alerts page (the button of the start-up summary opens it).
+ALERTS_PAGE_KEY = "alerts"
 
 
 class MainWindow(QMainWindow):
@@ -75,6 +92,15 @@ class MainWindow(QMainWindow):
 
         self.file_menu = self.menuBar().addMenu("")
         self.file_menu.setObjectName("menu_file")
+        # T7.4: the three data-protection actions; the folder is opened by the one allowed helper.
+        self.backup_actions = BackupActions(context, self, open_folder=open_local_folder)
+        self.backup_actions.backup_action.setObjectName("action_file_backup")
+        self.backup_actions.restore_action.setObjectName("action_file_restore")
+        self.backup_actions.open_folder_action.setObjectName("action_file_open_data_folder")
+        self.file_menu.addAction(self.backup_actions.backup_action)
+        self.file_menu.addAction(self.backup_actions.restore_action)
+        self.file_menu.addAction(self.backup_actions.open_folder_action)
+        self.file_menu.addSeparator()
         self.quit_action = QAction(self)
         self.quit_action.setObjectName("action_quit")
         self.quit_action.setShortcuts(QKeySequence.StandardKey.Quit)
@@ -116,6 +142,11 @@ class MainWindow(QMainWindow):
         self.today_action.triggered.connect(self._on_today)
         context.as_of_changed.connect(self._on_as_of_changed)
 
+        self._alert_counts: AlertCounts | None = None
+        self.alert_badge = QLabel()
+        self.alert_badge.setObjectName("alert_badge")
+        self.alert_badge.setTextFormat(Qt.TextFormat.PlainText)
+        self.statusBar().addPermanentWidget(self.alert_badge)
         self.data_folder_label = QLabel()
         self.data_folder_label.setObjectName("data_folder_label")
         self.data_folder_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -127,6 +158,10 @@ class MainWindow(QMainWindow):
         self._build_pages()
         self._sync_context_banners()
         context.backup_reminder_changed.connect(self._on_backup_reminder_changed)
+        self.banners.alerts_requested.connect(self._open_alerts_page)
+        context.as_of_changed.connect(self._refresh_alerts)
+        context.data_changed.connect(self._refresh_alerts)
+        self._refresh_alerts(startup=True)
 
         self._manager.language_changed.connect(self._on_language_changed)
         self._sync_language_actions()
@@ -218,6 +253,62 @@ class MainWindow(QMainWindow):
         else:
             self.banners.hide_banner(BannerCode.BACKUP_REMINDER)
 
+    # ------------------------------------------------------------------ alerts (T6.6)
+
+    def _read_alert_counts(self) -> AlertCounts | None:
+        """The counts on the as-of date, or ``None`` (no database, or the read failed).
+
+        The service is looked up in the context each time: ``context.conn = None`` empties it.
+        """
+        service = self._context.services.alerts
+        if service is None:
+            return None
+        try:
+            counts = service.counts(self._context.as_of)
+        except Exception as exc:  # a failing read must not take the window down
+            log_exception("UI.ALERT_COUNTS_FAILED", exc)
+            return None
+        return AlertCounts(
+            critical=counts[Severity.CRITICAL],
+            warning=counts[Severity.WARNING],
+            info=counts[Severity.INFO],
+        )
+
+    def _refresh_alerts(self, *_args: object, startup: bool = False) -> None:
+        """Read the counts again; update the badge and the summary banner.
+
+        ``startup`` (the first call) is the only one that may SHOW the summary, and only when the
+        preference is on and a warning or critical alert exists. Later calls update a summary that
+        is already shown, or hide it once no warning or critical alert is left.
+        """
+        counts = self._read_alert_counts()
+        self._alert_counts = counts
+        self._apply_alert_badge()
+        already_shown = BannerCode.ALERT_SUMMARY in self.banners.visible_codes()
+        allowed = already_shown or (startup and self._context.preferences.current.startup_summary)
+        if counts is not None and counts.actionable > 0 and allowed:
+            self.banners.set_alert_summary(counts.critical, counts.warning)
+            self.banners.show_banner(BannerCode.ALERT_SUMMARY)
+        else:
+            self.banners.hide_banner(BannerCode.ALERT_SUMMARY)
+
+    def _apply_alert_badge(self) -> None:
+        """Show the counts already read in the current language (hidden without counts)."""
+        counts = self._alert_counts
+        self.alert_badge.setVisible(counts is not None)
+        if counts is None:
+            self.alert_badge.clear()
+            self.alert_badge.setToolTip("")
+            return
+        tip = QCoreApplication.translate("Shell", "Alerts on the as-of date")
+        self.alert_badge.setText(alert_badge_text(counts))
+        self.alert_badge.setToolTip(tip)
+
+    def _open_alerts_page(self) -> None:
+        """The button of the summary banner: show the Alerts page (when it is registered)."""
+        if ALERTS_PAGE_KEY in self._page_keys:
+            self.show_page(ALERTS_PAGE_KEY)
+
     # ------------------------------------------------------------------ as-of date
 
     def _on_edit_date_changed(self, value: object) -> None:
@@ -263,6 +354,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(app_display_name())
         self.file_menu.setTitle(QCoreApplication.translate("Shell", "&File"))
         self.quit_action.setText(QCoreApplication.translate("Shell", "&Quit"))
+        self.backup_actions.retranslate()
+        self._apply_alert_badge()
         self.language_menu.setTitle(QCoreApplication.translate("Shell", "&Language"))
         for code, action in self.language_actions.items():
             action.setText(language_display_name(code))
