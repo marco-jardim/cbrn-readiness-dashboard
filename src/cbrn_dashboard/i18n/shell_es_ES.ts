@@ -145,5 +145,9 @@
         <extracomment>Okabe-Ito colour-blind-safe palette; series take their colours from it in order (cycling). The property the pseudo-locale walker looks for: the widget&apos;s own texts are data.</extracomment>
         <translation type="unfinished">Sin datos</translation>
     </message>
+    <message>
+        <source>Cannot save</source>
+        <translation type="unfinished">No se puede guardar</translation>
+    </message>
 </context>
 </TS>
