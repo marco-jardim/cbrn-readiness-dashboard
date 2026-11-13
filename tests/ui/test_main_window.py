@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QTranslator
+from PySide6.QtCore import QRect, QSize, QTranslator
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QMenu, QStackedWidget
 from pytestqt.qtbot import QtBot
@@ -20,6 +20,7 @@ from cbrn_dashboard.cli import CliOptions
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.paths import DataLocation, LocationSource
 from cbrn_dashboard.ui.shell import registry
+from cbrn_dashboard.ui.shell.main_window import MINIMUM_HEIGHT, MINIMUM_WIDTH
 from tests.ui._fakes import FakePrompts, expect_handle
 
 pytestmark = pytest.mark.ui
@@ -198,6 +199,60 @@ def test_quit_action_closes_the_window(make_app: MakeApp, qtbot: QtBot) -> None:
     assert window.findChild(QAction, "action_quit") is window.quit_action
     window.quit_action.trigger()
     assert not window.isVisible()
+
+
+def test_oversized_window_is_fitted_to_the_available_area(
+    make_app: MakeApp, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = make_app("en-US").window
+    area = QRect(100, 80, 1000, 600)  # smaller than the window below, larger than the minimum
+    monkeypatch.setattr(window, "available_area", lambda: area)
+    window.resize(1600, 1200)
+    window.move(900, 500)  # starts across the bottom right edge of the area
+    window.show()
+    qtbot.waitExposed(window)
+    assert area.contains(window.frameGeometry())
+    assert window.width() >= MINIMUM_WIDTH
+    assert window.height() >= MINIMUM_HEIGHT
+
+
+def test_window_fits_an_offset_available_area(
+    make_app: MakeApp, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The offscreen screen is only 800 px wide, the minimum width, so a patched area is used.
+    area = QRect(100, 50, 1200, 900)
+    window = make_app("en-US").window
+    monkeypatch.setattr(window, "available_area", lambda: area)
+    window.resize(3000, 2000)  # taller and wider than the area
+    window.show()
+    qtbot.waitExposed(window)
+    assert area.contains(window.frameGeometry())
+
+
+def test_fitted_window_keeps_the_minimum_size(
+    make_app: MakeApp, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = make_app("en-US").window
+    monkeypatch.setattr(window, "available_area", lambda: QRect(0, 0, 640, 400))
+    window.show()
+    qtbot.waitExposed(window)
+    assert (window.width(), window.height()) == (MINIMUM_WIDTH, MINIMUM_HEIGHT)
+    assert window.minimumSize() == QSize(MINIMUM_WIDTH, MINIMUM_HEIGHT)
+
+
+def test_window_is_fitted_only_on_the_first_show(
+    make_app: MakeApp, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = make_app("en-US").window
+    monkeypatch.setattr(window, "available_area", lambda: QRect(0, 0, 1000, 600))
+    window.resize(900, 560)
+    window.show()
+    qtbot.waitExposed(window)
+    window.hide()
+    window.resize(950, 580)
+    window.show()
+    qtbot.waitExposed(window)
+    assert (window.width(), window.height()) == (950, 580)
 
 
 def test_window_closes_cleanly(make_app: MakeApp, qtbot: QtBot) -> None:

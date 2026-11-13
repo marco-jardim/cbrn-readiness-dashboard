@@ -29,8 +29,8 @@ whole window live. Texts go through ``QCoreApplication.translate("Shell", ...)``
 from datetime import date
 from functools import partial
 
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtGui import QAction, QActionGroup, QKeySequence
+from PySide6.QtCore import QCoreApplication, QEvent, QRect, Qt
+from PySide6.QtGui import QAction, QActionGroup, QGuiApplication, QKeySequence, QShowEvent
 from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
@@ -66,6 +66,8 @@ ALERTS_PAGE_KEY = "alerts"
 #: The smallest window: it still fits a 960 x 540 logical screen (a 1920 x 1080 display at 200%).
 MINIMUM_WIDTH = 800
 MINIMUM_HEIGHT = 500
+#: Free space kept on each side between the window frame and the edge of the available area.
+_SCREEN_MARGIN = 8
 #: Keyboard shortcuts of the actions that have no mnemonic (the menu entries and the toolbar button
 #: whose texts are translated names). The standard keys (Quit, Help) stay as they are. None of
 #: these is used by a text field or by the date editor; the accessibility test checks that every
@@ -88,6 +90,7 @@ class MainWindow(QMainWindow):
         self._manager = context.translator_manager
         self.setObjectName("main_window")
         self.setMinimumSize(MINIMUM_WIDTH, MINIMUM_HEIGHT)
+        self._fitted = False
 
         self.banners = BannerArea()
         self.navigation = QListWidget()
@@ -429,6 +432,39 @@ class MainWindow(QMainWindow):
         current = self._manager.current_language
         for code, action in self.language_actions.items():
             action.setChecked(code == current)
+
+    # ------------------------------------------------------------------ initial size and position
+
+    def available_area(self) -> QRect:
+        """The usable area of the screen the window opens on (the taskbar is not part of it)."""
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        return screen.availableGeometry() if screen is not None else QRect()
+
+    def fit_to_available_area(self) -> None:
+        """Shrink the window to the available screen area and move its frame inside it.
+
+        The window never goes below ``MINIMUM_WIDTH`` x ``MINIMUM_HEIGHT``, even on a smaller area.
+        """
+        area = self.available_area()
+        if area.isEmpty():
+            return
+        frame = self.frameGeometry()
+        extra_width = max(0, frame.width() - self.width())
+        extra_height = max(0, frame.height() - self.height())
+        width = min(self.width(), area.width() - extra_width - 2 * _SCREEN_MARGIN)
+        height = min(self.height(), area.height() - extra_height - 2 * _SCREEN_MARGIN)
+        self.resize(max(MINIMUM_WIDTH, width), max(MINIMUM_HEIGHT, height))
+        frame_width = self.width() + extra_width
+        frame_height = self.height() + extra_height
+        left = min(max(frame.x(), area.left()), area.right() + 1 - frame_width)
+        top = min(max(frame.y(), area.top()), area.bottom() + 1 - frame_height)
+        self.move(max(left, area.left()), max(top, area.top()))
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        if not self._fitted:  # only the first show: later the user's size and place are kept
+            self._fitted = True
+            self.fit_to_available_area()
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
