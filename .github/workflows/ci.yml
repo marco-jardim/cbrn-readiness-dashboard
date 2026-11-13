@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          version: "0.11.7"
+
+      - run: uv sync --locked --all-groups
+
+      - run: uv run pytest --cov=cbrn_dashboard.domain --cov=cbrn_dashboard.storage --cov=cbrn_dashboard.services --cov-report=term-missing
+
+      # Coverage gate (PLAN section 9): at least 90% for domain, storage and services, applied
+      # only in CI. It switches on by itself as soon as the first of those packages exists
+      # (Phase 1). It is a separate step so that the test suite runs only once.
+      - if: ${{ hashFiles('src/cbrn_dashboard/domain/*.py', 'src/cbrn_dashboard/storage/*.py', 'src/cbrn_dashboard/services/*.py') != '' }}
+        run: uv run coverage report --fail-under=90
