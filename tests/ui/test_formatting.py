@@ -1,0 +1,554 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Tests of the locale formatting and parsing helpers (T1.10).
+
+The expected strings depend on the CLDR version inside the pinned Qt (PySide6 6.12.0) and are
+regenerated deliberately on a Qt upgrade. ``\\xa0`` is a non-breaking space, always written
+explicitly.
+"""
+
+from datetime import date
+from decimal import Decimal
+
+import pytest
+from PySide6.QtCore import QLocale
+from PySide6.QtWidgets import QDateEdit, QDoubleSpinBox
+from pytestqt.qtbot import QtBot
+
+from cbrn_dashboard.i18n import LANGUAGES, UnknownLanguageError
+from cbrn_dashboard.ui.shell import formatting as fmt
+from cbrn_dashboard.ui.shell.formatting import FormatError
+
+FIXED_DATE = date(2026, 3, 5)
+
+
+# ---------------------------------------------------------------------------- locale and dates
+
+
+@pytest.mark.parametrize(
+    ("lang", "name", "decimal_point", "group"),
+    [("pt_BR", "pt_BR", ",", "."), ("en_US", "en_US", ".", ","), ("es_ES", "es_ES", ",", ".")],
+)
+def test_locale_for(lang: str, name: str, decimal_point: str, group: str) -> None:
+    locale = fmt.locale_for(lang)
+    assert locale.name() == name
+    assert locale.decimalPoint() == decimal_point
+    assert locale.groupSeparator() == group
+
+
+def test_locale_for_accepts_bcp47() -> None:
+    assert fmt.locale_for("pt-BR").name() == "pt_BR"
+
+
+@pytest.mark.parametrize("lang", ["fr_FR", "pt", "", "PT_br"])
+def test_unknown_language_is_rejected(lang: str) -> None:
+    with pytest.raises(UnknownLanguageError):
+        fmt.locale_for(lang)
+    with pytest.raises(UnknownLanguageError):
+        fmt.format_date(FIXED_DATE, lang)
+    with pytest.raises(UnknownLanguageError):
+        fmt.format_number(1.5, lang)
+    with pytest.raises(UnknownLanguageError):
+        fmt.format_percent(0.5, lang)
+    with pytest.raises(UnknownLanguageError):
+        fmt.format_money(100, "BRL", lang)
+    with pytest.raises(UnknownLanguageError):
+        fmt.parse_number("1", lang)
+    with pytest.raises(UnknownLanguageError):
+        fmt.parse_amount("1", "BRL", lang)
+    with pytest.raises(UnknownLanguageError):
+        fmt.parse_date("05/03/2026", lang)
+
+
+def test_current_language_locale_returns_a_qlocale() -> None:
+    assert isinstance(fmt.current_language_locale(), QLocale)
+
+
+@pytest.mark.parametrize(
+    ("lang", "expected", "pattern"),
+    [
+        ("pt_BR", "05/03/2026", "dd/MM/yyyy"),
+        ("es_ES", "05/03/2026", "dd/MM/yyyy"),
+        ("en_US", "03/05/2026", "MM/dd/yyyy"),
+    ],
+)
+def test_format_date(lang: str, expected: str, pattern: str) -> None:
+    assert fmt.format_date(FIXED_DATE, lang) == expected
+    assert fmt.date_pattern(lang) == pattern
+    assert fmt.format_iso_date_text("2026-03-05", lang) == expected
+
+
+@pytest.mark.parametrize("iso", ["", "2026-3-5", "2026-02-30", "05/03/2026", "20260305", "x" * 10])
+def test_format_iso_date_text_rejects_garbage(iso: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.format_iso_date_text(iso, "pt_BR")
+    assert info.value.code == "INVALID_DATE"
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [("pt_BR", "05/03/2026"), ("es_ES", "05/03/2026"), ("en_US", "03/05/2026")],
+)
+def test_parse_date(lang: str, text: str) -> None:
+    assert fmt.parse_date(text, lang) == FIXED_DATE
+    assert fmt.parse_date(f"  {text}\xa0", lang) == FIXED_DATE
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_date_round_trip(lang: str) -> None:
+    for value in (date(2026, 1, 1), date(2024, 2, 29), date(1999, 12, 31), date(2030, 11, 9)):
+        assert fmt.parse_date(fmt.format_date(value, lang), lang) == value
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("pt_BR", "5/3/2026"),
+        ("pt_BR", "05/03/26"),
+        ("pt_BR", "05-03-2026"),
+        ("pt_BR", "31/02/2026"),
+        ("pt_BR", "00/03/2026"),
+        ("pt_BR", "05/13/2026"),
+        ("pt_BR", "29/02/2026"),
+        ("pt_BR", "2026-03-05"),
+        ("pt_BR", ""),
+        ("pt_BR", "05/03/2026 x"),
+        ("pt_BR", "05/03/0000"),
+        ("es_ES", "03/05"),
+        ("en_US", "13/05/2026"),
+        ("en_US", "05/32/2026"),
+        ("pt_BR", "\u0660\u0665/\u0660\u0663/\u0662\u0660\u0662\u0666"),
+    ],
+)
+def test_parse_date_rejects(lang: str, text: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_date(text, lang)
+    assert info.value.code == "INVALID_DATE"
+
+
+def test_qdate_conversion_round_trip() -> None:
+    qdate = fmt.to_qdate(FIXED_DATE)
+    assert (qdate.year(), qdate.month(), qdate.day()) == (2026, 3, 5)
+    assert fmt.from_qdate(qdate) == FIXED_DATE
+    with pytest.raises(FormatError):
+        fmt.from_qdate(type(qdate)())
+
+
+# ---------------------------------------------------------------------------- numbers
+
+
+@pytest.mark.parametrize(
+    ("lang", "expected"),
+    [("pt_BR", "1.234,5"), ("en_US", "1,234.5"), ("es_ES", "1234,5")],
+)
+def test_format_number_1234_5(lang: str, expected: str) -> None:
+    assert fmt.format_number(1234.5, lang) == expected
+    assert fmt.format_number(Decimal("1234.5"), lang) == expected
+    assert fmt.format_number(1234.5, lang, decimals=1) == expected
+
+
+@pytest.mark.parametrize(
+    ("lang", "big", "integer", "five_digits", "four_digits"),
+    [
+        ("pt_BR", "1.234.567,89", "1.234", "12.345", "1.234"),
+        ("en_US", "1,234,567.89", "1,234", "12,345", "1,234"),
+        ("es_ES", "1.234.567,89", "1234", "12.345", "1234"),
+    ],
+)
+def test_format_number_grouping(
+    lang: str, big: str, integer: str, five_digits: str, four_digits: str
+) -> None:
+    assert fmt.format_number(1234567.89, lang, decimals=2) == big
+    assert fmt.format_number(1234, lang) == integer
+    assert fmt.format_number(12345, lang) == five_digits
+    assert fmt.format_number(1234.0, lang, decimals=0) == four_digits
+
+
+def test_format_number_decimals_and_rounding() -> None:
+    assert fmt.format_number(2.5, "pt_BR", decimals=3) == "2,500"
+    assert fmt.format_number(2.675, "en_US", decimals=2) == "2.68"
+    assert fmt.format_number(-1234.5, "pt_BR") == "-1.234,5"
+    assert fmt.format_number(-0.001, "pt_BR", decimals=2) == "0,00"
+    assert fmt.format_number(0, "en_US") == "0"
+    assert fmt.format_number(Decimal("1E+3"), "en_US") == "1,000"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), Decimal("NaN")])
+def test_format_number_rejects_non_finite(value: float | Decimal) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.format_number(value, "pt_BR")
+    assert info.value.code == "INVALID_NUMBER"
+
+
+@pytest.mark.parametrize(
+    ("lang", "expected"),
+    [("pt_BR", "45,7%"), ("en_US", "45.7%"), ("es_ES", "45,7\xa0%")],
+)
+def test_format_percent(lang: str, expected: str) -> None:
+    assert fmt.format_percent(0.4567, lang) == expected
+
+
+@pytest.mark.parametrize(
+    ("ratio", "decimals", "pt", "en", "es"),
+    [
+        (1.0, 0, "100%", "100%", "100\xa0%"),
+        (0.0, 1, "0,0%", "0.0%", "0,0\xa0%"),
+        (0.4567, 0, "46%", "46%", "46\xa0%"),
+        (12.345, 2, "1.234,50%", "1,234.50%", "1234,50\xa0%"),
+        (0.5, 1, "50,0%", "50.0%", "50,0\xa0%"),
+    ],
+)
+def test_format_percent_variants(ratio: float, decimals: int, pt: str, en: str, es: str) -> None:
+    assert fmt.format_percent(ratio, "pt_BR", decimals=decimals) == pt
+    assert fmt.format_percent(ratio, "en_US", decimals=decimals) == en
+    assert fmt.format_percent(ratio, "es_ES", decimals=decimals) == es
+
+
+# ---------------------------------------------------------------------------- money
+
+
+@pytest.mark.parametrize(
+    ("minor", "currency", "pt", "en", "es"),
+    [
+        (123456, "BRL", "R$\xa01.234,56", "R$1,234.56", "1234,56\xa0R$"),
+        (123456, "EUR", "€\xa01.234,56", "€1,234.56", "1234,56\xa0€"),
+        (123456, "USD", "US$\xa01.234,56", "US$1,234.56", "1234,56\xa0US$"),
+        (123456789, "BRL", "R$\xa01.234.567,89", "R$1,234,567.89", "1.234.567,89\xa0R$"),
+        (5, "BRL", "R$\xa00,05", "R$0.05", "0,05\xa0R$"),
+        (0, "EUR", "€\xa00,00", "€0.00", "0,00\xa0€"),
+        (100, "BRL", "R$\xa01,00", "R$1.00", "1,00\xa0R$"),
+        (99999, "BRL", "R$\xa0999,99", "R$999.99", "999,99\xa0R$"),
+        (-100, "BRL", "-R$\xa01,00", "-R$1.00", "-1,00\xa0R$"),
+        (-123456, "EUR", "-€\xa01.234,56", "-€1,234.56", "-1234,56\xa0€"),
+        (123456, "CHF", "CHF\xa01.234,56", "CHF\xa01,234.56", "1234,56\xa0CHF"),
+    ],
+)
+def test_format_money(minor: int, currency: str, pt: str, en: str, es: str) -> None:
+    assert fmt.format_money(minor, currency, "pt_BR") == pt
+    assert fmt.format_money(minor, currency, "en_US") == en
+    assert fmt.format_money(minor, currency, "es_ES") == es
+
+
+@pytest.mark.parametrize(
+    ("minor", "pt", "en", "es"),
+    [
+        (123456, "1.234,56", "1,234.56", "1234,56"),
+        (123456789, "1.234.567,89", "1,234,567.89", "1.234.567,89"),
+        (5, "0,05", "0.05", "0,05"),
+        (-250, "-2,50", "-2.50", "-2,50"),
+    ],
+)
+def test_format_amount(minor: int, pt: str, en: str, es: str) -> None:
+    assert fmt.format_amount(minor, "BRL", "pt_BR") == pt
+    assert fmt.format_amount(minor, "BRL", "en_US") == en
+    assert fmt.format_amount(minor, "BRL", "es_ES") == es
+
+
+def test_format_money_is_exact_for_huge_values() -> None:
+    # No float is involved: 2**53 + 1 minor units would be lost by a float.
+    minor = 2**53 + 1
+    assert fmt.format_amount(minor, "BRL", "en_US") == "90,071,992,547,409.93"
+
+
+@pytest.mark.parametrize("currency", ["", "br", "BRLX", "R$", "123"])
+def test_invalid_currency_code(currency: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.format_money(100, currency, "pt_BR")
+    assert info.value.code == "INVALID_CURRENCY"
+    with pytest.raises(FormatError):
+        fmt.parse_amount("1", currency, "pt_BR")
+
+
+# ---------------------------------------------------------------------------- parsing numbers
+
+
+@pytest.mark.parametrize(
+    ("lang", "text", "expected"),
+    [
+        ("pt_BR", "1.234,56", "1234.56"),
+        ("pt_BR", "1234,56", "1234.56"),
+        ("pt_BR", "1.234", "1234"),
+        ("pt_BR", "12.345.678", "12345678"),
+        ("pt_BR", "0,5", "0.5"),
+        ("pt_BR", "  1.234,5\xa0", "1234.5"),
+        ("pt_BR", "-1.234,5", "-1234.5"),
+        ("pt_BR", "- 3", "-3"),
+        ("pt_BR", "\u22123,25", "-3.25"),
+        ("pt_BR", "007", "7"),
+        ("en_US", "1,234.56", "1234.56"),
+        ("en_US", "1234.56", "1234.56"),
+        ("en_US", "1,234", "1234"),
+        ("en_US", "12,345,678.9", "12345678.9"),
+        ("en_US", "-0.5", "-0.5"),
+        ("es_ES", "1234,56", "1234.56"),
+        ("es_ES", "1.234,56", "1234.56"),
+        ("es_ES", "1.234", "1234"),
+        ("es_ES", "12.345,6", "12345.6"),
+        ("es_ES", "12345", "12345"),
+    ],
+)
+def test_parse_number(lang: str, text: str, expected: str) -> None:
+    result = fmt.parse_number(text, lang)
+    assert isinstance(result, Decimal)
+    assert result == Decimal(expected)
+    assert str(result) == str(Decimal(expected))
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("pt_BR", "1,234.56"),
+        ("pt_BR", "1.5"),
+        ("pt_BR", "1.23"),
+        ("pt_BR", "1234.567"),
+        ("pt_BR", "0.123"),
+        ("es_ES", "1,234.56"),
+        ("es_ES", "1.5"),
+        ("es_ES", "1234.567"),
+        ("en_US", "1.234,56"),
+        ("en_US", "1,5"),
+        ("en_US", "1,23"),
+        ("en_US", "1.234.567"),
+    ],
+)
+def test_parse_number_ambiguous(lang: str, text: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_number(text, lang)
+    assert info.value.code == "AMBIGUOUS_NUMBER"
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("pt_BR", "abc"),
+        ("pt_BR", "1..234"),
+        ("pt_BR", ".123"),
+        ("pt_BR", ",5"),
+        ("pt_BR", "5,"),
+        ("pt_BR", "1,2,3"),
+        ("pt_BR", "1.23.4"),
+        ("pt_BR", "1 234,56"),
+        ("pt_BR", "1\xa0234,56"),
+        ("pt_BR", "1'234,56"),
+        ("pt_BR", "1e5"),
+        ("pt_BR", "--1"),
+        ("pt_BR", "+1"),
+        ("pt_BR", "1-"),
+        ("pt_BR", "\u0661\u0662"),
+        ("pt_BR", "12.34a"),
+        ("en_US", "1 234.56"),
+        ("en_US", ".5"),
+        ("en_US", "1..2"),
+        ("es_ES", "1 234,56"),
+    ],
+)
+def test_parse_number_invalid(lang: str, text: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_number(text, lang)
+    assert info.value.code == "INVALID_NUMBER"
+
+
+@pytest.mark.parametrize("text", ["", "   ", "\xa0", "\t\n"])
+def test_parse_number_empty(text: str) -> None:
+    for lang in LANGUAGES:
+        with pytest.raises(FormatError) as info:
+            fmt.parse_number(text, lang)
+        assert info.value.code == "EMPTY"
+
+
+def test_format_error_is_a_value_error_with_code() -> None:
+    error = FormatError("EMPTY", "no input")
+    assert isinstance(error, ValueError)
+    assert error.code == "EMPTY"
+    assert str(error) == "EMPTY: no input"
+    assert str(FormatError("EMPTY")) == "EMPTY"
+
+
+# ---------------------------------------------------------------------------- parsing amounts
+
+
+@pytest.mark.parametrize(
+    ("lang", "currency", "text", "expected"),
+    [
+        ("pt_BR", "BRL", "1.234,56", 123456),
+        ("pt_BR", "BRL", "1234,56", 123456),
+        ("pt_BR", "BRL", "1.234,5", 123450),
+        ("pt_BR", "BRL", "1.234", 123400),
+        ("pt_BR", "BRL", "0,05", 5),
+        ("pt_BR", "BRL", "0", 0),
+        ("pt_BR", "BRL", "R$ 1.234,56", 123456),
+        ("pt_BR", "BRL", "R$\xa01.234,56", 123456),
+        ("pt_BR", "BRL", "R$1.234,56", 123456),
+        ("pt_BR", "BRL", "BRL 1.234,56", 123456),
+        ("pt_BR", "BRL", "brl 1.234,56", 123456),
+        ("pt_BR", "BRL", "1.234,56 R$", 123456),
+        ("pt_BR", "EUR", "€\xa012,3", 1230),
+        ("en_US", "BRL", "1,234.56", 123456),
+        ("en_US", "BRL", "1234.56", 123456),
+        ("en_US", "BRL", "R$1,234.56", 123456),
+        ("en_US", "USD", "US$1,234.56", 123456),
+        ("en_US", "USD", "USD 1,234.56", 123456),
+        ("en_US", "EUR", "1,234", 123400),
+        ("en_US", "EUR", "  1,234.5  ", 123450),
+        ("es_ES", "BRL", "1234,56", 123456),
+        ("es_ES", "BRL", "1.234,56", 123456),
+        ("es_ES", "BRL", "1.234.567,89\xa0R$", 123456789),
+        ("es_ES", "EUR", "1234,56\xa0€", 123456),
+        ("es_ES", "EUR", "1.234,56 EUR", 123456),
+        ("es_ES", "EUR", "1.234", 123400),
+    ],
+)
+def test_parse_amount(lang: str, currency: str, text: str, expected: int) -> None:
+    result = fmt.parse_amount(text, currency, lang)
+    assert result == expected
+    assert type(result) is int
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+@pytest.mark.parametrize("currency", ["BRL", "EUR", "USD"])
+@pytest.mark.parametrize(
+    "minor",
+    [0, 1, 5, 99, 100, 999, 1000, 123456, 99999, 100000, 123450, 1234567, 123456789, 2**53 + 1],
+)
+def test_amount_round_trips(lang: str, currency: str, minor: int) -> None:
+    assert fmt.parse_amount(fmt.format_amount(minor, currency, lang), currency, lang) == minor
+    assert fmt.parse_amount(fmt.format_money(minor, currency, lang), currency, lang) == minor
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_number_round_trip(lang: str) -> None:
+    for value in (Decimal("1234.5"), Decimal("0.25"), Decimal("12345678.125"), Decimal(7)):
+        text = fmt.format_number(value, lang)
+        assert fmt.parse_number(text, lang) == value
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("pt_BR", "1,234.56"),
+        ("pt_BR", "1.5"),
+        ("es_ES", "1,234.56"),
+        ("es_ES", "1.5"),
+        ("en_US", "1.234,56"),
+        ("en_US", "1,5"),
+    ],
+)
+def test_parse_amount_ambiguous(lang: str, text: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_amount(text, "BRL", lang)
+    assert info.value.code == "AMBIGUOUS_NUMBER"
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("pt_BR", "abc"),
+        ("pt_BR", "1 234,56"),
+        ("pt_BR", "R$ R$ 1,00"),
+        ("pt_BR", "EUR 1,00"),
+        ("pt_BR", "+1,00"),
+        ("pt_BR", "-abc"),
+        ("en_US", "1,00 BRL BRL"),
+    ],
+)
+def test_parse_amount_invalid(lang: str, text: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_amount(text, "BRL", lang)
+    assert info.value.code == "INVALID_NUMBER"
+
+
+@pytest.mark.parametrize("text", ["", "  ", "\xa0", "R$", "R$ ", "BRL"])
+def test_parse_amount_empty(text: str) -> None:
+    for lang in LANGUAGES:
+        with pytest.raises(FormatError) as info:
+            fmt.parse_amount(text, "BRL", lang)
+        assert info.value.code == "EMPTY"
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("pt_BR", "-1,00"),
+        ("pt_BR", "-1.234,56"),
+        ("pt_BR", "-R$ 1,00"),
+        ("pt_BR", "R$ -1,00"),
+        ("pt_BR", "\u22121,00"),
+        ("en_US", "-1.00"),
+        ("en_US", "-R$1.00"),
+        ("es_ES", "-1,00\xa0R$"),
+        ("pt_BR", "-0"),
+    ],
+)
+def test_parse_amount_negative(lang: str, text: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_amount(text, "BRL", lang)
+    assert info.value.code == "NEGATIVE_AMOUNT"
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("pt_BR", "1,234"),
+        ("pt_BR", "1.234,567"),
+        ("pt_BR", "R$ 0,001"),
+        ("en_US", "1.234"),
+        ("en_US", "1,234.567"),
+        ("es_ES", "1234,567"),
+    ],
+)
+def test_parse_amount_too_many_decimals(lang: str, text: str) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_amount(text, "BRL", lang)
+    assert info.value.code == "TOO_MANY_DECIMALS"
+
+
+# ---------------------------------------------------------------------------- widgets
+
+
+@pytest.mark.ui
+@pytest.mark.parametrize(
+    ("lang", "pattern", "decimal_point"),
+    [("pt_BR", "dd/MM/yyyy", ","), ("en_US", "MM/dd/yyyy", "."), ("es_ES", "dd/MM/yyyy", ",")],
+)
+def test_apply_locale_to_date_edit(
+    qtbot: QtBot, lang: str, pattern: str, decimal_point: str
+) -> None:
+    widget = QDateEdit()
+    qtbot.addWidget(widget)
+    widget.setDate(fmt.to_qdate(FIXED_DATE))
+    fmt.apply_locale(widget, lang)
+    assert widget.locale().name() == lang
+    assert widget.locale().decimalPoint() == decimal_point
+    assert widget.displayFormat() == pattern
+    assert widget.text() == fmt.format_date(FIXED_DATE, lang)
+
+
+@pytest.mark.ui
+def test_apply_locale_switches_language_live(qtbot: QtBot) -> None:
+    widget = QDateEdit()
+    qtbot.addWidget(widget)
+    widget.setDate(fmt.to_qdate(FIXED_DATE))
+    fmt.apply_locale(widget, "pt_BR")
+    assert widget.text() == "05/03/2026"
+    fmt.apply_locale(widget, "en_US")
+    assert widget.text() == "03/05/2026"
+
+
+@pytest.mark.ui
+@pytest.mark.parametrize(
+    ("lang", "expected"), [("pt_BR", "1,50"), ("en_US", "1.50"), ("es_ES", "1,50")]
+)
+def test_apply_locale_to_double_spin_box(qtbot: QtBot, lang: str, expected: str) -> None:
+    widget = QDoubleSpinBox()
+    qtbot.addWidget(widget)
+    widget.setDecimals(2)
+    fmt.apply_locale(widget, lang)
+    assert widget.locale().name() == lang
+    assert widget.textFromValue(1.5) == expected
+
+
+@pytest.mark.ui
+def test_apply_locale_rejects_unknown_language(qtbot: QtBot) -> None:
+    widget = QDoubleSpinBox()
+    qtbot.addWidget(widget)
+    with pytest.raises(UnknownLanguageError):
+        fmt.apply_locale(widget, "xx_XX")
