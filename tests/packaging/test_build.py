@@ -8,6 +8,7 @@ built once per session by the ``bundle_dir`` fixture.
 import fnmatch
 import json
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -24,6 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_PACKAGE = REPO_ROOT / "src" / "cbrn_dashboard"
 EXE_NAME = "cbrn-dashboard.exe"
 MAX_BUNDLE_MB = 400
+BUILD_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 #: Substrings that must not occur in any path of the bundle (lower case).
 FORBIDDEN_PATH_PARTS: tuple[str, ...] = (
@@ -36,9 +38,48 @@ FORBIDDEN_PATH_PARTS: tuple[str, ...] = (
     "qtwebengine",
 )
 
+#: Further substrings (lower case), checked only for paths under ``_internal/``: the Qt network
+#: stack, in its DLL and Python-binding spellings. They are limited to ``_internal`` so that the
+#: names in ``licenses/`` (component folders, ``QT-THIRD-PARTY.md``) can never trip them.
+FORBIDDEN_INTERNAL_PATH_PARTS: tuple[str, ...] = (
+    "qtnetwork",
+    "qt6network",
+    "qtwebsockets",
+    "qthttpserver",
+)
+
 
 def _internal(bundle: Path) -> Path:
     return bundle / "_internal"
+
+
+def _tracked_package_files() -> list[Path] | None:
+    """Files git tracks below ``src/cbrn_dashboard`` (relative to it), or ``None`` without git."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z", "--", "src/cbrn_dashboard"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    names = [os.fsdecode(item) for item in result.stdout.split(b"\x00") if item]
+    if not names:
+        return None
+    return sorted(Path(name).relative_to("src/cbrn_dashboard") for name in names)
+
+
+def _expected_package_data() -> list[Path]:
+    """Tracked package files that are neither ``.py`` nor ``.ts`` (independent of the build)."""
+    tracked = _tracked_package_files()
+    if tracked is None:
+        pytest.skip("git is missing or the folder is not a git work tree: no independent list")
+    return [
+        relative
+        for relative in tracked
+        if relative.suffix.lower() not in {".py", ".ts"} and (SRC_PACKAGE / relative).is_file()
+    ]
 
 
 def _files(bundle: Path) -> list[Path]:
@@ -88,11 +129,100 @@ def test_bundle_has_qt_platform_plugins(bundle_dir: Path) -> None:
     assert list(bundle_dir.glob("**/platforms/qwindows.dll")), "no windows platform plug-in"
 
 
-def test_bundle_contains_all_package_data(bundle_dir: Path, build_script: ModuleType) -> None:
+def test_bundle_contains_all_package_data(bundle_dir: Path) -> None:
+    # The expected set comes from git, not from the build script, so a wrong exclusion in the
+    # script (for example ".sql") cannot hide itself. build_info.json is generated, not tracked.
     package_root = _internal(bundle_dir) / "cbrn_dashboard"
-    relative_files: list[Path] = build_script.package_data_files(SRC_PACKAGE)
-    missing = [str(path) for path in relative_files if not (package_root / path).is_file()]
+    expected = _expected_package_data()
+    assert expected, "git lists no package data"
+    missing = [path.as_posix() for path in expected if not (package_root / path).is_file()]
     assert not missing, f"package data missing from the bundle: {missing}"
+
+
+def test_bundle_package_folder_holds_only_tracked_data(bundle_dir: Path) -> None:
+    package_root = _internal(bundle_dir) / "cbrn_dashboard"
+    allowed = {path.as_posix() for path in _expected_package_data()}
+    allowed.add("build_info.json")
+    bundled = [path.relative_to(package_root).as_posix() for path in _files(package_root)]
+    extra = [name for name in bundled if name not in allowed and not name.endswith(".qm")]
+    assert not extra, f"untracked files in the bundled package folder: {extra}"
+
+
+def test_bundle_has_build_info(bundle_dir: Path) -> None:
+    path = _internal(bundle_dir) / "cbrn_dashboard" / "build_info.json"
+    assert path.is_file(), f"missing {path}"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(document, dict)
+    stamp = document["built_at_utc"]
+    assert isinstance(stamp, str)
+    assert BUILD_TIMESTAMP.fullmatch(stamp), stamp
+
+
+def test_build_timestamp_honours_source_date_epoch(
+    build_script: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "0")
+    assert build_script.build_timestamp_utc() == "1970-01-01T00:00:00Z"
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "1700000000")
+    assert build_script.build_timestamp_utc() == "2023-11-14T22:13:20Z"
+    monkeypatch.delenv("SOURCE_DATE_EPOCH")
+    assert BUILD_TIMESTAMP.fullmatch(build_script.build_timestamp_utc())
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "yesterday")
+    with pytest.raises(build_script.BuildError):
+        build_script.build_timestamp_utc()
+
+
+def test_package_data_comes_from_git_in_this_work_tree(build_script: ModuleType) -> None:
+    if _tracked_package_files() is None:
+        pytest.skip("not a git work tree")
+    files, source = build_script.package_data_with_source(SRC_PACKAGE)
+    assert source == "git"
+    assert Path("storage") / "migrations" / "0001_core.sql" in files
+
+
+def test_filesystem_fallback_lists_data_and_skips_sources(
+    build_script: ModuleType, tmp_path: Path
+) -> None:
+    (tmp_path / "pkg" / "__pycache__").mkdir(parents=True)
+    (tmp_path / "pkg" / "__pycache__" / "mod.pyc").write_bytes(b"x")
+    (tmp_path / "pkg" / "mod.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "pkg" / "cat.ts").write_text("<TS/>\n", encoding="utf-8")
+    (tmp_path / "pkg" / "schema.sql").write_text("select 1;\n", encoding="utf-8")
+    files, source = build_script.package_data_with_source(tmp_path)
+    assert source == "filesystem"
+    assert files == [Path("pkg") / "schema.sql"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "copy.sqlite3",
+        "x.db",
+        "x.db-journal",
+        "backup.cbrnbak",
+        "x.db.before-restore-20000101",
+        "prefs.json",
+        "selftest.json",
+        "location.json",
+        "app.log",
+        "table.csv",
+    ],
+)
+def test_build_refuses_data_files_by_name(
+    build_script: ModuleType, tmp_path: Path, name: str
+) -> None:
+    (tmp_path / name).write_bytes(b"harmless")
+    with pytest.raises(build_script.BuildError):
+        build_script.package_data_files(tmp_path)
+
+
+@pytest.mark.parametrize("head", [b"SQLite format 3\x00" + b"\x00" * 16, b"CBRNBAK1payload"])
+def test_build_refuses_data_files_by_magic_bytes(
+    build_script: ModuleType, tmp_path: Path, head: bytes
+) -> None:
+    (tmp_path / "innocent.txt").write_bytes(head)
+    with pytest.raises(build_script.BuildError):
+        build_script.package_data_files(tmp_path)
 
 
 def test_bundle_has_the_core_migration_by_name(bundle_dir: Path) -> None:
@@ -148,18 +278,21 @@ def test_bundle_has_no_unused_libraries(bundle_dir: Path) -> None:
     offenders: list[str] = []
     for path in _files(bundle_dir):
         relative = path.relative_to(bundle_dir).as_posix().lower()
-        if any(part in relative for part in FORBIDDEN_PATH_PARTS) or path.name.lower() == (
-            "qt6network.dll"
-        ):
+        forbidden = list(FORBIDDEN_PATH_PARTS)
+        if relative.startswith("_internal/"):
+            forbidden.extend(FORBIDDEN_INTERNAL_PATH_PARTS)
+        if any(part in relative for part in forbidden):
             offenders.append(relative)
     assert not offenders, f"unused libraries in the bundle: {offenders}"
 
 
 def test_bundle_size_is_reasonable(
-    bundle_dir: Path, record_property: Callable[[str, object], None]
+    bundle_dir: Path,
+    record_property: Callable[[str, object], None],
+    report_bundle_size: Callable[[float, Path], None],
 ) -> None:
     total = sum(path.stat().st_size for path in _files(bundle_dir))
     megabytes = round(total / (1024 * 1024), 1)
     record_property("bundle_size_mb", megabytes)
-    sys.stdout.write(f"bundle size: {megabytes} MB\n")
+    report_bundle_size(megabytes, bundle_dir)  # printed by the terminal summary (conftest.py)
     assert megabytes < MAX_BUNDLE_MB

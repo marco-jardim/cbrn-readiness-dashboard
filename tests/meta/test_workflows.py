@@ -315,6 +315,44 @@ def test_ci_build_job_runs_the_packaging_tests() -> None:
     assert any(line.endswith("uv run pytest -m packaging") for line in lines), lines
 
 
+def _env_value(lines: list[str], name: str) -> str | None:
+    """Return the value of the ``NAME: value`` line among ``lines`` (quotes removed), if any."""
+    for line in lines:
+        match = re.match(rf"\s*{re.escape(name)}:\s*(?P<value>\S.*?)\s*$", line)
+        if match is not None:
+            return _unquote(match.group("value"))
+    return None
+
+
+def test_ci_build_job_builds_once_inside_the_packaging_tests() -> None:
+    lines = job_lines(read_workflow("ci.yml"), "build")
+    dist = _env_value(lines, "CBRN_BUNDLE_DIST_DIR")
+    work = _env_value(lines, "CBRN_BUNDLE_WORK_DIR")
+    assert dist, "the build job does not set CBRN_BUNDLE_DIST_DIR"
+    assert work, "the build job does not set CBRN_BUNDLE_WORK_DIR"
+    run_index = index_of_run(lines, "uv run pytest -m packaging")
+    env_index = index_containing(lines, "CBRN_BUNDLE_DIST_DIR")
+    assert 0 <= run_index < env_index, "the variables must belong to the packaging test step"
+    assert index_containing(lines, "CBRN_BUNDLE_WORK_DIR") > run_index
+
+
+def test_ci_never_runs_the_build_script_directly() -> None:
+    lines = code_lines(read_workflow("ci.yml"))
+    offenders = [line.strip() for line in lines if "build_exe" in line]
+    assert offenders == [], f"ci.yml must not build a second time: {offenders}"
+
+
+def test_ci_zip_step_archives_the_tested_bundle_folder() -> None:
+    lines = [line.strip() for line in job_lines(read_workflow("ci.yml"), "build")]
+    dist = _env_value(lines, "CBRN_BUNDLE_DIST_DIR")
+    assert dist
+    zips = [line for line in lines if "Compress-Archive" in line]
+    assert len(zips) == 1, zips
+    assert f"-Path {dist}/cbrn-dashboard " in zips[0], zips[0]
+    run_index = index_of_run(lines, "uv run pytest -m packaging")
+    assert 0 <= run_index < index_containing(lines, "Compress-Archive")
+
+
 def test_ci_build_job_uploads_the_artefact_for_14_days() -> None:
     lines = [line.strip() for line in job_lines(read_workflow("ci.yml"), "build")]
     assert any("uses: actions/upload-artifact@" in line for line in lines), lines

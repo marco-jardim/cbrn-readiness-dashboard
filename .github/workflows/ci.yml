@@ -38,7 +38,9 @@ jobs:
         run: uv run coverage report --fail-under=90
 
   # One-folder Windows bundle (PLAN section 8): the packaging tests build it, run its frozen
-  # --self-test and inspect its contents; the artefact folder is then built again and uploaded.
+  # --self-test and inspect its contents. They build into dist/ and build/ (the two CBRN_BUNDLE_*
+  # variables below), and the zip is made from that very folder: the uploaded bundle is the one
+  # whose self-test ran. There is no second build.
   build:
     needs: test
     runs-on: windows-2025
@@ -58,8 +60,9 @@ jobs:
       - run: uv sync --locked --all-groups
 
       - run: uv run pytest -m packaging
-
-      - run: uv run python scripts/build_exe.py --dist-dir dist --work-dir build
+        env:
+          CBRN_BUNDLE_DIST_DIR: dist
+          CBRN_BUNDLE_WORK_DIR: build
 
       - run: Compress-Archive -Path dist/cbrn-dashboard -DestinationPath cbrn-dashboard-win-x64.zip
         shell: pwsh

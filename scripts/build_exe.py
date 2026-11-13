@@ -13,6 +13,11 @@ The functions are importable (the packaging tests load this file by path, since 
 not a package): :func:`build`, :func:`package_data_files`, :func:`prune_bundle` and the tables
 :data:`UNWANTED_FILE_PATTERNS` / :data:`UNWANTED_PLUGIN_DIRS`.
 
+The package data comes from ``git ls-files`` (tracked files only); without a git work tree every
+file is a candidate and the build is refused if one looks like a database, backup or other user
+data. The build also writes ``cbrn_dashboard/build_info.json`` (``built_at_utc``, honouring
+``SOURCE_DATE_EPOCH``) into the bundle; it is generated in the work folder, never in ``src/``.
+
 ``--exclude-module`` takes Python module names and can leave the Qt DLLs behind, hence the pruning
 step. If the frozen self-test ever proves that a pruned DLL is a link-time dependency of a kept
 one (``Qt6Network.dll`` is the usual suspect), drop its single line from the table below.
@@ -21,10 +26,13 @@ one (``Qt6Network.dll`` is the usual suspect), drop its single line from the tab
 import argparse
 import fnmatch
 import importlib.util
+import json
 import os
 import shutil
+import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType
 
@@ -47,6 +55,28 @@ DEFAULT_WORK_DIR = REPO_ROOT / "build"
 #: Linguist catalogues, byte code, and stale ``.qm`` files (the catalogues are compiled afresh).
 EXCLUDED_DATA_SUFFIXES: frozenset[str] = frozenset({".ts", ".py", ".pyc", ".pyo", ".qm"})
 EXCLUDED_DATA_DIRS: frozenset[str] = frozenset({"__pycache__"})
+
+#: Base-name patterns (case-insensitive) of files that must never be bundled: databases,
+#: backups, preferences, self-test results, logs. A candidate that matches stops the build.
+DATA_FILE_NAME_PATTERNS: tuple[str, ...] = (
+    "*.sqlite",
+    "*.sqlite3",
+    "*.db",
+    "*-journal",
+    "*.cbrnbak",
+    "*.before-restore-*",
+    "prefs.json",
+    "selftest.json",
+    "location.json",
+    "*.log",
+    "*.csv",
+)
+#: Leading bytes of an SQLite database and of a CBRN backup archive (any file name).
+DATA_FILE_MAGIC: tuple[bytes, ...] = (b"SQLite format 3\x00", b"CBRNBAK1")
+
+#: Generated at build time (work folder) and shipped as ``cbrn_dashboard/build_info.json``; the
+#: application's start-up clock check reads ``built_at_utc`` from it.
+BUILD_INFO_NAME = "build_info.json"
 
 EXCLUDED_MODULES: tuple[str, ...] = (
     "PySide6.QtNetwork",
@@ -91,6 +121,19 @@ UNWANTED_FILE_PATTERNS: tuple[str, ...] = (
     "Qt6Positioning*.dll",
     "Qt6Sql*.dll",
     "Qt6Pdf*.dll",
+    "Qt6HttpServer*.dll",
+    "QtNetwork*.pyd",  # the Python bindings of the excluded modules
+    "QtWebEngine*.pyd",
+    "QtWebSockets*.pyd",
+    "QtWebChannel*.pyd",
+    "QtHttpServer*.pyd",
+    "QtQml*.pyd",
+    "QtQuick*.pyd",
+    "QtSql*.pyd",
+    "QtPdf*.pyd",
+    "QtMultimedia*.pyd",
+    "QtBluetooth*.pyd",
+    "QtPositioning*.pyd",
     "QtWebEngineProcess*.exe",
     "qpdf.dll",  # the image-format plug-in that needs Qt6Pdf.dll
     "qtwebengine*.qm",
@@ -144,24 +187,128 @@ def _load_collect_licenses_script() -> ModuleType:
     return module
 
 
+def _git_tracked_files(src_pkg: Path) -> list[Path] | None:
+    """Return the files git tracks below ``src_pkg`` (relative to it), or ``None``.
+
+    ``None`` means git is missing, ``src_pkg`` is not inside a git work tree, or git lists nothing
+    there (for example a source tarball unpacked inside an unrelated repository).
+    """
+    try:
+        inside = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=src_pkg,
+            capture_output=True,
+            check=True,
+        )
+        if inside.stdout.strip() != b"true":
+            return None
+        listing = subprocess.run(
+            ["git", "ls-files", "-z", "--", "."],
+            cwd=src_pkg,
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    names = [os.fsdecode(item) for item in listing.stdout.split(b"\x00") if item]
+    # A tracked file may be deleted in the working tree: it cannot be bundled, so skip it.
+    tracked = [Path(name) for name in names if (src_pkg / name).is_file()]
+    return tracked or None
+
+
+def _walk_files(src_pkg: Path) -> list[Path]:
+    """Return every file below ``src_pkg`` (relative to it), whatever git says about it."""
+    return [path.relative_to(src_pkg) for path in src_pkg.rglob("*") if path.is_file()]
+
+
+def _is_data_file_name(name: str) -> bool:
+    lowered = name.lower()
+    return any(fnmatch.fnmatchcase(lowered, pattern) for pattern in DATA_FILE_NAME_PATTERNS)
+
+
+def _has_data_file_magic(path: Path) -> bool:
+    longest = max(len(magic) for magic in DATA_FILE_MAGIC)
+    with path.open("rb") as handle:
+        head = handle.read(longest)
+    return any(head.startswith(magic) for magic in DATA_FILE_MAGIC)
+
+
+def _refuse_data_files(src_pkg: Path, candidates: Sequence[Path]) -> None:
+    """Raise :class:`BuildError` when a candidate looks like user data (name or magic bytes)."""
+    offenders = [
+        relative.as_posix()
+        for relative in candidates
+        if _is_data_file_name(relative.name) or _has_data_file_magic(src_pkg / relative)
+    ]
+    if offenders:
+        raise BuildError(
+            f"Refusing to bundle what looks like data (database, backup, preferences, log): "
+            f"{sorted(offenders)}. Remove these files from {src_pkg}."
+        )
+
+
+def package_data_with_source(src_pkg: Path) -> tuple[list[Path], str]:
+    """Return ``(files, source)``: the package data files and where the list came from.
+
+    ``source`` is ``"git"`` when ``src_pkg`` is in a git work tree (only tracked files are
+    listed, so an untracked or ignored stray file is never bundled) and ``"filesystem"`` when git
+    is unavailable (a source tarball): then every file is a candidate. In both cases the build is
+    refused (:class:`BuildError`) when a candidate looks like a database, backup or other user
+    data file (:data:`DATA_FILE_NAME_PATTERNS`, :data:`DATA_FILE_MAGIC`).
+    """
+    tracked = _git_tracked_files(src_pkg)
+    source = "git" if tracked is not None else "filesystem"
+    listed = tracked if tracked is not None else _walk_files(src_pkg)
+    found: list[Path] = []
+    for relative in listed:
+        if any(part in EXCLUDED_DATA_DIRS for part in relative.parts[:-1]):
+            continue
+        if relative.suffix.lower() in EXCLUDED_DATA_SUFFIXES:
+            continue
+        found.append(relative)
+    found.sort()
+    _refuse_data_files(src_pkg, found)
+    return found, source
+
+
 def package_data_files(src_pkg: Path) -> list[Path]:
     """Return the data files of the package folder ``src_pkg``, relative to it, sorted.
 
-    Every file below ``src_pkg`` is data except sources, byte code, ``.ts`` catalogues and stale
-    ``.qm`` files (see :data:`EXCLUDED_DATA_SUFFIXES`) and anything inside ``__pycache__``. The
-    walk is generic, so migrations, resources and help files are picked up with no script change.
+    Every tracked file below ``src_pkg`` is data except sources, byte code, ``.ts`` catalogues and
+    stale ``.qm`` files (see :data:`EXCLUDED_DATA_SUFFIXES`) and anything inside ``__pycache__``.
+    The list is generic, so migrations, resources and help files are picked up with no script
+    change. See :func:`package_data_with_source` for the git/filesystem rules.
     """
-    found: list[Path] = []
-    for path in src_pkg.rglob("*"):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(src_pkg)
-        if any(part in EXCLUDED_DATA_DIRS for part in relative.parts[:-1]):
-            continue
-        if path.suffix.lower() in EXCLUDED_DATA_SUFFIXES:
-            continue
-        found.append(relative)
-    return sorted(found)
+    return package_data_with_source(src_pkg)[0]
+
+
+def build_timestamp_utc(environ: Mapping[str, str] | None = None) -> str:
+    """Return the build time as ``YYYY-MM-DDTHH:MM:SSZ`` (UTC, second precision).
+
+    ``SOURCE_DATE_EPOCH`` (integer seconds since 1970) is honoured when set, so that a rebuild can
+    be reproduced; otherwise the current UTC time is used.
+    """
+    variables = os.environ if environ is None else environ
+    epoch = variables.get("SOURCE_DATE_EPOCH", "").strip()
+    if epoch:
+        try:
+            seconds = int(epoch)
+        except ValueError as error:
+            raise BuildError(f"SOURCE_DATE_EPOCH is not an integer: {epoch!r}") from error
+        moment = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(seconds=seconds)
+    else:
+        moment = datetime.now(UTC)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def write_build_info(work_dir: Path) -> Path:
+    """Write ``build_info.json`` into ``work_dir`` (not the source tree) and return its path."""
+    folder = work_dir / "build_info"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / BUILD_INFO_NAME
+    document = {"built_at_utc": build_timestamp_utc()}
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def _add_data_argument(source: Path, destination: str) -> str:
@@ -188,8 +335,20 @@ def _write_launcher(work_dir: Path) -> Path:
     return launcher
 
 
-def pyinstaller_arguments(dist_dir: Path, work_dir: Path, qm_files: Sequence[Path]) -> list[str]:
-    """Return the PyInstaller command line (without the program name)."""
+def pyinstaller_arguments(
+    dist_dir: Path,
+    work_dir: Path,
+    qm_files: Sequence[Path],
+    data_files: Sequence[Path] | None = None,
+    build_info: Path | None = None,
+) -> list[str]:
+    """Return the PyInstaller command line (without the program name).
+
+    ``data_files`` (relative to the package folder) defaults to :func:`package_data_files`;
+    ``build_info`` is the generated ``build_info.json``, added to the package folder when given.
+    """
+    if data_files is None:
+        data_files = package_data_files(PACKAGE_DIR)
     launcher = _write_launcher(work_dir)
     arguments = [
         "--onedir",
@@ -207,9 +366,11 @@ def pyinstaller_arguments(dist_dir: Path, work_dir: Path, qm_files: Sequence[Pat
         f"--collect-submodules={PACKAGE_NAME}",
     ]
     arguments.extend(f"--exclude-module={module}" for module in EXCLUDED_MODULES)
-    for relative in package_data_files(PACKAGE_DIR):
+    for relative in data_files:
         destination = _destination(relative.parent)
         arguments.append(_add_data_argument(PACKAGE_DIR / relative, destination))
+    if build_info is not None:
+        arguments.append(_add_data_argument(build_info, PACKAGE_NAME))
     for qm_file in qm_files:
         arguments.append(_add_data_argument(qm_file, _destination(Path("i18n"))))
     arguments.append(str(launcher))
@@ -264,7 +425,10 @@ def build(dist_dir: Path, work_dir: Path) -> Path:
     shutil.rmtree(qm_dir, ignore_errors=True)
     qm_files = _load_i18n_script().compile_catalogues(qm_dir)
 
-    arguments = pyinstaller_arguments(dist_dir, work_dir, qm_files)
+    data_files, data_source = package_data_with_source(PACKAGE_DIR)
+    print(f"package data: {len(data_files)} file(s) from {data_source}")
+    build_info = write_build_info(work_dir)
+    arguments = pyinstaller_arguments(dist_dir, work_dir, qm_files, data_files, build_info)
     import PyInstaller.__main__ as pyinstaller_main
 
     pyinstaller_main.run(arguments)
