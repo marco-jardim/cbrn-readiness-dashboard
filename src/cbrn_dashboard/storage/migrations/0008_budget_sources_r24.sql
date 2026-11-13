@@ -13,6 +13,9 @@
 -- promoted, a code such as comaer stays a separate user-defined source. This migration changes
 -- rows only, not tables, and does not touch migration 0005.
 --
+-- Like every schema or seed migration, this one writes no change_log rows; the pre-migration
+-- backup keeps the earlier state.
+--
 -- COMAER is inserted BEFORE the Trust Fund is deleted. The id column has no AUTOINCREMENT, so an
 -- id freed by the delete would be reused, and the new source would inherit the change history
 -- (keyed by entity and entity id) of the removed one.

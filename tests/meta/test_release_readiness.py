@@ -94,6 +94,18 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+#: The status line of a manual test document: either not executed, or executed on a date with a
+#: result after it ("EXECUTADO em 2026-12-01, resultado: aprovado").
+_STATUS_LINE = re.compile(
+    r"Status da execução: (?:NÃO EXECUTADO"
+    r"|EXECUTADO em (?:\d{4}-\d{2}-\d{2}|\d{2}/\d{2}/\d{4})\W+\w[^\n]*)"
+)
+
+
+def _has_status_line(text: str) -> bool:
+    return _STATUS_LINE.search(text) is not None
+
+
 def _entry(version: str) -> str:
     """The text of the ``## [version]`` entry of the changelog, up to the next entry."""
     lines = _read(CHANGELOG).splitlines()
@@ -375,9 +387,9 @@ def test_the_smoke_test_exists_and_names_the_current_version() -> None:
     assert f"cbrn-readiness-dashboard-{__version__}-win-x64.zip" in text
 
 
-def test_the_smoke_test_says_that_it_was_not_executed() -> None:
+def test_the_smoke_test_states_whether_it_was_executed() -> None:
     text = _read(SMOKE_TEST)
-    assert "NÃO EXECUTADO" in text
+    assert _has_status_line(text)
     assert "perfil" in text.lower()
     assert "administrador" in text.lower()
 
@@ -441,9 +453,9 @@ def test_the_manual_test_script_names_every_registered_page() -> None:
         assert f"**{title}**" in text, f"the manual test script does not name the page {key}"
 
 
-def test_the_manual_test_script_says_that_it_was_not_executed() -> None:
+def test_the_manual_test_script_states_whether_it_was_executed() -> None:
     text = _read(MANUAL_SCRIPT)
-    assert "NÃO EXECUTADO" in text
+    assert _has_status_line(text)
     assert __version__ in text
     assert "não insira dados reais" in text.lower()
 

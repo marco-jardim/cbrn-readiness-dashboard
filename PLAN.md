@@ -4,7 +4,7 @@
 |---|---|
 | Repository | `marco-jardim/cbrn-readiness-dashboard` (public) |
 | Licence | GPL-3.0-or-later |
-| Plan status | Draft for review by the project owner and the hospital's CBRN defence committee. No code yet. |
+| Plan status | Draft for review by the project owner and the hospital's CBRN defence committee. Implemented up to T10.5; release v1.0.0 is pending the human and network steps of section 13. |
 | Requirements source | Appendix A of the thesis, product "PTT 2" (appendix source lines 55–95, in Portuguese). `Lnn` = line *nn* of that source. The source is not in this repository (the thesis is unpublished), so the R01–R36 quotes and the `Lnn` references cannot be checked from the repository alone. They were checked against `postextual/apendice-a.tex` of the private thesis repository, commit `f8b1d65a76b53019573fb789c09d3d938dbffb59` (2026-11-13), SHA-256 `fbe30bc40ff6ab5ebace449dd3309e2dc2ff8f216d4ad9048c77a83b9c6661c1` (Q18). |
 | Date | 2026-11-12 |
 
@@ -1912,14 +1912,14 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
 - Check: `uv run pytest tests/reports/test_report_model.py`
 
 **T8.6 — PDF rendering** (M) · Depends on: T8.5, T6.4
-- Files: `reports/pdf.py`, `i18n/reports_pt_BR.ts`, `i18n/reports_en_US.ts`, `i18n/reports_es_ES.ts`, `i18n/__init__.py` (one line), `reports/message_keys.py`, `selftest.py` (add the "pdf" check), `pyproject.toml` (pypdf in the `dev` group), `uv.lock`, `tests/reports/test_pdf.py`.
+- Files: `reports/pdf.py`, `i18n/reports_pt_BR.ts`, `i18n/reports_en_US.ts`, `i18n/reports_es_ES.ts`, `i18n/__init__.py` (one line), `reports/message_keys.py`, `selftest.py` (add the "pdf" check), `pyproject.toml` (pypdf in the `dev` group), `uv.lock`, `tests/reports/test_report_pdf.py`, `tests/reports/test_report_pdf_parse.py`.
 - Work:
   - Start with a spike: check whether pypdf extracts text reliably from a Qt-generated PDF. If it does not, content assertions move to the Qt-free report model (T8.5) and the PDF test checks page count, page size and metadata only (K18).
   - Render the report document to an A4 PDF with Qt's text-document and PDF-writer classes (D09). `QTextDocument.print()` has no per-page footer, so paginate manually with `QPainter`, drawing the footer notice and the page number on every page.
   - Include the title, page numbers, the preliminary notice in every page footer, and charts embedded through the T6.4 adapter. When the report model carries the demo marker (`app_meta.is_demo` is 1), every page, in both variants, carries a "DEMO — FICTITIOUS DATA" watermark and the PDF title says so.
   - Set the PDF document metadata (Info and XMP) explicitly, with no operator label, institution name or identifier in the anonymised variant.
   - The language is chosen per report. The renderer loads its own `QTranslator` set for that language and calls those translators directly, formats with an explicit `QLocale`, and never swaps the application's installed translators. Labels shared with the UI come from the Qt-free code→message-key map in `reports/message_keys.py`, so `reports/` does not import `ui/`.
-  - **Open (QA finding P8-04), decision pending:** the Accept bullet "the output parses with pypdf" is not met. pypdf is in neither `pyproject.toml` nor `uv.lock`. The test file is `tests/reports/test_report_pdf.py`, not the `tests/reports/test_pdf.py` named in Files and in the check command below; it asserts content on the layout the renderer builds before painting (text and chart data), and checks the PDF itself only for its signature, page count, page size, the absence of identifying strings in its bytes, and the failure behaviour. Either the dependency and a parse test are added, or the K18 fallback is adopted for this bullet; the decision is not taken here.
+  - **Status (QA finding P8-04, decided):** pypdf was added to the `dev` group (tests only, BSD-3-Clause, never bundled). `tests/reports/test_report_pdf_parse.py` opens the rendered PDFs with pypdf and asserts the page count, the A4 page size and, when pypdf extracts text from page 1, the preliminary notice and the page number on every page (K18: the text checks are skipped if extraction returns nothing). The content assertions on the layout built before painting (text and chart data) stay in `tests/reports/test_report_pdf.py`.
 - Accept:
   - the output parses with pypdf;
   - the pages are A4;
@@ -1928,7 +1928,7 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
   - with a demo model, every page of both variants carries the watermark and the PDF title says "DEMO"; with a real model, none does;
   - generating a report in another language leaves the application's installed translators and default locale unchanged;
   - the self-test "pdf" check passes.
-- Check: `uv run pytest tests/reports/test_pdf.py` and `uv run pytest -m packaging tests/packaging/test_build.py`
+- Check: `uv run pytest tests/reports/test_report_pdf.py tests/reports/test_report_pdf_parse.py` and `uv run pytest -m packaging tests/packaging/test_build.py`
 
 **T8.7 — Reports, snapshots and import/export user interface** (M) · Depends on: T8.2, T8.4, T8.6
 - Files: `ui/reports/page.py`, `ui/reports/dialogs.py`, `ui/reports/labels.py`, `i18n/reports_pt_BR.ts`, `i18n/reports_en_US.ts`, `i18n/reports_es_ES.ts` (update), `ui/shell/registry.py` (one line), `tests/ui/test_reports_page.py`.

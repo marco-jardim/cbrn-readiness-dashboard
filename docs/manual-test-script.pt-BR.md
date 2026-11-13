@@ -35,7 +35,7 @@ nos arquivos e pastas que você escolhe.
   (veja [demo-walkthrough.md](demo-walkthrough.md)). Execute o roteiro no mesmo dia da criação e
   **não altere o relógio do computador**. Em um banco criado em outro dia, as situações envelhecem e
   podem diferir do que está escrito aqui.
-- Ao terminar, registre o resultado na seção 16.
+- Ao terminar, preencha a seção 16 e registre o resultado em CHANGELOG.md.
 
 ## 1. Iniciar o modo de demonstração
 
@@ -124,6 +124,10 @@ nos arquivos e pastas que você escolhe.
    manutenção).
    - Resultado esperado: o histórico lista os registros do ativo. Na página, "Disponível" significa
      operacional; a ocupação não é acompanhada.
+4. Entrada de dados. Use "Adicionar ativo": um leito com código `TESTE-L01`, em serviço desde uma
+   data passada. Se o formulário pedir outros campos, use valores fictícios.
+   - Resultado esperado: o ativo aparece na lista. Se a tela recusar um valor, anote a mensagem
+     exata; ela deve explicar o problema e não alterar nada.
 
 ## 5. Página Exercícios
 
@@ -134,6 +138,9 @@ nos arquivos e pastas que você escolhe.
 2. Selecione `DEMO-EX-06` e `DEMO-EX-09`.
    - Resultado esperado: `DEMO-EX-06` é a última edição EXBRAMED encerrada e não tem total de
      participantes. `DEMO-EX-09` começa no futuro e não tem resultados.
+3. Entrada de dados. Use "Adicionar edição": uma edição CBRAMED fictícia, com datas de início e fim
+   passadas.
+   - Resultado esperado: a edição aparece na lista.
 
 ## 6. Página Orçamento
 
@@ -149,6 +156,10 @@ nos arquivos e pastas que você escolhe.
      execuções, mas nenhum valor alocado, e sua taxa de execução aparece como "Sem dados".
 3. Veja o "Resumo por fonte e moeda".
    - Resultado esperado: os valores estão separados por fonte e por moeda, sem conversão.
+4. Entrada de dados. Use "Adicionar entrada": exercício do ano corrente, uma fonte de recursos, moeda
+   BRL e um valor alocado fictício. Depois use "Adicionar execução" com uma data passada e um valor
+   menor que o alocado.
+   - Resultado esperado: a entrada e a execução aparecem, com a taxa de execução calculada.
 
 ## 7. Página Alertas
 
@@ -321,9 +332,15 @@ demonstração forem recriados.
    - Resultado esperado: "O backup foi restaurado. Os dados anteriores foram mantidos como ...".
      `TESTE-002` **não** está mais na lista, e os demais dados voltam como estavam no passo 2. Uma
      cópia de segurança dos dados anteriores existe ao lado do banco de dados.
-6. Menu "Arquivo" > "Abrir pasta de dados", ou Ctrl+Shift+O.
+6. Troca entre demonstração e dados reais. Feche o programa e abra-o **sem** `--demo` (em uma pasta
+   de dados diferente, por exemplo `--data-dir C:\Temp\cbrn-teste-real`, para não tocar nos dados
+   de demonstração). Em "Arquivo" > "Restaurar...", escolha o arquivo `.cbrnbak` do passo 2 (feito a
+   partir do banco de demonstração) e informe a frase correta.
+   - Resultado esperado: o programa recusa: "Dados de demonstração e dados reais não podem ser
+     trocados. Nada foi alterado." Feche o programa.
+7. Menu "Arquivo" > "Abrir pasta de dados", ou Ctrl+Shift+O.
    - Resultado esperado: o Explorador de Arquivos abre a pasta de dados.
-7. Remova a mídia removível com segurança e guarde o arquivo `.cbrnbak` apenas pelo tempo do teste.
+8. Remova a mídia removível com segurança e guarde o arquivo `.cbrnbak` apenas pelo tempo do teste.
 
 ## 14. Ajuda e Sobre
 
@@ -377,8 +394,12 @@ em uma pasta descartável:
 
 ## 16. Registro do resultado
 
-Preencha após a execução e guarde a folha **fora** do repositório (ela não deve conter dados reais
-nem frases secretas).
+Preencha a folha abaixo após a execução. A folha em si não deve conter dados reais nem frases
+secretas, e é guardada **fora** do repositório. O **resultado** é registrado em
+[CHANGELOG.md](../CHANGELOG.md), na entrada da versão 1.0.0: o status deste teste manual para o
+lançamento (data, versão testada, resultado e decisão de publicar o rascunho), sem o conteúdo das
+respostas às perguntas em aberto. Depois do registro, a linha "Status da execução" no início deste
+documento passa de "NÃO EXECUTADO" para "EXECUTADO em AAAA-MM-DD, resultado: ...".
 
 | Campo | Valor |
 |---|---|

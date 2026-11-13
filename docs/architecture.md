@@ -279,6 +279,9 @@ The rules (from `storage/migrate.py` and `storage/migrations/README.md`):
   a migration may use `DROP TABLE`. For it the runner turns foreign keys off before the
   transaction and runs `PRAGMA foreign_key_check` before the commit.
 - A non-empty database is backed up before the first migration runs.
+- Schema and seed migrations write no `change_log` rows (the log is append-only and records user
+  writes); the pre-migration backup keeps the earlier state. Migration 0008, which changes seed
+  rows of `funding_source`, is an example.
 - **A migration is never edited after it has shipped in a tagged release.** Nothing is tagged yet,
   so developer and demo databases are disposable until a release is published. Change the schema
   with a new migration, numbered one more than the highest number on the main branch when it is

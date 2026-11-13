@@ -146,8 +146,10 @@ message, one `type="unfinished"` translation); a test compares it with the files
   AppLocker or WDAC may warn about or block them (see the install guides).
 - The release workflow has never run, so the zip, the checksums, the per-file manifest and the
   draft release have not been produced by it.
-- The provenance attestation may need a public repository, or a GitHub plan that supports it for
-  private repositories. This is to be confirmed.
+- The repository is public, so the build-provenance attestation is expected to work. The first
+  tag is the first real run of the workflow, so this is still to be confirmed (Q23 stays open).
+- The warning about writing reports or CSV exports to removable media is never shown, because the
+  application does not detect removable drives.
 - The wording about the redistribution of the Microsoft Visual C++ runtime in the bundled licence
   notice (`licenses\MSVC-RUNTIME.md`, which points to Microsoft's published terms) has not been
   confirmed.

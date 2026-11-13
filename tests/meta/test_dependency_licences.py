@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = ROOT / "scripts" / "collect_licenses.py"
 
 PYSIDE_DECLARED = "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only"
-NOT_RUNTIME = ("pytest", "ruff", "mypy", "pyinstaller", "babel")
+NOT_RUNTIME = ("pytest", "ruff", "mypy", "pyinstaller", "babel", "pypdf")
 
 
 @pytest.fixture(scope="module")
