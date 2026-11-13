@@ -17,9 +17,9 @@ runner switches foreign keys off before ``BEGIN``, runs ``PRAGMA foreign_key_che
 ``COMMIT`` (any row rolls the migration back) and switches foreign keys on again afterwards.
 
 The runner refuses to run when the available migration files are not contiguous from 0001 and when
-the database is newer than the newest migration. :func:`backup_before_migration` copies a non-empty
-database with SQLite's online backup API before the first migration runs (task T7.1 later moves it
-into ``storage/backup.py``).
+the database is newer than the newest migration. :func:`backup_before_migration` (implemented in
+``storage/backup.py``, task T7.1, and re-exported here) copies a non-empty database with SQLite's
+online backup API before the first migration runs.
 
 Errors derive from :class:`~cbrn_dashboard.storage.db.DatabaseError`, carry a stable ``code`` and
 never contain SQL text or record contents.
@@ -31,10 +31,11 @@ import re
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from enum import StrEnum
 from importlib import resources
 from pathlib import Path
 
+from cbrn_dashboard.clock import Clock
+from cbrn_dashboard.storage.backup import DatabaseIdentity, backup_before_migration
 from cbrn_dashboard.storage.db import DatabaseConnection, DatabaseError, open_database
 
 __all__ = [
@@ -61,11 +62,7 @@ DEFAULT_PACKAGE = "cbrn_dashboard.storage.migrations"
 #: Header comment line that flags a migration as a table rebuild.
 REBUILD_FLAG = "-- migrate: table-rebuild"
 
-BACKUP_DIR_NAME = "backups"
-DEMO_DIR_NAME = "demo"
-
 _FILE_NAME = re.compile(r"^(\d{4})_([a-z0-9_]+)\.sql$")
-_BACKUP_NAME = re.compile(r"^pre-migration-v\d{4}-(\d{3,})\.sqlite3$")
 _COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
 
 
@@ -315,61 +312,9 @@ def migrate(
 # --------------------------------------------------------------------------- backup
 
 
-class DatabaseIdentity(StrEnum):
-    """Which database a connection belongs to; always passed explicitly, never inferred."""
-
-    REAL = "real"
-    DEMO = "demo"
-
-
-def _next_backup_number(folder: Path) -> int:
-    highest = 0
-    for entry in folder.iterdir():
-        match = _BACKUP_NAME.fullmatch(entry.name)
-        if match is not None:
-            highest = max(highest, int(match.group(1)))
-    return highest + 1
-
-
-def backup_before_migration(
-    conn: sqlite3.Connection,
-    *,
-    data_dir: Path,
-    identity: DatabaseIdentity,
-    from_version: int,
-    enabled: bool = True,
-) -> Path | None:
-    """Copy a non-empty database with SQLite's online backup API; return the new file or ``None``.
-
-    A real database goes to ``<data_dir>/backups/``, a demo database to
-    ``<data_dir>/demo/backups/``. ``None`` is returned (and nothing is written) when ``enabled`` is
-    false, for example when the restore service migrates a temporary copy, and when the database
-    has no user tables (a fresh file). The file name is
-    ``pre-migration-v<from_version>-<n>.sqlite3`` with the next free sequence number ``n``.
-    """
-    if not enabled:
-        return None
-    count: object = conn.execute(
-        "SELECT count(*) FROM sqlite_master WHERE type='table'"
-    ).fetchone()[0]
-    if count == 0:
-        return None
-    folder = data_dir / BACKUP_DIR_NAME
-    if identity is DatabaseIdentity.DEMO:
-        folder = data_dir / DEMO_DIR_NAME / BACKUP_DIR_NAME
-    folder.mkdir(parents=True, exist_ok=True)
-    destination = folder / (
-        f"pre-migration-v{from_version:04d}-{_next_backup_number(folder):03d}.sqlite3"
-    )
-    target = open_database(destination)
-    try:
-        conn.backup(target)
-    except BaseException:
-        target.close()
-        destination.unlink(missing_ok=True)
-        raise
-    target.close()
-    return destination
+#
+# The pre-migration backup lives in ``storage/backup.py`` (task T7.1) and is re-exported here, with
+# ``DatabaseIdentity``, so existing imports from this module keep working.
 
 
 # --------------------------------------------------------------------------- convenience
@@ -382,11 +327,12 @@ def open_and_migrate(
     identity: DatabaseIdentity,
     backup: bool = True,
     package: str | None = None,
+    clock: Clock | None = None,
 ) -> DatabaseConnection:
     """Open the database at ``path`` and migrate it, backing it up first when it is not empty.
 
     The connection is closed before any error propagates. ``package`` replaces the real migration
-    package (for tests).
+    package (for tests); ``clock`` stamps the pre-migration backup (default: the system clock).
     """
     conn = open_database(path)
 
@@ -397,6 +343,7 @@ def open_and_migrate(
             identity=identity,
             from_version=from_version,
             enabled=backup,
+            clock=clock,
         )
 
     try:

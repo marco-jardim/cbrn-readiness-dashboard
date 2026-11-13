@@ -8,11 +8,13 @@ import inspect
 import itertools
 import sqlite3
 from contextlib import closing
+from datetime import timedelta
 from importlib import resources
 from pathlib import Path
 
 import pytest
 
+from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.storage import migrate as migrate_module
 from cbrn_dashboard.storage.db import DatabaseError, open_database
 from cbrn_dashboard.storage.migrate import (
@@ -508,6 +510,11 @@ def test_before_migrate_is_called_once_and_only_when_there_is_work(
 # --------------------------------------------------------------------------- backup
 
 
+BACKUP_CLOCK = FixedClock.at("2026-03-05T02:30:00Z")
+#: Name of the pre-migration backup made at ``BACKUP_CLOCK`` from schema version 1 (T7.1 naming).
+FIRST_BACKUP = "pre-migration-20260305T023000Z-v0001.sqlite3"
+
+
 def _packages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[str, str, str]:
     one = {"0001_a.sql": CREATE_A}
     two = {**one, "0002_b.sql": CREATE_B}
@@ -526,8 +533,11 @@ def _migrate_and_close(
     identity: DatabaseIdentity = DatabaseIdentity.REAL,
     *,
     backup: bool = True,
+    clock: FixedClock = BACKUP_CLOCK,
 ) -> None:
-    open_and_migrate(db, data_dir=data, identity=identity, backup=backup, package=package).close()
+    open_and_migrate(
+        db, data_dir=data, identity=identity, backup=backup, package=package, clock=clock
+    ).close()
 
 
 def _files(folder: Path) -> list[str]:
@@ -550,21 +560,21 @@ def test_a_non_empty_database_is_backed_up_before_migrating(
         conn.execute("INSERT INTO a VALUES (42)")
 
     _migrate_and_close(db, data, two)
-    assert _files(data / "backups") == ["pre-migration-v0001-001.sqlite3"]
-    with closing(open_database(data / "backups" / "pre-migration-v0001-001.sqlite3")) as old:
+    assert _files(data / "backups") == [FIRST_BACKUP]
+    with closing(open_database(data / "backups" / FIRST_BACKUP)) as old:
         assert user_version(old) == 1
         assert table_names(old) == {"a"}
         assert old.execute("SELECT x FROM a").fetchone()[0] == 42
 
-    # nothing to apply: no new backup; the next migration gets the next sequence number
+    # nothing to apply: no new backup; the next migration makes a new one (name: time, version)
     _migrate_and_close(db, data, two)
     assert len(_files(data / "backups")) == 1
-    _migrate_and_close(db, data, three)
+    _migrate_and_close(db, data, three, clock=BACKUP_CLOCK.advanced(timedelta(hours=1)))
     with closing(open_database(db)) as conn:
         assert user_version(conn) == 3
     assert _files(data / "backups") == [
-        "pre-migration-v0001-001.sqlite3",
-        "pre-migration-v0002-002.sqlite3",
+        FIRST_BACKUP,
+        "pre-migration-20260305T033000Z-v0002.sqlite3",
     ]
     assert not (data / "demo").exists()
 
@@ -578,7 +588,7 @@ def test_a_demo_database_is_backed_up_under_demo_backups(
     db = data / "demo.sqlite3"
     _migrate_and_close(db, data, one, DatabaseIdentity.DEMO)
     _migrate_and_close(db, data, two, DatabaseIdentity.DEMO)
-    assert _files(data / "demo" / "backups") == ["pre-migration-v0001-001.sqlite3"]
+    assert _files(data / "demo" / "backups") == [FIRST_BACKUP]
     assert not (data / "backups").exists()
 
 
@@ -606,6 +616,7 @@ def test_backup_helper_decides_by_content_and_flag(
             identity=DatabaseIdentity.REAL,
             from_version=0,
             enabled=enabled,
+            clock=BACKUP_CLOCK,
         )
 
     with closing(open_database(data / "db.sqlite3")) as conn:
@@ -614,7 +625,7 @@ def test_backup_helper_decides_by_content_and_flag(
         assert backup(conn, enabled=False) is None
         assert _files(data / "backups") == []
         made = backup(conn)
-        assert made == data / "backups" / "pre-migration-v0000-001.sqlite3"
+        assert made == data / "backups" / "pre-migration-20260305T023000Z-v0000.sqlite3"
         assert made is not None
         assert made.is_file()
 
