@@ -29,11 +29,15 @@ from PySide6.QtCore import QCoreApplication, QEvent
 
 from cbrn_dashboard import __version__
 from cbrn_dashboard.app import ensure_application
+from cbrn_dashboard.clock import SystemClock
 from cbrn_dashboard.i18n import DEFAULT_LANGUAGE, LANGUAGES, to_bcp47
 from cbrn_dashboard.paths import DataLocation
+from cbrn_dashboard.prefs import PreferencesStore
 from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
+from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager, app_display_name
 from cbrn_dashboard.ui.shell.main_window import MainWindow
+from cbrn_dashboard.ui.shell.prompts import QtPrompts
 
 RESULT_FILE_NAME = "selftest.json"
 TMP_DIR_NAME = "tmp"
@@ -142,7 +146,16 @@ def _check_main_window(context: SelfTestContext) -> None:
     manager = TranslatorManager(app, context.qm_dir)
     try:
         manager.set_language(DEFAULT_LANGUAGE)
-        window = MainWindow(manager, context.location)
+        # No database, no lock: the window is built over an empty context (T1.9 owns start-up).
+        app_context = AppContext(
+            conn=None,
+            clock=SystemClock(),
+            location=context.location,
+            prompts=QtPrompts(),
+            preferences=PreferencesStore(context.workdir, writable=False),
+            translator_manager=manager,
+        )
+        window = MainWindow(app_context)
         try:
             _require(bool(window.windowTitle().strip()), "the main window has no title")
         finally:

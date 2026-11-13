@@ -12,14 +12,21 @@ import pytest
 from PySide6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
 
-from cbrn_dashboard.app import AppHandle, build_application, main
+from cbrn_dashboard.app import AppHandle, main, start
 from cbrn_dashboard.cli import CliOptions
-from cbrn_dashboard.paths import DataLocation, LocationSource
+from cbrn_dashboard.clock import FixedClock
+from cbrn_dashboard.paths import DATABASE_FILE_NAME, DataLocation, LocationSource
 from cbrn_dashboard.prefs import PREFS_FILE_NAME, PreferencesStore, PreferencesWarning
+from cbrn_dashboard.ui.shell.instance_lock import LOCK_FILE_NAME
+from tests.ui._fakes import FakePrompts, create_database, expect_handle, snapshot
 
 pytestmark = pytest.mark.ui
 
 type MakeApp = Callable[..., AppHandle]
+
+#: What a read-write start legitimately creates in an empty data folder (T1.9): the database, the
+#: instance lock file and the log folder. ``prefs.json`` is NOT among them.
+STARTED_FILES = {DATABASE_FILE_NAME, LOCK_FILE_NAME, "logs"}
 
 
 def _prefs_file(folder: Path) -> Path:
@@ -32,22 +39,34 @@ def _stored_language(folder: Path) -> object:
 
 @pytest.fixture
 def make_app(qapp: QApplication, qm_dir: Path, tmp_path: Path, qtbot: QtBot) -> Iterator[MakeApp]:
-    """Build the application on ``tmp_path``; ``close_all`` tears every built one down."""
+    """Start the application on ``tmp_path``; ``close_all`` tears every started one down.
+
+    A start with ``writable=False`` needs a database to open read-only: it is created first when
+    there is none (a start never creates one in a folder reported as not writable).
+    """
     handles: list[AppHandle] = []
 
     def close_all() -> None:
         for handle in reversed(handles):
-            handle.window.close()
-            handle.translator_manager.clear()
-            handle.translator_manager.setParent(None)
+            handle.close()
         handles.clear()
 
     def make(lang: str | None = None, *, writable: bool = True, fresh: bool = True) -> AppHandle:
         if fresh:
             close_all()  # one application at a time, like a real start
+        if not writable and not (tmp_path / DATABASE_FILE_NAME).exists():
+            create_database(tmp_path)
         options = CliOptions(data_dir=str(tmp_path), lang=lang, self_test=False)
         location = DataLocation(path=tmp_path, source=LocationSource.CLI, writable=writable)
-        handle = build_application(options, location, qm_dir)
+        result = start(
+            options,
+            location,
+            clock=FixedClock.at("2026-03-05T12:00:00Z"),
+            prompts=FakePrompts(),
+            qm_dir=qm_dir,
+            hooks=(),
+        )
+        handle = expect_handle(result)
         qtbot.addWidget(handle.window)
         handles.append(handle)
         return handle
@@ -56,7 +75,7 @@ def make_app(qapp: QApplication, qm_dir: Path, tmp_path: Path, qtbot: QtBot) -> 
     close_all()
 
 
-def test_no_preference_means_portuguese_and_nothing_is_written(
+def test_no_preference_means_portuguese_and_no_preferences_file_is_written(
     make_app: MakeApp, tmp_path: Path
 ) -> None:
     handle = make_app()
@@ -64,7 +83,8 @@ def test_no_preference_means_portuguese_and_nothing_is_written(
     assert isinstance(handle.preferences, PreferencesStore)
     assert handle.preferences.current.language == "pt_BR"
     assert not _prefs_file(tmp_path).exists()
-    assert list(tmp_path.iterdir()) == []
+    # A read-write start creates the database, the lock file and the log folder, nothing else.
+    assert {entry.name for entry in tmp_path.iterdir()} == STARTED_FILES
 
 
 def test_menu_choice_is_saved_and_used_at_the_next_start(make_app: MakeApp, tmp_path: Path) -> None:
@@ -131,14 +151,19 @@ def test_corrupt_preferences_start_in_the_default_language(
 def test_read_only_folder_switches_without_error_and_writes_nothing(
     make_app: MakeApp, tmp_path: Path
 ) -> None:
+    create_database(tmp_path)  # the database a read-only start opens
+    before = snapshot(tmp_path)
     handle = make_app(writable=False)
+    assert snapshot(tmp_path) == before  # starting writes nothing (no lock, no logs, no prefs)
     handle.window.language_actions["en_US"].trigger()
     assert handle.translator_manager.current_language == "en_US"
     assert handle.window.windowTitle() == "CBRN Readiness Dashboard"
     assert handle.preferences.current.language == "en_US"
     assert not handle.preferences.persisted
     assert PreferencesWarning.NOT_SAVED in handle.preferences.warnings
-    assert list(tmp_path.iterdir()) == []
+    assert snapshot(tmp_path) == before  # a menu switch writes nothing
+    handle.close()
+    assert snapshot(tmp_path) == before  # neither does closing
 
 
 def test_read_only_folder_never_touches_an_existing_file(make_app: MakeApp, tmp_path: Path) -> None:

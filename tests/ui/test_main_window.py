@@ -15,11 +15,12 @@ from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QMenu, QStacked
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard import i18n
-from cbrn_dashboard.app import AppHandle, build_application
+from cbrn_dashboard.app import AppHandle, start
 from cbrn_dashboard.cli import CliOptions
+from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.paths import DataLocation, LocationSource
-from cbrn_dashboard.ui.shell.i18n import TranslatorManager
-from cbrn_dashboard.ui.shell.main_window import MainWindow
+from cbrn_dashboard.ui.shell import registry
+from tests.ui._fakes import FakePrompts, expect_handle
 
 pytestmark = pytest.mark.ui
 
@@ -37,7 +38,7 @@ FOLDER_TEXT = {
 }
 WARNING = "Translations are not compiled: the English source text is shown."
 
-type MakeApp = Callable[[str | None], AppHandle]
+type MakeApp = Callable[..., AppHandle]
 
 
 def _location(folder: Path) -> DataLocation:
@@ -46,21 +47,27 @@ def _location(folder: Path) -> DataLocation:
 
 @pytest.fixture
 def make_app(qapp: QApplication, qm_dir: Path, tmp_path: Path, qtbot: QtBot) -> Iterator[MakeApp]:
-    """Build the application like ``main`` does (without ``exec``); undo it on teardown."""
+    """Start the application like ``main`` does (without ``exec``); undo it on teardown."""
     handles: list[AppHandle] = []
 
-    def make(lang: str | None) -> AppHandle:
+    def make(lang: str | None, *, qm: Path | None = None) -> AppHandle:
         options = CliOptions(data_dir=str(tmp_path), lang=lang, self_test=False)
-        handle = build_application(options, _location(tmp_path), qm_dir)
+        result = start(
+            options,
+            _location(tmp_path),
+            clock=FixedClock.at("2026-03-05T12:00:00Z"),
+            prompts=FakePrompts(),
+            qm_dir=qm_dir if qm is None else qm,
+            hooks=(),
+        )
+        handle = expect_handle(result)
         qtbot.addWidget(handle.window)
         handles.append(handle)
         return handle
 
     yield make
     for handle in reversed(handles):
-        handle.window.close()
-        handle.translator_manager.clear()
-        handle.translator_manager.setParent(None)
+        handle.close()
 
 
 def _find[T](handle: AppHandle, kind: type[T], name: str) -> T:
@@ -151,10 +158,12 @@ def test_language_entries_are_named_in_the_current_language(make_app: MakeApp) -
     assert texts == ["Portugués (Brasil)", "Inglés (Estados Unidos)", "Español (España)"]
 
 
-def test_navigation_is_empty(make_app: MakeApp) -> None:
+def test_navigation_holds_exactly_the_registered_pages(make_app: MakeApp) -> None:
+    # No module has registered a page yet, so this is empty today; it follows the registry.
+    expected = len(registry.pages())
     handle = make_app(None)
-    assert _find(handle, QListWidget, "navigation_list").count() == 0
-    assert _find(handle, QStackedWidget, "page_stack").count() == 0
+    assert _find(handle, QListWidget, "navigation_list").count() == expected
+    assert _find(handle, QStackedWidget, "page_stack").count() == expected
 
 
 def test_status_bar_shows_the_data_folder(make_app: MakeApp, tmp_path: Path) -> None:
@@ -167,23 +176,18 @@ def test_status_bar_shows_the_data_folder(make_app: MakeApp, tmp_path: Path) -> 
 def test_no_warning_when_catalogues_are_compiled(make_app: MakeApp) -> None:
     handle = make_app("pt-BR")
     assert handle.translator_manager.missing_catalogues == ()
-    assert _find(handle, QLabel, "translations_warning_label").text() == ""
+    assert "TRANSLATIONS_MISSING" not in handle.window.banners.visible_codes()
 
 
-def test_warning_when_catalogues_are_missing(
-    translator_manager_factory: Callable[[Path | None], TranslatorManager],
-    tmp_path: Path,
-    qtbot: QtBot,
-) -> None:
-    manager = translator_manager_factory(tmp_path / "no-qm")
-    manager.set_language("en_US")
-    assert manager.missing_catalogues != ()
-    window = MainWindow(manager, _location(tmp_path))
-    qtbot.addWidget(window)
-    label = window.findChild(QLabel, "translations_warning_label")
-    assert label is not None
-    assert label.text() == WARNING
-    assert window.windowTitle() == TITLES["en_US"]
+def test_warning_when_catalogues_are_missing(make_app: MakeApp, tmp_path: Path) -> None:
+    # The warning moved from the status bar into the banner area (T1.9); it is shown once.
+    handle = make_app("en-US", qm=tmp_path / "no-qm")
+    assert handle.translator_manager.missing_catalogues != ()
+    banners = handle.window.banners
+    assert "TRANSLATIONS_MISSING" in banners.visible_codes()
+    assert banners.text("TRANSLATIONS_MISSING") == WARNING
+    assert handle.window.findChild(QLabel, "translations_warning_label") is None
+    assert handle.window.windowTitle() == TITLES["en_US"]
 
 
 def test_quit_action_closes_the_window(make_app: MakeApp, qtbot: QtBot) -> None:

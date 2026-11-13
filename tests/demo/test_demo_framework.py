@@ -11,7 +11,7 @@ from pytestqt.qtbot import QtBot
 
 import cbrn_dashboard
 from cbrn_dashboard import demo as demo_module
-from cbrn_dashboard.app import AppHandle, build_application, main
+from cbrn_dashboard.app import AppHandle, main, start
 from cbrn_dashboard.cli import CliOptions
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.demo import (
@@ -38,6 +38,7 @@ from cbrn_dashboard.storage.migrate import (
     backup_before_migration,
     open_and_migrate,
 )
+from tests.ui._fakes import FakePrompts, expect_handle
 
 CLOCK = FixedClock.at("2026-03-05T12:00:00Z")
 
@@ -423,7 +424,7 @@ def test_a_non_demo_database_at_the_demo_path_is_refused_untouched(
 
 
 class MakeApp(Protocol):
-    """Builds the application like ``main`` does (without ``exec``)."""
+    """Starts the application like ``main`` does (without ``exec``)."""
 
     def __call__(self, data_dir: Path, *, demo: bool) -> AppHandle: ...
 
@@ -433,19 +434,25 @@ def make_app(qapp: QApplication, qm_dir: Path, qtbot: QtBot) -> Iterator[MakeApp
     handles: list[AppHandle] = []
 
     def make(data_dir: Path, *, demo: bool) -> AppHandle:
+        data_dir.mkdir(parents=True, exist_ok=True)  # the real resolver creates the folder
         location = DataLocation(path=data_dir, source=LocationSource.CLI, writable=True)
         options = CliOptions(data_dir=str(data_dir), lang="en-US", demo=demo)
-        handle = build_application(options, location, qm_dir)
+        result = start(
+            options,
+            location,
+            clock=CLOCK,
+            prompts=FakePrompts(),
+            qm_dir=qm_dir,
+            hooks=(),
+        )
+        handle = expect_handle(result)
         qtbot.addWidget(handle.window)
         handles.append(handle)
         return handle
 
     yield make
     for handle in reversed(handles):
-        handle.window.close()
-        handle.translator_manager.clear()
-        handle.translator_manager.setParent(None)
-        handle.close_database()
+        handle.close()
 
 
 @pytest.mark.ui
@@ -454,16 +461,20 @@ def test_demo_option_opens_the_demo_database(tmp_path: Path, make_app: MakeApp) 
     assert handle.database is not None
     assert handle.is_demo is True
     assert demo_database_path(tmp_path).is_file()
-    assert not (tmp_path / DATABASE_FILE_NAME).exists()
+    assert not (tmp_path / DATABASE_FILE_NAME).exists()  # --demo never creates the real database
     assert not (tmp_path / "backups").exists()
 
 
 @pytest.mark.ui
-def test_without_demo_no_database_file_is_created(tmp_path: Path, make_app: MakeApp) -> None:
+def test_without_demo_the_real_database_is_opened_and_no_demo_folder_appears(
+    tmp_path: Path, make_app: MakeApp
+) -> None:
+    # T1.9 opens the real database at start-up; --demo is the only way to the demo database.
     handle = make_app(tmp_path, demo=False)
-    assert handle.database is None
+    assert handle.database is not None
     assert handle.is_demo is False
-    assert list(tmp_path.rglob("*.sqlite3")) == []
+    assert (tmp_path / DATABASE_FILE_NAME).is_file()
+    assert list(tmp_path.rglob("*.sqlite3")) == [tmp_path / DATABASE_FILE_NAME]
     assert not (tmp_path / "demo").exists()
 
 
@@ -491,11 +502,22 @@ def test_close_database_closes_the_connection(tmp_path: Path, make_app: MakeApp)
     assert handle.is_demo is False
 
 
-def test_demo_with_an_unwritable_data_folder_returns_one(tmp_path: Path) -> None:
+@pytest.mark.ui
+def test_demo_with_an_unwritable_data_folder_returns_one(
+    qapp: QApplication, qm_dir: Path, tmp_path: Path
+) -> None:
     blocked = tmp_path / "blocked"
     blocked.write_text("a file, not a folder", encoding="utf-8")
-    assert main(["--demo", "--data-dir", str(blocked)]) == 1
+    prompts = FakePrompts()
+    argv = ["--demo", "--lang", "en-US", "--data-dir", str(blocked)]
+    assert main(argv, qm_dir=qm_dir, prompts=prompts) == 1
+    [call] = prompts.calls_of("error")  # one translated explanation instead of a silent exit
+    assert call.title == "Cannot start"
+    assert call.text == (
+        "The data folder is not writable and has no database, so nothing can be opened."
+    )
     assert blocked.read_text(encoding="utf-8") == "a file, not a folder"
+    assert [entry.name for entry in tmp_path.iterdir()] == ["blocked"]
 
 
 @pytest.mark.ui
