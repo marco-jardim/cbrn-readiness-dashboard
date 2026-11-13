@@ -4,7 +4,8 @@
 Reads are plain parameterised ``SELECT`` statements. Every write goes through the repository
 helpers (:func:`~cbrn_dashboard.storage.repository.insert`, ``update`` and ``delete``), so each
 affected row gets its ``change_log`` row in the same transaction; the helpers also keep the personal
-free-text columns (``staff_member.identifier``/``label``, ``ppe_certification.reference``,
+free-text columns (``staff_member.identifier``/``label``/``category``,
+``ppe_certification.reference``,
 ``academic_degree.field``) out of the log (D17, section 5.1). This module checks no business rule:
 that is the service's job (``services/personnel.py``). It also holds the one place where rows
 become domain objects.
@@ -311,10 +312,10 @@ def update_staff(
 
 
 def set_staff_pseudonym(ctx: WriteContext, staff_id: int, identifier: str) -> bool:
-    """Replace the identifier and clear the label (pseudonymisation); the log records only that
-    these two columns changed.
+    """Replace the identifier and clear the label and the category (pseudonymisation); the log
+    records only that these columns changed.
     """
-    changes: dict[str, object] = {"identifier": identifier, "label": None}
+    changes: dict[str, object] = {"identifier": identifier, "label": None, "category": None}
     return update(ctx, _STAFF, staff_id, changes)
 
 
@@ -683,4 +684,5 @@ def degree_to_domain(row: DegreeRow) -> Degree:
         staff_id=row.staff_id,
         level=DegreeLevel(row.level),
         status=DegreeStatus(row.status),
+        year=row.year,
     )

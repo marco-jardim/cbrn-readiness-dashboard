@@ -120,9 +120,12 @@ class TrainingRecord:
 
 @dataclass(frozen=True)
 class Degree:
+    """A degree; ``year`` (``None`` = not recorded) only matters for completed degrees."""
+
     staff_id: int
     level: DegreeLevel
     status: DegreeStatus
+    year: int | None = None
 
 
 def _empty_hierarchy() -> Mapping[str, tuple[str, ...]]:
@@ -387,6 +390,16 @@ def indicator_definitions() -> tuple[IndicatorDefinition, ...]:
     )
 
 
+def _degree_counts_on(degree: Degree, d: date) -> bool:
+    """A completed degree with a recorded year after ``d.year`` was not completed on ``d``.
+
+    Degrees without a year and in-progress degrees always count.
+    """
+    if degree.status != DegreeStatus.COMPLETED or degree.year is None:
+        return True
+    return degree.year <= d.year
+
+
 def indicator_values(
     staff: Iterable[StaffMember],
     certs: Iterable[Certificate],
@@ -404,6 +417,9 @@ def indicator_values(
 
     ``PERS_TRAINING_12M`` counts training RECORDS of staff ACTIVE on ``d`` whose ``completed_on``
     lies in ``(add_months(d, -12), d]`` (exclusive start, inclusive end).
+
+    ``PERS_DEGREE``: a COMPLETED degree whose ``year`` is set and greater than ``d.year`` is not
+    counted on ``d``; degrees without a year and in-progress degrees are not affected.
     """
     active = [person for person in staff if is_active(person, d)]
     active_ids = {person.id for person in active}
@@ -427,7 +443,7 @@ def indicator_values(
     degree_keys = {
         (degree.staff_id, degree.level, degree.status)
         for degree in degrees
-        if degree.staff_id in active_ids
+        if degree.staff_id in active_ids and _degree_counts_on(degree, d)
     }
     window_start = add_months(d, -_TRAINING_WINDOW_MONTHS)
     training_count = sum(
@@ -451,7 +467,7 @@ def indicator_values(
         )
     for degree_level in DegreeLevel:
         for status in DegreeStatus:
-            count = sum(1 for _, lvl, st in degree_keys if lvl is degree_level and st is status)
+            count = sum(1 for _, lvl, st in degree_keys if lvl == degree_level and st == status)
             values.append(
                 IndicatorValue(
                     code="PERS_DEGREE",

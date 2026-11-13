@@ -9,6 +9,7 @@ Identifiers, labels, references, course names and level letters are data, flagge
 """
 
 from collections.abc import Callable
+from datetime import date
 
 from PySide6.QtCore import QCoreApplication, QDate
 from PySide6.QtWidgets import (
@@ -33,6 +34,7 @@ from cbrn_dashboard.services.personnel import (
     CourseView,
     DegreeInput,
     DegreeView,
+    NoRenewalMark,
     StaffInput,
     StaffView,
     TrainingInput,
@@ -79,6 +81,24 @@ def _date_edit(parent: QWidget, value: QDate) -> QDateEdit:
     edit = QDateEdit(value, parent)
     edit.setCalendarPopup(True)
     return edit
+
+
+def _optional_date_edit(parent: QWidget) -> QDateEdit:
+    """A date input that starts "not set": the minimum date stands for no date (P2-02, P2-04)."""
+    edit = QDateEdit(parent)
+    edit.setCalendarPopup(True)
+    edit.setDate(edit.minimumDate())
+    return edit
+
+
+def _optional_date(edit: QDateEdit) -> date | None:
+    """The date of an input made by :func:`_optional_date_edit`; ``None`` while it is not set."""
+    value = edit.date()
+    return None if value == edit.minimumDate() else from_qdate(value)
+
+
+def _not_set_text() -> str:
+    return QCoreApplication.translate("Personnel", "Not set")
 
 
 def _identifier_hint() -> str:
@@ -153,6 +173,8 @@ class StaffDialog(_PersonnelDialog):
         self.category_edit = QLineEdit(self)
         self.category_edit.setObjectName("category_edit")
         self.active_from_edit = _date_edit(self, to_qdate(context.as_of))
+        self.active_until_edit = _optional_date_edit(self)
+        self.active_until_edit.setObjectName("active_until_edit")
         self.add_hinted_field(
             lambda: QCoreApplication.translate("Personnel", "Identifier"),
             self.identifier_edit,
@@ -165,17 +187,25 @@ class StaffDialog(_PersonnelDialog):
             _free_text_hint,
             "label_hint",
         )
-        self.add_field(
-            lambda: QCoreApplication.translate("Personnel", "Category"), self.category_edit
+        self.add_hinted_field(
+            lambda: QCoreApplication.translate("Personnel", "Category"),
+            self.category_edit,
+            _free_text_hint,
+            "category_hint",
         )
         self.add_field(
             lambda: QCoreApplication.translate("Personnel", "Active from"), self.active_from_edit
+        )
+        self.add_field(
+            lambda: QCoreApplication.translate("Personnel", "Active until"), self.active_until_edit
         )
         if staff is not None:
             self.identifier_edit.setText(staff.identifier)
             self.label_edit.setText(staff.label or "")
             self.category_edit.setText(staff.category or "")
             self.active_from_edit.setDate(to_qdate(staff.active_from))
+            if staff.active_until is not None:
+                self.active_until_edit.setDate(to_qdate(staff.active_until))
         self.retranslate()
 
     def retranslate(self) -> None:
@@ -185,6 +215,8 @@ class StaffDialog(_PersonnelDialog):
         else:
             self.setWindowTitle(QCoreApplication.translate("Personnel", "Edit person"))
         apply_locale(self.active_from_edit, self.language)
+        apply_locale(self.active_until_edit, self.language)
+        self.active_until_edit.setSpecialValueText(_not_set_text())
 
     def submit(self) -> bool:
         service = self.context.services.personnel
@@ -194,7 +226,7 @@ class StaffDialog(_PersonnelDialog):
         data = StaffInput(
             identifier=self.identifier_edit.text(),
             active_from=from_qdate(self.active_from_edit.date()),
-            active_until=None if staff is None else staff.active_until,
+            active_until=_optional_date(self.active_until_edit),
             label=self.label_edit.text(),
             category=self.category_edit.text(),
         )
@@ -241,7 +273,7 @@ class CertificateDialog(_PersonnelDialog):
         for level in PpeLevel:
             self.level_combo.addItem(ppe_level_label(level.value), level.value)
         self.issued_edit = _date_edit(self, today)
-        self.valid_until_edit = _date_edit(self, today)
+        self.valid_until_edit = _optional_date_edit(self)  # "not set" until picked or proposed
         self.reference_edit = QLineEdit(self)
         self.reference_edit.setObjectName("reference_edit")
         self.no_renewal_check = QCheckBox(self)
@@ -311,7 +343,10 @@ class CertificateDialog(_PersonnelDialog):
         proposed = service.propose_valid_until(str(self.level_combo.currentData()), issued)
         self._prefilling = True
         try:
-            self.valid_until_edit.setDate(to_qdate(issued if proposed is None else proposed))
+            # No configured months: no proposal (A04), the field stays "not set".
+            self.valid_until_edit.setDate(
+                self.valid_until_edit.minimumDate() if proposed is None else to_qdate(proposed)
+            )
         finally:
             self._prefilling = False
 
@@ -329,33 +364,39 @@ class CertificateDialog(_PersonnelDialog):
             )
         for edit in (self.issued_edit, self.valid_until_edit, self.no_renewal_edit):
             apply_locale(edit, self.language)
+        self.valid_until_edit.setSpecialValueText(_not_set_text())
 
     def submit(self) -> bool:
         service = self.context.services.personnel
         if service is None:
             return False
+        valid_until = _optional_date(self.valid_until_edit)
+        if valid_until is None:
+            show_service_error(
+                self.context, self, ServiceError(REQUIRED, "valid_until"), error_label
+            )
+            return False
         data = CertificateInput(
             level=str(self.level_combo.currentData()),
             issued_on=from_qdate(self.issued_edit.date()),
-            valid_until=from_qdate(self.valid_until_edit.date()),
+            valid_until=valid_until,
             reference=self.reference_edit.text(),
         )
-        marked = self.no_renewal_check.isChecked()
-        mark_from = from_qdate(self.no_renewal_edit.date())
         reason = self.reason_combo.currentData()
+        mark: NoRenewalMark | None = None
+        if self.no_renewal_check.isChecked():
+            mark = NoRenewalMark(
+                from_qdate(self.no_renewal_edit.date()), None if reason is None else str(reason)
+            )
         certificate = self._certificate
         staff_id = self._staff_id
 
         def save() -> None:
+            # One service call, one transaction: the certificate and its mark are stored together.
             if certificate is None:
-                cert_id = service.add_certificate(staff_id, data)
+                service.add_certificate(staff_id, data, no_renewal=mark)
             else:
-                service.update_certificate(certificate.id, data)
-                cert_id = certificate.id
-            if marked:
-                service.set_no_renewal(cert_id, mark_from, None if reason is None else str(reason))
-            elif certificate is not None and certificate.no_renewal_from is not None:
-                service.clear_no_renewal(cert_id)
+                service.update_certificate(certificate.id, data, no_renewal=mark)
 
         return apply_change(self.context, self, error_label, save)
 

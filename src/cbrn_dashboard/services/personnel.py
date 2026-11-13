@@ -16,9 +16,9 @@ offending field; the UI maps codes to texts. Every mutating method
 
 Personal data (D17): a person is identified by a LOCAL CODE (never a national ID), with an
 optional short label; there are no notes fields. The free-text columns ``identifier``, ``label``,
-``reference`` and ``field`` are never copied into ``change_log`` (the repository helper redacts
-them). :meth:`PersonnelService.pseudonymise_staff` replaces them with random codes (or clears them)
-and keeps the history.
+``category``, ``reference`` and ``field`` are never copied into ``change_log`` (the repository
+helper redacts them). :meth:`PersonnelService.pseudonymise_staff` replaces them with random codes
+(or clears them) and keeps the history.
 
 A person has ONE active interval (A14). There is deliberately no "reactivate": someone who returns
 is a new record. Clearing or moving ``active_until`` through :meth:`PersonnelService.update_staff`
@@ -34,6 +34,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
+from enum import Enum
+from typing import Final
 
 from cbrn_dashboard.clock import Clock
 from cbrn_dashboard.domain import personnel as rules
@@ -90,6 +92,7 @@ __all__ = [
     "INVALID_NUMBER",
     "INVALID_PPE_LEVEL",
     "INVALID_YEAR",
+    "KEEP",
     "NEGATIVE_HOURS",
     "NO_RENEWAL_REASONS",
     "NO_RENEWAL_REASON_WITHOUT_DATE",
@@ -104,6 +107,7 @@ __all__ = [
     "DegreeInput",
     "DegreeView",
     "LevelSummary",
+    "NoRenewalMark",
     "PersonnelAlertInputs",
     "PersonnelService",
     "StaffDetail",
@@ -179,6 +183,24 @@ class CertificateInput:
     issued_on: str | date
     valid_until: str | date
     reference: str | None = None
+
+
+@dataclass(frozen=True)
+class NoRenewalMark:
+    """The D24 "no renewal" mark: the date it applies from and an optional reason code."""
+
+    from_date: str | date | None
+    reason: str | None = None
+
+
+class _Keep(Enum):
+    """Type of :data:`KEEP`: "leave the no-renewal mark as it is"."""
+
+    KEEP = "keep"
+
+
+#: Default of ``update_certificate(no_renewal=...)``: the stored mark is not touched.
+KEEP: Final = _Keep.KEEP
 
 
 @dataclass(frozen=True)
@@ -401,6 +423,22 @@ def _parse_optional_date(value: str | date | None, field: str) -> date | None:
     if value is None or (isinstance(value, str) and not value.strip()):
         return None
     return _parse_date(value, field)
+
+
+def _validate_no_renewal(mark: NoRenewalMark) -> tuple[str, str | None]:
+    """The ISO date text and the reason code of a no-renewal mark; ``ServiceError`` if refused."""
+    reason_code = _clean(mark.reason)
+    require(
+        reason_code is None or reason_code in NO_RENEWAL_REASONS,
+        INVALID_NO_RENEWAL_REASON,
+        "no_renewal_reason",
+    )
+    start = _parse_optional_date(mark.from_date, "no_renewal_from")
+    if start is None:
+        if reason_code is not None:
+            raise ServiceError(NO_RENEWAL_REASON_WITHOUT_DATE, "no_renewal_reason")
+        raise ServiceError(REQUIRED, "no_renewal_from")
+    return format_iso_date(start), reason_code
 
 
 def _finite(value: float | None, field: str) -> float | None:
@@ -706,11 +744,11 @@ class PersonnelService:
     def pseudonymise_staff(self, staff_id: int) -> str:
         """Pseudonymise a person (D17). IRREVERSIBLE; returns the new identifier.
 
-        In one transaction: the identifier becomes a random ``PSEUDO-<code>``, the label and every
-        certificate ``reference`` are cleared, and each degree ``field`` that is set is replaced by
-        its own random code (per row, so the unique index of the degrees still holds). Certificates,
-        training records, degrees, category and dates are kept. The change log records only THAT
-        these columns changed. A person can be pseudonymised again (new codes).
+        In one transaction: the identifier becomes a random ``PSEUDO-<code>``, the label, the
+        category and every certificate ``reference`` are cleared, and each degree ``field`` that is
+        set is replaced by its own random code (per row, so the unique index of the degrees still
+        holds). Certificates, training records, degrees and dates are kept. The change log records
+        only THAT these columns changed. A person can be pseudonymised again (new codes).
         """
         self._require_writable()
         with _translated(), transaction(self._conn):
@@ -807,12 +845,21 @@ class PersonnelService:
             level=level, issued_on=issued_on, valid_until=valid_until, reference=reference
         )
 
-    def add_certificate(self, staff_id: int, data: CertificateInput) -> int:
-        """Add a certificate to a person; returns its id."""
+    def add_certificate(
+        self, staff_id: int, data: CertificateInput, *, no_renewal: NoRenewalMark | None = None
+    ) -> int:
+        """Add a certificate to a person; returns its id.
+
+        With ``no_renewal`` the certificate is stored already marked "no renewal" (D24), in the
+        same transaction: if the mark is refused, no certificate is stored.
+        """
         self._require_writable()
         with _translated(), transaction(self._conn):
             self._staff_row(staff_id)
             fields = self._validate_certificate(staff_id, data, None)
+            mark: tuple[str, str | None] | None = None
+            if no_renewal is not None:
+                mark = _validate_no_renewal(no_renewal)
             return repo.insert_certificate(
                 self._ctx(),
                 staff_id=staff_id,
@@ -820,22 +867,46 @@ class PersonnelService:
                 issued_on=format_iso_date(fields.issued_on),
                 valid_until=format_iso_date(fields.valid_until),
                 reference=fields.reference,
+                no_renewal_from=None if mark is None else mark[0],
+                no_renewal_reason=None if mark is None else mark[1],
             )
 
-    def update_certificate(self, cert_id: int, data: CertificateInput) -> None:
-        """Change a certificate; its no-renewal mark is left as it is."""
+    def update_certificate(
+        self,
+        cert_id: int,
+        data: CertificateInput,
+        *,
+        no_renewal: NoRenewalMark | _Keep | None = KEEP,
+    ) -> None:
+        """Change a certificate.
+
+        By default its no-renewal mark is left as it is. With ``no_renewal`` the mark is set (a
+        :class:`NoRenewalMark`) or cleared (``None``) in the same transaction as the change: if
+        either is refused, nothing is stored.
+        """
         self._require_writable()
         with _translated(), transaction(self._conn):
             current = self._certificate_row(cert_id)
             fields = self._validate_certificate(current.staff_id, data, cert_id)
+            mark: tuple[str, str | None] | None = None
+            if isinstance(no_renewal, NoRenewalMark):
+                mark = _validate_no_renewal(no_renewal)
+            ctx = self._ctx()
             repo.update_certificate(
-                self._ctx(),
+                ctx,
                 cert_id,
                 ppe_level=fields.level.value,
                 issued_on=format_iso_date(fields.issued_on),
                 valid_until=format_iso_date(fields.valid_until),
                 reference=fields.reference,
             )
+            if not isinstance(no_renewal, _Keep):
+                repo.set_certificate_no_renewal(
+                    ctx,
+                    cert_id,
+                    None if mark is None else mark[0],
+                    None if mark is None else mark[1],
+                )
 
     def delete_certificate(self, cert_id: int) -> None:
         """Delete one certificate; ``NOT_FOUND`` when there is none."""
@@ -853,20 +924,8 @@ class PersonnelService:
         self._require_writable()
         with _translated(), transaction(self._conn):
             self._certificate_row(cert_id)
-            reason_code = _clean(reason)
-            require(
-                reason_code is None or reason_code in NO_RENEWAL_REASONS,
-                INVALID_NO_RENEWAL_REASON,
-                "no_renewal_reason",
-            )
-            start = _parse_optional_date(from_date, "no_renewal_from")
-            if start is None:
-                if reason_code is not None:
-                    raise ServiceError(NO_RENEWAL_REASON_WITHOUT_DATE, "no_renewal_reason")
-                raise ServiceError(REQUIRED, "no_renewal_from")
-            repo.set_certificate_no_renewal(
-                self._ctx(), cert_id, format_iso_date(start), reason_code
-            )
+            start, reason_code = _validate_no_renewal(NoRenewalMark(from_date, reason))
+            repo.set_certificate_no_renewal(self._ctx(), cert_id, start, reason_code)
 
     def clear_no_renewal(self, cert_id: int) -> None:
         """Remove the "no renewal" mark (date and reason) from a certificate."""

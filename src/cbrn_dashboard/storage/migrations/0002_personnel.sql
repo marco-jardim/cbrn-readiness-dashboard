@@ -6,13 +6,19 @@
 -- courses (A09).
 
 -- A person is identified by an internal code, never by a national ID or a service number (D17).
+--
+-- Every date column holds ISO text (the GLOB checks the shape, the services check the calendar).
+-- The checks repeat rules the services enforce, so a wrong row cannot get in by another path.
 CREATE TABLE staff_member (
     id           INTEGER PRIMARY KEY,
     identifier   TEXT NOT NULL UNIQUE,      -- internal code, never a national ID (D17)
     label        TEXT,                      -- optional short label
-    category     TEXT,                      -- configurable list (Q4)
-    active_from  TEXT NOT NULL,             -- one active interval; a returning person is a new record (A14)
+    category     TEXT,                      -- personal free text, never logged (Q4 is still open)
+    active_from  TEXT NOT NULL              -- one active interval; a returning person is a new record (A14)
+        CHECK (active_from GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     active_until TEXT
+        CHECK (active_until IS NULL OR active_until GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    CHECK (active_until IS NULL OR active_until >= active_from)
 ) STRICT;
 
 -- Personal protective equipment (PPE) certification (L74).
@@ -20,11 +26,16 @@ CREATE TABLE ppe_certification (
     id                INTEGER PRIMARY KEY,
     staff_id          INTEGER NOT NULL REFERENCES staff_member (id) ON DELETE CASCADE,
     ppe_level         TEXT NOT NULL CHECK (ppe_level IN ('A', 'B', 'C')),   -- L74
-    issued_on         TEXT NOT NULL,
-    valid_until       TEXT NOT NULL CHECK (valid_until >= issued_on),       -- A04
-    no_renewal_from   TEXT,                 -- D24: NULL = renewal expected; the flag applies from this date
+    issued_on         TEXT NOT NULL
+        CHECK (issued_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    valid_until       TEXT NOT NULL CHECK (valid_until >= issued_on)        -- A04
+        CHECK (valid_until GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    no_renewal_from   TEXT                  -- D24: NULL = renewal expected, the flag applies from this date
+        CHECK (no_renewal_from IS NULL
+               OR no_renewal_from GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     no_renewal_reason TEXT CHECK (no_renewal_reason IN ('left_unit', 'role_change', 'other')),
     reference         TEXT,                 -- hint: no names, health or contact data
+    CHECK (no_renewal_reason IS NULL OR no_renewal_from IS NOT NULL),       -- a reason needs a date
     UNIQUE (staff_id, ppe_level, issued_on) -- import natural key (T8.4)
 ) STRICT;
 
@@ -37,7 +48,7 @@ CREATE TABLE training_course (
     label_pt_br TEXT,
     label_en_us TEXT,
     label_es_es TEXT,
-    active      INTEGER NOT NULL DEFAULT 1
+    active      INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
 ) STRICT;
 
 -- A completed course of one staff member (A09).
@@ -45,8 +56,9 @@ CREATE TABLE training_record (
     id           INTEGER PRIMARY KEY,
     staff_id     INTEGER NOT NULL REFERENCES staff_member (id) ON DELETE CASCADE,
     course_id    INTEGER NOT NULL REFERENCES training_course (id) ON DELETE RESTRICT,
-    completed_on TEXT NOT NULL,
-    hours        REAL,
+    completed_on TEXT NOT NULL
+        CHECK (completed_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+    hours        REAL CHECK (hours IS NULL OR hours >= 0),
     UNIQUE (staff_id, course_id, completed_on)  -- import natural key (T8.4)
 ) STRICT;
 
@@ -57,7 +69,7 @@ CREATE TABLE academic_degree (
     staff_id INTEGER NOT NULL REFERENCES staff_member (id) ON DELETE CASCADE,
     level    TEXT NOT NULL CHECK (level IN ('specialisation', 'master', 'doctorate')),  -- L74
     status   TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'in_progress')),  -- A10
-    year     INTEGER,
+    year     INTEGER CHECK (year IS NULL OR year BETWEEN 1900 AND 2200),  -- same range as the service
     field    TEXT
 ) STRICT;
 

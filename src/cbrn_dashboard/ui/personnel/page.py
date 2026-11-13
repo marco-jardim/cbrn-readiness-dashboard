@@ -49,7 +49,7 @@ from cbrn_dashboard.ui.personnel.dialogs import (
     StaffDialog,
     TrainingDialog,
 )
-from cbrn_dashboard.ui.personnel.labels import error_label, ppe_level_label
+from cbrn_dashboard.ui.personnel.labels import error_label, fill_placeholders, ppe_level_label
 from cbrn_dashboard.ui.personnel.models import (
     CertificatesModel,
     CoursesModel,
@@ -427,10 +427,10 @@ class PersonnelPage(QWidget):
             return
         as_of = self.context.as_of
         title = QCoreApplication.translate("Personnel", "Deactivate person")
-        question = (
-            QCoreApplication.translate("Personnel", "Deactivate person %1 as of %2?")
-            .replace("%1", person.identifier)
-            .replace("%2", format_date(as_of, current_language(self.context)))
+        question = fill_placeholders(
+            QCoreApplication.translate("Personnel", "Deactivate person %1 as of %2?"),
+            person.identifier,
+            format_date(as_of, current_language(self.context)),
         )
         if self.context.prompts.confirm(self, title, question):
             apply_change(
@@ -446,10 +446,13 @@ class PersonnelPage(QWidget):
         if person is None or service is None:
             return
         title = QCoreApplication.translate("Personnel", "Delete person")
-        question = QCoreApplication.translate(
-            "Personnel",
-            "Delete person %1 together with the certificates, training records and degrees?",
-        ).replace("%1", person.identifier)
+        question = fill_placeholders(
+            QCoreApplication.translate(
+                "Personnel",
+                "Delete person %1 together with the certificates, training records and degrees?",
+            ),
+            person.identifier,
+        )
         if self.context.prompts.confirm(self, title, question):
             apply_change(self.context, self, error_label, lambda: service.delete_staff(person.id))
 
@@ -460,10 +463,11 @@ class PersonnelPage(QWidget):
         if person is None or service is None:
             return
         title = QCoreApplication.translate("Personnel", "Pseudonymise person")
-        question = QCoreApplication.translate(
+        template = QCoreApplication.translate(
             "Personnel",
             "Pseudonymise %1? Identifier and free text become random codes. This cannot be undone.",
-        ).replace("%1", person.identifier)
+        )
+        question = fill_placeholders(template, person.identifier)
         if self.context.prompts.confirm(self, title, question):
             apply_change(
                 self.context, self, error_label, lambda: service.pseudonymise_staff(person.id)
@@ -503,10 +507,13 @@ class PersonnelPage(QWidget):
         if certificate is None or service is None:
             return
         title = QCoreApplication.translate("Personnel", "Delete certificate")
-        question = (
-            QCoreApplication.translate("Personnel", "Delete the level %1 certificate issued on %2?")
-            .replace("%1", certificate.level.value)
-            .replace("%2", format_date(certificate.issued_on, current_language(self.context)))
+        template = QCoreApplication.translate(
+            "Personnel", "Delete the level %1 certificate issued on %2?"
+        )
+        question = fill_placeholders(
+            template,
+            certificate.level.value,
+            format_date(certificate.issued_on, current_language(self.context)),
         )
         if self.context.prompts.confirm(self, title, question):
             apply_change(
@@ -532,9 +539,10 @@ class PersonnelPage(QWidget):
         if training is None or service is None:
             return
         title = QCoreApplication.translate("Personnel", "Delete training")
-        question = QCoreApplication.translate(
-            "Personnel", "Delete the training record of course %1?"
-        ).replace("%1", training.course_code)
+        question = fill_placeholders(
+            QCoreApplication.translate("Personnel", "Delete the training record of course %1?"),
+            training.course_code,
+        )
         if self.context.prompts.confirm(self, title, question):
             apply_change(
                 self.context, self, error_label, lambda: service.delete_training(training.id)
@@ -567,6 +575,10 @@ class PersonnelPage(QWidget):
 # --------------------------------------------------------------------------- the settings section
 
 
+#: The state of the rule inputs: A02 switch, mapping pairs, typed A04 months per level.
+type _RuleState = tuple[bool, frozenset[tuple[str, str]], tuple[tuple[str, str], ...]]
+
+
 class _InputError(Exception):
     """A typed value was refused; carries the service-style error to present."""
 
@@ -584,6 +596,8 @@ class PersonnelSettingsSection(QWidget):
         self.context = context
         self.courses_model = CoursesModel(self)
         self._badge_ids: dict[str, str | None] = {"A02": None, "A04": None}
+        #: The rule inputs as last loaded from the configuration (``None`` before the first load).
+        self._loaded_rules: _RuleState | None = None
 
         # A02: the level mapping
         self.mapping_box = QGroupBox(self)
@@ -766,19 +780,44 @@ class PersonnelSettingsSection(QWidget):
                 return str(badge)
         return None
 
+    def _typed_rules(self) -> _RuleState:
+        """What the rule inputs show now: switch, mapping pairs and the typed months."""
+        return (
+            self.hierarchy_check.isChecked(),
+            frozenset(key for key, box in self.mapping_checks.items() if box.isChecked()),
+            tuple((level, edit.text().strip()) for level, edit in self.months_edits.items()),
+        )
+
+    def is_dirty(self) -> bool:
+        """Whether the rule inputs differ from what was last loaded into them (unsaved edits)."""
+        return self._loaded_rules is not None and self._typed_rules() != self._loaded_rules
+
+    def reload_rules(self) -> None:
+        """Put the stored A02 switch, the mapping and the A04 months into the inputs."""
+        config = self._config()
+        if config is None:
+            return
+        current = config.load()
+        self.hierarchy_check.setChecked(bool(current.ppe_hierarchy_enabled))
+        for (level, other), box in self.mapping_checks.items():
+            box.setChecked(other in current.ppe_hierarchy.get(level, ()))
+        for level, edit in self.months_edits.items():
+            months = current.ppe_validity_months.get(level)
+            edit.setText("" if months is None else str(months))
+        self._loaded_rules = self._typed_rules()
+
     def refresh(self, *_args: object) -> None:
-        """Read the configuration and the courses again."""
+        """Read the courses and the badges again.
+
+        The rule inputs are reloaded only the first time and when they hold no unsaved edit: a
+        change signalled by the course list or by another page must not discard what was typed.
+        """
         config = self._config()
         if config is None:
             self._badge_ids = {"A02": None, "A04": None}
         else:
-            current = config.load()
-            self.hierarchy_check.setChecked(bool(current.ppe_hierarchy_enabled))
-            for (level, other), box in self.mapping_checks.items():
-                box.setChecked(other in current.ppe_hierarchy.get(level, ()))
-            for level, edit in self.months_edits.items():
-                months = current.ppe_validity_months.get(level)
-                edit.setText("" if months is None else str(months))
+            if self._loaded_rules is None or not self.is_dirty():
+                self.reload_rules()
             self._badge_ids = {
                 "A02": self._badge_for(config, _A02_FIELDS),
                 "A04": self._badge_for(config, _A04_FIELDS),
@@ -821,8 +860,12 @@ class PersonnelSettingsSection(QWidget):
     def _confirm(self, key: str) -> None:
         config = self._config()
         badge = self._badge_ids[key]
-        if config is not None and badge is not None:
-            apply_change(self.context, self, error_label, lambda: config.confirm(badge))
+        if (
+            config is not None
+            and badge is not None
+            and apply_change(self.context, self, error_label, lambda: config.confirm(badge))
+        ):
+            self.reload_rules()
 
     def _read_months(self) -> dict[str, int | None]:
         months: dict[str, int | None] = {}
@@ -861,7 +904,8 @@ class PersonnelSettingsSection(QWidget):
             ppe_hierarchy=hierarchy,
             ppe_validity_months=months,
         )
-        apply_change(self.context, self, error_label, lambda: config.save(changed))
+        if apply_change(self.context, self, error_label, lambda: config.save(changed)):
+            self.reload_rules()
 
     # ----- courses
 
@@ -887,8 +931,8 @@ class PersonnelSettingsSection(QWidget):
         if course is None or service is None:
             return
         title = QCoreApplication.translate("Personnel", "Delete course")
-        question = QCoreApplication.translate("Personnel", "Delete course %1?").replace(
-            "%1", course.code
+        question = fill_placeholders(
+            QCoreApplication.translate("Personnel", "Delete course %1?"), course.code
         )
         if self.context.prompts.confirm(self, title, question):
             apply_change(self.context, self, error_label, lambda: service.delete_course(course.id))

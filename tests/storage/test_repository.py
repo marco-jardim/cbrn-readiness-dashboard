@@ -494,7 +494,7 @@ def _assert_absent_from_change_log(conn: sqlite3.Connection) -> None:
 
 
 def test_personal_free_text_columns_are_configured() -> None:
-    assert REDACTED_COLUMNS["staff_member"] == {"identifier", "label"}
+    assert REDACTED_COLUMNS["staff_member"] == {"identifier", "label", "category"}
     assert REDACTED_COLUMNS["ppe_certification"] == {"reference"}
     assert REDACTED_COLUMNS["academic_degree"] == {"field"}
 
@@ -529,7 +529,7 @@ def test_personal_values_never_reach_change_log(ctx: WriteContext) -> None:
     assert inserted["id"] == staff
     assert inserted["identifier"] == {"redacted": True}
     assert inserted["label"] == {"redacted": True}
-    assert inserted["category"] == "alpha"
+    assert inserted["category"] == {"redacted": True}
     assert inserted["active_from"] == "2026-01-01"
 
     before = _json(rename_log["before_json"])
@@ -538,15 +538,15 @@ def test_personal_values_never_reach_change_log(ctx: WriteContext) -> None:
     assert before["label"] == {"redacted": True}
     assert after["identifier"] == {"redacted": True, "changed": True}
     assert after["label"] == {"redacted": True, "changed": True}
-    assert before["category"] == "alpha"  # the non-personal column keeps old and new values
-    assert after["category"] == "beta"
+    assert before["category"] == {"redacted": True}  # category is personal free text too (P2-01)
+    assert after["category"] == {"redacted": True, "changed": True}
     assert "changed" not in str(after["active_from"])
 
     after_only_label = _json(only_label_log["after_json"])  # still written
     assert only_label_log["action"] == "update"
     assert after_only_label["label"] == {"redacted": True, "changed": True}
     assert after_only_label["identifier"] == {"redacted": True}
-    assert after_only_label["category"] == "beta"
+    assert after_only_label["category"] == {"redacted": True}
 
     assert delete_log["action"] == "delete"
     assert delete_log["after_json"] is None
@@ -561,7 +561,7 @@ def test_redaction_has_no_side_door_through_row_to_json_and_log_event(
     text = row_to_json("staff_member", row)
     assert IDENT_1 not in text
     assert LABEL_1 not in text
-    assert json.loads(text)["category"] == "c"
+    assert json.loads(text)["category"] == {"redacted": True}
     assert redact_row("staff_member", row, {"label"})["label"] == {
         "redacted": True,
         "changed": True,

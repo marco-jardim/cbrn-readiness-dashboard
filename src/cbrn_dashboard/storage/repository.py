@@ -69,7 +69,7 @@ _INSERT_ACTIONS: frozenset[str] = frozenset({"insert", "import"})
 #: Personal free-text columns whose values never reach ``change_log`` (section 5.1, D17). Keyed by
 #: table name; tables that do not exist (yet) are simply never matched.
 REDACTED_COLUMNS: Mapping[str, frozenset[str]] = {
-    "staff_member": frozenset({"identifier", "label"}),
+    "staff_member": frozenset({"identifier", "label", "category"}),
     "ppe_certification": frozenset({"reference"}),
     "academic_degree": frozenset({"field"}),
 }

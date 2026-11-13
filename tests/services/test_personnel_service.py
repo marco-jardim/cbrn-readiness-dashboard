@@ -53,6 +53,7 @@ from cbrn_dashboard.services.personnel import (
     CourseInput,
     CourseView,
     DegreeInput,
+    NoRenewalMark,
     PersonnelService,
     StaffInput,
     TrainingInput,
@@ -74,9 +75,13 @@ SECRET_REFERENCE = "DEMO-REF-9917"
 SECRET_REFERENCE_2 = "DEMO-REF-9918"
 SECRET_FIELD = "Fictitious Field KW"
 SECRET_FIELD_2 = "Fictitious Field ZV"
+SECRET_CATEGORY = "Fictitious Category HJ"
+SECRET_CATEGORY_2 = "Fictitious Category MP"
 SECRETS_ALL = (
     SECRET_IDENTIFIER,
     SECRET_LABEL,
+    SECRET_CATEGORY,
+    SECRET_CATEGORY_2,
     SECRET_REFERENCE,
     SECRET_REFERENCE_2,
     SECRET_FIELD,
@@ -301,7 +306,12 @@ def test_operator_is_read_for_each_write(
 def test_personal_text_never_reaches_the_change_log(
     service: PersonnelService, db: DatabaseConnection
 ) -> None:
-    staff_id = service.create_staff(_staff(SECRET_IDENTIFIER, label=SECRET_LABEL))
+    staff_id = service.create_staff(
+        _staff(SECRET_IDENTIFIER, label=SECRET_LABEL, category=SECRET_CATEGORY)
+    )
+    service.update_staff(
+        staff_id, _staff(SECRET_IDENTIFIER, label=SECRET_LABEL, category=SECRET_CATEGORY_2)
+    )
     cert_id = service.add_certificate(staff_id, _cert(reference=SECRET_REFERENCE))
     service.update_certificate(cert_id, _cert(reference=SECRET_REFERENCE_2))
     degree_id = service.add_degree(staff_id, DegreeInput("master", field=SECRET_FIELD))
@@ -312,6 +322,7 @@ def test_personal_text_never_reaches_the_change_log(
         assert secret not in log_text
     assert SECRET_IDENTIFIER in table_text
     assert SECRET_FIELD_2 in table_text
+    assert SECRET_CATEGORY_2 in table_text
 
 
 # --------------------------------------------------------------------------- staff lifecycle
@@ -470,16 +481,97 @@ def test_local_code_is_accepted(service: PersonnelService, value: str) -> None:
     assert service.get_staff(staff_id).identifier == value
 
 
+# --------------------------------------------------------------------------- certificate + mark
+
+
+def test_add_certificate_with_a_mark_is_one_insert_row(
+    service: PersonnelService, db: DatabaseConnection, change_log_rows: ChangeLogRows
+) -> None:
+    staff_id = service.create_staff(_staff())
+    holder: list[int] = []
+    rows = _logged(
+        db,
+        change_log_rows,
+        lambda: holder.append(
+            service.add_certificate(
+                staff_id, _cert(), no_renewal=NoRenewalMark("2026-01-01", "left_unit")
+            )
+        ),
+    )
+    assert [(row["entity"], row["action"]) for row in rows] == [("ppe_certification", "insert")]
+    certificate = service.get_certificate(holder[0])
+    assert (certificate.no_renewal_from, certificate.no_renewal_reason) == (
+        date(2026, 1, 1),
+        "left_unit",
+    )
+
+
+@pytest.mark.parametrize(
+    ("mark", "code"),
+    [
+        (NoRenewalMark("2026-01-01", "retired"), INVALID_NO_RENEWAL_REASON),
+        (NoRenewalMark(None, "other"), NO_RENEWAL_REASON_WITHOUT_DATE),
+        (NoRenewalMark(None), REQUIRED),
+        (NoRenewalMark("not-a-date"), INVALID_DATE),
+    ],
+)
+def test_a_refused_mark_stores_no_certificate_and_no_log_row(
+    service: PersonnelService,
+    db: DatabaseConnection,
+    change_log_rows: ChangeLogRows,
+    mark: NoRenewalMark,
+    code: str,
+) -> None:
+    staff_id = service.create_staff(_staff())
+    before = _dump(db)
+    log_before = len(change_log_rows(db))
+    assert _error(lambda: service.add_certificate(staff_id, _cert(), no_renewal=mark)).code == code
+    assert _count(db, "ppe_certification") == 0
+    assert len(change_log_rows(db)) == log_before
+    assert _dump(db) == before
+
+
+def test_update_certificate_with_a_refused_mark_changes_nothing(
+    service: PersonnelService, db: DatabaseConnection, change_log_rows: ChangeLogRows
+) -> None:
+    staff_id = service.create_staff(_staff())
+    cert_id = service.add_certificate(staff_id, _cert())
+    before = _dump(db)
+    log_before = len(change_log_rows(db))
+    bad = NoRenewalMark("2026-01-01", "retired")
+    changed = _cert(valid_until="2030-01-01")
+    error = _error(lambda: service.update_certificate(cert_id, changed, no_renewal=bad))
+    assert error.code == INVALID_NO_RENEWAL_REASON
+    assert service.get_certificate(cert_id).valid_until == date(2027, 1, 10)
+    assert len(change_log_rows(db)) == log_before
+    assert _dump(db) == before
+
+
+def test_update_certificate_sets_keeps_and_clears_the_mark(service: PersonnelService) -> None:
+    staff_id = service.create_staff(_staff())
+    cert_id = service.add_certificate(staff_id, _cert())
+    service.update_certificate(
+        cert_id, _cert(), no_renewal=NoRenewalMark("2026-02-01", "role_change")
+    )
+    marked = service.get_certificate(cert_id)
+    assert (marked.no_renewal_from, marked.no_renewal_reason) == (date(2026, 2, 1), "role_change")
+    service.update_certificate(cert_id, _cert(reference="r"))  # default: the mark is kept
+    assert service.get_certificate(cert_id).no_renewal_from == date(2026, 2, 1)
+    service.update_certificate(cert_id, _cert(), no_renewal=None)
+    cleared = service.get_certificate(cert_id)
+    assert (cleared.no_renewal_from, cleared.no_renewal_reason) == (None, None)
+
+
 # --------------------------------------------------------------------------- pseudonymisation
 
 
 def _pseudonym_fixture(service: PersonnelService) -> tuple[int, int, int]:
     """A person with distinctive personal text, two certificates, two trainings, three degrees."""
     staff_id = service.create_staff(
-        _staff(SECRET_IDENTIFIER, label=SECRET_LABEL, category="DEMO-CAT")
+        _staff(SECRET_IDENTIFIER, label=SECRET_LABEL, category=SECRET_CATEGORY)
     )
     service.update_staff(
-        staff_id, _staff(SECRET_IDENTIFIER, label=SECRET_LABEL, category="DEMO-CAT2")
+        staff_id, _staff(SECRET_IDENTIFIER, label=SECRET_LABEL, category=SECRET_CATEGORY_2)
     )
     course_id = service.create_course(_course())
     service.add_certificate(staff_id, _cert("A", "2025-01-10", "2026-04-10", SECRET_REFERENCE))
@@ -524,6 +616,10 @@ def test_pseudonymise_leaves_no_old_value_anywhere_and_keeps_history(
         "changed": True,
     }
     assert json.loads(str(staff_row["after_json"]))["label"] == {"redacted": True, "changed": True}
+    assert json.loads(str(staff_row["after_json"]))["category"] == {
+        "redacted": True,
+        "changed": True,
+    }
 
     for secret in SECRETS_ALL:
         assert secret not in _text_of(db, change_log=False)
@@ -532,7 +628,7 @@ def test_pseudonymise_leaves_no_old_value_anywhere_and_keeps_history(
     after_detail = service.staff_detail(staff_id)
     assert after_detail.staff.identifier.startswith("PSEUDO-")
     assert after_detail.staff.label is None
-    assert after_detail.staff.category == "DEMO-CAT2"
+    assert after_detail.staff.category is None  # P2-01: category is personal free text
     assert after_detail.staff.active_from == before_detail.staff.active_from
     assert [c.reference for c in after_detail.certificates] == [None, None]
     assert [(c.id, c.level, c.issued_on, c.valid_until) for c in after_detail.certificates] == [

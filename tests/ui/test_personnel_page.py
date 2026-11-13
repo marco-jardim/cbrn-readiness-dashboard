@@ -39,6 +39,7 @@ from cbrn_dashboard.ui.personnel.labels import (
     degree_level_label,
     degree_status_label,
     error_label,
+    fill_placeholders,
     ppe_level_label,
     reason_label,
 )
@@ -453,6 +454,7 @@ def test_the_hints_are_shown_under_the_free_text_inputs(
     expected = (
         (staff, "identifier_hint", IDENTIFIER_HINT),
         (staff, "label_hint", FREE_TEXT_HINT),
+        (staff, "category_hint", FREE_TEXT_HINT),  # P2-01: category is personal free text
         (certificate, "reference_hint", FREE_TEXT_HINT),
         (degree, "field_hint", FREE_TEXT_HINT),
     )
@@ -527,9 +529,12 @@ def test_valid_until_is_prefilled_from_the_configured_months(
     assert moved is not None
     assert from_qdate(dialog.valid_until_edit.date()) == moved
 
-    # a level without months proposes nothing: the field follows the issue date
+    # a level without months proposes nothing: the field goes back to "not set" and stays there
     dialog.level_combo.setCurrentIndex(dialog.level_combo.findData("B"))
-    assert from_qdate(dialog.valid_until_edit.date()) == date(2026, 1, 31)
+    assert dialog.valid_until_edit.date() == dialog.valid_until_edit.minimumDate()
+    dialog.issued_edit.setDate(QDate(2026, 3, 1))
+    assert dialog.valid_until_edit.date() == dialog.valid_until_edit.minimumDate()
+    dialog.issued_edit.setDate(QDate(2026, 1, 31))
 
     # once the user has edited the field it is never overwritten
     dialog.valid_until_edit.setDate(QDate(2030, 1, 1))
@@ -555,17 +560,31 @@ def test_the_prefilled_valid_until_is_what_gets_stored(
 
 
 def test_there_is_no_prefill_without_configured_months(
-    app_context: AppContext, qtbot: QtBot
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
 ) -> None:
+    _english(app_context)
     app_context.set_as_of(AS_OF)
     service = _service(app_context)
     sid = _add_staff(app_context)
     assert service.propose_valid_until("A", AS_OF) is None
     dialog = CertificateDialog(app_context, None, sid)
     qtbot.addWidget(dialog)
-    assert from_qdate(dialog.valid_until_edit.date()) == AS_OF
+    dialog.show()
+    unset = dialog.valid_until_edit.minimumDate()
+    assert dialog.valid_until_edit.date() == unset  # "not set", not a one-day certificate
+    assert dialog.valid_until_edit.specialValueText() == "Not set"
     dialog.issued_edit.setDate(QDate(2026, 6, 1))
-    assert from_qdate(dialog.valid_until_edit.date()) == date(2026, 6, 1)
+    assert dialog.valid_until_edit.date() == unset  # it does not follow the issue date
+
+    dialog.accept()  # a forgotten field is refused, nothing is stored
+    assert _warnings(fake_prompts) == ["A required field is empty."]
+    assert dialog.isVisible()
+    assert service.list_certificates(sid) == []
+
+    dialog.valid_until_edit.setDate(QDate(2027, 6, 1))
+    dialog.accept()
+    (certificate,) = service.list_certificates(sid)
+    assert (certificate.issued_on, certificate.valid_until) == (date(2026, 6, 1), date(2027, 6, 1))
 
 
 def test_editing_a_certificate_keeps_its_valid_until(app_context: AppContext, qtbot: QtBot) -> None:
@@ -975,10 +994,14 @@ def test_the_section_saves_the_mapping_and_the_validity_months(
     assert saved.ppe_validity_months.get("C") == 24
     assert fake_prompts.calls_of("warning") == []
 
-    # the section reads the stored values back
+    # a refresh keeps unsaved edits (P2-05); reload_rules reads the stored values back
     section.months_edits["A"].setText("")
     section.mapping_checks[("A", "B")].setChecked(False)
+    assert section.is_dirty()
     section.refresh()
+    assert section.months_edits["A"].text() == ""
+    section.reload_rules()
+    assert not section.is_dirty()
     assert section.months_edits["A"].text() == "12"
     assert section.mapping_checks[("A", "B")].isChecked()
     assert section.months_edits["B"].text() == ""
@@ -1018,6 +1041,149 @@ def test_the_placeholder_badges_show_until_confirmed(app_context: AppContext, qt
     section.confirm_a02_action.trigger()
     assert fake.confirmed == ["A04", "A02"]
     assert section.a02_badge.isHidden()
+
+
+# --------------------------------------------------------------- review fixes P2-03 .. P2-08
+
+
+def _change_log_count(context: AppContext) -> int:
+    conn = context.conn
+    assert conn is not None
+    return int(conn.execute("SELECT count(*) FROM change_log").fetchone()[0])
+
+
+def test_the_certificate_dialog_stores_certificate_and_mark_in_one_transaction(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    sid = _add_staff(app_context)
+    emitted: list[int] = []
+    app_context.data_changed.connect(lambda *_args: emitted.append(1))
+    dialog = CertificateDialog(app_context, None, sid)
+    qtbot.addWidget(dialog)
+    dialog.issued_edit.setDate(QDate(2026, 1, 1))
+    dialog.valid_until_edit.setDate(QDate(2027, 1, 1))
+    dialog.no_renewal_check.setChecked(True)
+    dialog.no_renewal_edit.setDate(QDate(2026, 6, 1))
+    before = _change_log_count(app_context)
+    dialog.accept()
+    (certificate,) = _service(app_context).list_certificates(sid)
+    assert certificate.no_renewal_from == date(2026, 6, 1)
+    assert emitted == [1]
+    assert _change_log_count(app_context) - before == 1  # one insert row, no second update row
+
+
+def test_a_refused_mark_leaves_no_certificate_and_ok_again_works(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    _english(app_context)
+    sid = _add_staff(app_context)
+    emitted: list[int] = []
+    app_context.data_changed.connect(lambda *_args: emitted.append(1))
+    dialog = CertificateDialog(app_context, None, sid)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.issued_edit.setDate(QDate(2026, 1, 1))
+    dialog.valid_until_edit.setDate(QDate(2027, 1, 1))
+    dialog.no_renewal_check.setChecked(True)
+    dialog.reason_combo.addItem("Retired", "retired")  # a reason the service refuses
+    dialog.reason_combo.setCurrentIndex(dialog.reason_combo.findData("retired"))
+    before = _change_log_count(app_context)
+
+    dialog.accept()
+    assert _warnings(fake_prompts) == ["The reason for no renewal is not valid."]
+    assert dialog.isVisible()
+    assert _service(app_context).list_certificates(sid) == []
+    assert _change_log_count(app_context) == before
+    assert emitted == []
+
+    dialog.reason_combo.setCurrentIndex(dialog.reason_combo.findData("other"))
+    dialog.accept()  # not DUPLICATE_CERTIFICATE: the first attempt stored nothing
+    (certificate,) = _service(app_context).list_certificates(sid)
+    assert certificate.no_renewal_reason == "other"
+    assert emitted == [1]
+
+
+def test_the_staff_dialog_corrects_and_clears_active_until(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    _english(app_context)
+    service = _service(app_context)
+    sid = _add_staff(app_context, active_until=date(2025, 6, 30))
+
+    dialog = StaffDialog(app_context, None, service.get_staff(sid))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert from_qdate(dialog.active_until_edit.date()) == date(2025, 6, 30)
+    dialog.active_until_edit.setDate(QDate(2024, 12, 31))  # before active_from (2025-01-01)
+    dialog.accept()
+    assert _warnings(fake_prompts) == ["The end of the active period cannot be before its start."]
+    assert service.get_staff(sid).active_until == date(2025, 6, 30)
+    dialog.active_until_edit.setDate(QDate(2025, 7, 31))
+    dialog.accept()
+    assert service.get_staff(sid).active_until == date(2025, 7, 31)
+
+    again = StaffDialog(app_context, None, service.get_staff(sid))
+    qtbot.addWidget(again)
+    again.active_until_edit.setDate(again.active_until_edit.minimumDate())  # "not set"
+    again.accept()
+    assert service.get_staff(sid).active_until is None
+
+    fresh = StaffDialog(app_context)
+    qtbot.addWidget(fresh)
+    assert fresh.active_until_edit.date() == fresh.active_until_edit.minimumDate()
+    assert fresh.active_until_edit.specialValueText() == "Not set"
+
+
+def test_the_deactivate_prompt_survives_a_percent_two_in_the_identifier(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    _english(app_context)
+    app_context.set_as_of(AS_OF)
+    _add_staff(app_context, "DEMO%2-001")
+    page = _page(app_context, qtbot)
+    page.staff_view.selectRow(0)
+    page.deactivate_staff_action.trigger()
+    (call,) = fake_prompts.calls_of("confirm")
+    assert call.text == "Deactivate person DEMO%2-001 as of 03/05/2026?"
+
+
+def test_fill_placeholders_substitutes_in_one_pass() -> None:
+    assert fill_placeholders("%1 on %2", "X%2Y", "d") == "X%2Y on d"
+    assert fill_placeholders("%2 before %1", "a", "b") == "b before a"
+    assert fill_placeholders("%3 stays", "a") == "%3 stays"
+
+
+def test_unsaved_rule_edits_survive_signals_from_the_course_list(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    _english(app_context)
+    fake = _attach_fake_config(app_context)
+    section = PersonnelSettingsSection(app_context)
+    qtbot.addWidget(section)
+    section.show()
+    section.months_edits["A"].setText("12")
+    section.mapping_checks[("A", "B")].setChecked(True)
+    assert section.is_dirty()
+
+    dialog = CourseDialog(app_context)
+    qtbot.addWidget(dialog)
+    dialog.code_edit.setText("COURSE-1")
+    dialog.label_pt_edit.setText("Curso demo")
+    dialog.accept()  # data_changed is emitted
+    assert section.courses_model.rowCount() == 1
+    assert section.months_edits["A"].text() == "12"
+    assert section.mapping_checks[("A", "B")].isChecked()
+
+    section.courses_view.selectRow(0)
+    section.deactivate_course_action.trigger()  # another data_changed
+    assert section.months_edits["A"].text() == "12"
+
+    # without unsaved edits a change of the stored configuration is picked up again
+    section.reload_rules()
+    assert not section.is_dirty()
+    fake.config = fake.config.with_changes(ppe_validity_months={"A": 6})
+    app_context.notify_data_changed()
+    assert section.months_edits["A"].text() == "6"
 
 
 # --------------------------------------------------------------------------- pseudo-locale walk

@@ -6,6 +6,7 @@ personnel service, of the shared service errors and of the configuration service
 entry; an unknown code is shown as itself, never as an exception.
 """
 
+import re
 from collections.abc import Callable
 
 from PySide6.QtCore import QCoreApplication
@@ -52,9 +53,27 @@ __all__ = [
     "degree_level_label",
     "degree_status_label",
     "error_label",
+    "fill_placeholders",
     "ppe_level_label",
     "reason_label",
 ]
+
+_PLACEHOLDER = re.compile(r"%([1-9])")
+
+
+def fill_placeholders(text: str, *values: str) -> str:
+    """Replace ``%1``..``%9`` by ``values`` in ONE pass.
+
+    A value that itself contains ``%2`` is never substituted again, and a translation may
+    reorder the placeholders. Mirrors ``_fill`` of ``ui/alerts/labels.py``.
+    """
+
+    def substitute(match: re.Match[str]) -> str:
+        position = int(match.group(1)) - 1
+        return values[position] if position < len(values) else match.group(0)
+
+    return _PLACEHOLDER.sub(substitute, text)
+
 
 _DEGREE_LEVEL_LABELS: dict[str, Callable[[], str]] = {
     DegreeLevel.SPECIALISATION.value: lambda: QCoreApplication.translate(

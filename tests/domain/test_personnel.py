@@ -7,6 +7,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain.indicators import (
     Direction,
     IndicatorStatus,
@@ -451,6 +452,86 @@ def test_degrees_counted_per_level_and_status_once_per_person() -> None:
         ("level=doctorate;status=completed", 0.0),
         ("level=doctorate;status=in_progress", 0.0),
     ]
+
+
+def _completed_master_count(degrees: list[Degree], d: date) -> float | None:
+    values = compute([person()], [], d=d, degrees=degrees)
+    return values_by_key(values)[("PERS_DEGREE", "level=master;status=completed")]
+
+
+@pytest.mark.parametrize(
+    ("clock", "status", "year", "counted"),
+    [
+        (FixedClock.at("2026-12-31T12:00:00Z"), DegreeStatus.COMPLETED, 2027, False),
+        (FixedClock.at("2026-12-31T12:00:00Z"), DegreeStatus.COMPLETED, 2026, True),
+        (FixedClock.at("2026-01-01T12:00:00Z"), DegreeStatus.COMPLETED, 2026, True),
+        (FixedClock.at("2026-01-01T12:00:00Z"), DegreeStatus.COMPLETED, 2025, True),
+        (FixedClock.at("2026-06-15T12:00:00Z"), DegreeStatus.COMPLETED, 2200, False),
+        (FixedClock.at("2026-06-15T12:00:00Z"), DegreeStatus.COMPLETED, None, True),
+        (FixedClock.at("2027-01-01T12:00:00Z"), DegreeStatus.COMPLETED, 2027, True),
+        # the local date decides, not the UTC date: 2027-01-01T01:00Z is still 2026 at UTC-3
+        (FixedClock.at("2027-01-01T01:00:00Z", -3), DegreeStatus.COMPLETED, 2027, False),
+        # in-progress degrees are not affected by their (future) year
+        (FixedClock.at("2026-06-15T12:00:00Z"), DegreeStatus.IN_PROGRESS, 2030, None),
+    ],
+)
+def test_completed_degree_of_a_later_year_is_not_counted_on_an_earlier_date(
+    clock: FixedClock, status: DegreeStatus, year: int | None, counted: bool | None
+) -> None:
+    d = clock.local_date()
+    degrees = [Degree(1, DegreeLevel.MASTER, status, year)]
+    values = values_by_key(compute([person()], [], d=d, degrees=degrees))
+    completed = values[("PERS_DEGREE", "level=master;status=completed")]
+    in_progress = values[("PERS_DEGREE", "level=master;status=in_progress")]
+    if status is DegreeStatus.IN_PROGRESS:
+        assert (completed, in_progress) == (0.0, 1.0)
+    else:
+        assert (completed, in_progress) == (float(bool(counted)), 0.0)
+
+
+def test_degree_year_defaults_to_not_recorded() -> None:
+    assert Degree(1, DegreeLevel.MASTER, DegreeStatus.COMPLETED).year is None
+
+
+def test_degree_level_and_status_are_compared_by_value_not_identity() -> None:
+    # Values that arrive as plain strings (not the enum members) must still be counted.
+    degree = Degree(1, DegreeLevel.MASTER, DegreeStatus.COMPLETED)
+    object.__setattr__(degree, "level", "master")
+    object.__setattr__(degree, "status", "completed")
+    assert degree.level is not DegreeLevel.MASTER
+    assert _completed_master_count([degree], D) == 1.0
+
+
+# --------------------------------------------------------------------------------------------
+# As-of readings from a FixedClock (T2.2)
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("clock", "status"),
+    [
+        (FixedClock.at("2026-03-01T12:00:00Z"), CertStatus.VALID),  # 106 days left
+        (FixedClock.at("2026-03-17T12:00:00Z"), CertStatus.EXPIRING),  # 90 days left
+        (FixedClock.at("2026-03-16T12:00:00Z"), CertStatus.VALID),  # 91 days left
+        (FixedClock.at("2026-06-14T12:00:00Z"), CertStatus.EXPIRING),  # the day before
+        (FixedClock.at("2026-06-15T12:00:00Z"), CertStatus.EXPIRING),  # last valid day
+        (FixedClock.at("2026-06-16T01:00:00Z", -3), CertStatus.EXPIRING),  # local date: 15th
+        (FixedClock.at("2026-06-16T12:00:00Z"), CertStatus.EXPIRED),
+        (FixedClock.at("2026-06-15T23:00:00Z", 3), CertStatus.EXPIRED),  # local date: 16th
+    ],
+)
+def test_certificate_status_on_the_date_of_a_fixed_clock(
+    clock: FixedClock, status: CertStatus
+) -> None:
+    d = clock.local_date()
+    certificate = cert(1, date(2026, 6, 15))
+    assert level_status(certificate, d, RULES) is status
+    values = compute([person()], [certificate], d=d)
+    assert level_counts(values, "PERS_CERT_VALID")[0] == float(status is not CertStatus.EXPIRED)
+    assert level_counts(values, "PERS_CERT_EXPIRING")[0] == float(status is CertStatus.EXPIRING)
+    assert level_counts(values, "PERS_RETRAINING_NEEDED")[0] == float(
+        status in (CertStatus.EXPIRING, CertStatus.EXPIRED)
+    )
 
 
 # --------------------------------------------------------------------------------------------

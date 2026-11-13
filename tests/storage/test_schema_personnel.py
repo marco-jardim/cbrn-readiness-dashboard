@@ -254,6 +254,176 @@ def test_null_no_renewal_reason_is_accepted(migrated_db: DatabaseConnection) -> 
     assert count(migrated_db, "ppe_certification") == 1
 
 
+# --------------------------------------------------------------------------- P2-06 checks
+
+BAD_DATES = ["2024-1-01", "24-01-01", "2024/01/01", "01-01-2024", "2024-01-01T00:00", "", "today"]
+
+
+@pytest.mark.parametrize("value", BAD_DATES)
+def test_staff_dates_must_have_the_iso_shape(migrated_db: DatabaseConnection, value: str) -> None:
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO staff_member (identifier, active_from) VALUES ('DEMO-P001', ?)", (value,)
+        )
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO staff_member (identifier, active_from, active_until) "
+            "VALUES ('DEMO-P001', '2024-01-01', ?)",
+            (value,),
+        )
+    assert count(migrated_db, "staff_member") == 0
+
+
+def test_active_until_before_active_from_is_rejected(migrated_db: DatabaseConnection) -> None:
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO staff_member (identifier, active_from, active_until) "
+            "VALUES ('DEMO-P001', '2024-01-02', '2024-01-01')"
+        )
+    staff_id = add_staff(migrated_db)  # active from 2024-01-01
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "UPDATE staff_member SET active_until = '2023-12-31' WHERE id = ?", (staff_id,)
+        )
+
+
+@pytest.mark.parametrize("until", [None, "2024-01-01", "2030-12-31"])
+def test_active_until_on_or_after_active_from_or_open_is_accepted(
+    migrated_db: DatabaseConnection, until: str | None
+) -> None:
+    migrated_db.execute(
+        "INSERT INTO staff_member (identifier, active_from, active_until) "
+        "VALUES ('DEMO-P001', '2024-01-01', ?)",
+        (until,),
+    )
+    assert count(migrated_db, "staff_member") == 1
+
+
+@pytest.mark.parametrize("column", ["issued_on", "valid_until"])
+@pytest.mark.parametrize("value", BAD_DATES)
+def test_certificate_dates_must_have_the_iso_shape(
+    migrated_db: DatabaseConnection, column: str, value: str
+) -> None:
+    staff_id = add_staff(migrated_db)
+    dates = {"issued_on": "2024-02-01", "valid_until": "2026-02-01", column: value}
+    with pytest.raises(sqlite3.IntegrityError):
+        add_certificate(
+            migrated_db, staff_id, issued_on=dates["issued_on"], valid_until=dates["valid_until"]
+        )
+    assert count(migrated_db, "ppe_certification") == 0
+
+
+@pytest.mark.parametrize("value", BAD_DATES)
+def test_no_renewal_from_must_have_the_iso_shape(
+    migrated_db: DatabaseConnection, value: str
+) -> None:
+    staff_id = add_staff(migrated_db)
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO ppe_certification "
+            "(staff_id, ppe_level, issued_on, valid_until, no_renewal_from) "
+            "VALUES (?, 'A', '2024-02-01', '2026-02-01', ?)",
+            (staff_id, value),
+        )
+
+
+@pytest.mark.parametrize("reason", ["left_unit", "role_change", "other"])
+def test_no_renewal_reason_without_a_date_is_rejected(
+    migrated_db: DatabaseConnection, reason: str
+) -> None:
+    staff_id = add_staff(migrated_db)
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO ppe_certification "
+            "(staff_id, ppe_level, issued_on, valid_until, no_renewal_reason) "
+            "VALUES (?, 'A', '2024-02-01', '2026-02-01', ?)",
+            (staff_id, reason),
+        )
+    add_certificate(migrated_db, staff_id)
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute("UPDATE ppe_certification SET no_renewal_reason = ?", (reason,))
+
+
+def test_no_renewal_date_without_a_reason_is_accepted(migrated_db: DatabaseConnection) -> None:
+    staff_id = add_staff(migrated_db)
+    migrated_db.execute(
+        "INSERT INTO ppe_certification "
+        "(staff_id, ppe_level, issued_on, valid_until, no_renewal_from) "
+        "VALUES (?, 'A', '2024-02-01', '2026-02-01', '2025-06-01')",
+        (staff_id,),
+    )
+    assert count(migrated_db, "ppe_certification") == 1
+
+
+@pytest.mark.parametrize("active", [2, -1, 10])
+def test_course_active_must_be_zero_or_one(migrated_db: DatabaseConnection, active: int) -> None:
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO training_course (code, active) VALUES ('DEMO-COURSE-1', ?)", (active,)
+        )
+
+
+@pytest.mark.parametrize("active", [0, 1])
+def test_course_active_zero_and_one_are_accepted(
+    migrated_db: DatabaseConnection, active: int
+) -> None:
+    migrated_db.execute(
+        "INSERT INTO training_course (code, active) VALUES ('DEMO-COURSE-1', ?)", (active,)
+    )
+    assert count(migrated_db, "training_course") == 1
+
+
+@pytest.mark.parametrize("value", BAD_DATES)
+def test_training_date_must_have_the_iso_shape(migrated_db: DatabaseConnection, value: str) -> None:
+    staff_id = add_staff(migrated_db)
+    course_id = add_course(migrated_db)
+    with pytest.raises(sqlite3.IntegrityError):
+        add_training(migrated_db, staff_id, course_id, value)
+
+
+def test_negative_training_hours_are_rejected(migrated_db: DatabaseConnection) -> None:
+    staff_id = add_staff(migrated_db)
+    course_id = add_course(migrated_db)
+    with pytest.raises(sqlite3.IntegrityError):
+        migrated_db.execute(
+            "INSERT INTO training_record (staff_id, course_id, completed_on, hours) "
+            "VALUES (?, ?, '2024-03-01', -0.5)",
+            (staff_id, course_id),
+        )
+
+
+@pytest.mark.parametrize("hours", [None, 0, 0.5, 40])
+def test_zero_positive_and_missing_training_hours_are_accepted(
+    migrated_db: DatabaseConnection, hours: float | None
+) -> None:
+    staff_id = add_staff(migrated_db)
+    course_id = add_course(migrated_db)
+    migrated_db.execute(
+        "INSERT INTO training_record (staff_id, course_id, completed_on, hours) "
+        "VALUES (?, ?, '2024-03-01', ?)",
+        (staff_id, course_id, hours),
+    )
+    assert count(migrated_db, "training_record") == 1
+
+
+@pytest.mark.parametrize("year", [0, 1899, 2201, -2020])
+def test_degree_year_outside_the_range_is_rejected(
+    migrated_db: DatabaseConnection, year: int
+) -> None:
+    staff_id = add_staff(migrated_db)
+    with pytest.raises(sqlite3.IntegrityError):
+        add_degree(migrated_db, staff_id, year=year)
+
+
+@pytest.mark.parametrize("year", [None, 1900, 2020, 2200])
+def test_degree_year_in_the_range_or_missing_is_accepted(
+    migrated_db: DatabaseConnection, year: int | None
+) -> None:
+    staff_id = add_staff(migrated_db)
+    add_degree(migrated_db, staff_id, year=year)
+    assert count(migrated_db, "academic_degree") == 1
+
+
 # --------------------------------------------------------------------------- natural keys
 
 
