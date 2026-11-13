@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QCoreApplication, QDate
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QPushButton, QWidget
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard import app as app_module
@@ -21,15 +21,17 @@ from cbrn_dashboard.app import AppHandle, StartupHook, clock_is_suspect
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain.config import ReadinessConfig
 from cbrn_dashboard.paths import DATABASE_FILE_NAME, LocationWarning
-from cbrn_dashboard.prefs import PreferencesStore
+from cbrn_dashboard.prefs import PREFS_FILE_NAME, PreferencesStore, PreferencesWarning
 from cbrn_dashboard.services.backup import daily_backup_startup
 from cbrn_dashboard.services.personnel import CourseInput, StaffInput
+from cbrn_dashboard.services.restore import tmp_cleanup_startup
+from cbrn_dashboard.services.snapshots import monthly_snapshot_startup
 from cbrn_dashboard.storage import repository
 from cbrn_dashboard.storage.backup import BackupKind, DatabaseIdentity, list_backups
 from cbrn_dashboard.storage.db import HotJournalError, open_database
 from cbrn_dashboard.storage.repository import WriteContext
 from cbrn_dashboard.ui.shell import registry
-from cbrn_dashboard.ui.shell.banners import BannerCode
+from cbrn_dashboard.ui.shell.banners import BannerArea, BannerCode
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.formatting import to_qdate
 from cbrn_dashboard.ui.shell.instance_lock import LOCK_FILE_NAME, InstanceLock, LockReason
@@ -92,6 +94,42 @@ def _banners(handle: AppHandle) -> tuple[str, ...]:
     return handle.window.banners.visible_codes()
 
 
+def _assert_banner_really_shown(banners: BannerArea, code: str) -> None:
+    """The frame is not hidden, carries a non-null icon (D23) and a non-empty text."""
+    frame = banners.findChild(QFrame, f"banner_{code}")
+    icon = banners.findChild(QLabel, f"banner_icon_{code}")
+    assert frame is not None
+    assert icon is not None
+    assert not frame.isHidden()
+    pixmap = icon.pixmap()
+    assert pixmap is not None
+    assert not pixmap.isNull()
+    assert banners.text(code).strip() != ""
+
+
+class _MovingClock:
+    """A clock the test can move forward (``FixedClock`` is frozen)."""
+
+    def __init__(self, iso_utc: str) -> None:
+        self.now = FixedClock.at(iso_utc)
+
+    def advance(self, delta: timedelta) -> None:
+        self.now = self.now.advanced(delta)
+
+    def utc_now(self) -> datetime:
+        return self.now.utc_now()
+
+    def local_date(self) -> date:
+        return self.now.local_date()
+
+    def local_date_of(self, instant: datetime) -> date:
+        return self.now.local_date_of(instant)
+
+
+def _failing_page(context: AppContext) -> QWidget:
+    raise RuntimeError("DEMO-ZEBRA-7731")
+
+
 def _read_only_app(started_app: StartApp, tmp_path: Path, **kwargs: object) -> AppHandle:
     """An app over an existing database in a folder reported as not writable."""
     create_database(tmp_path)
@@ -112,22 +150,29 @@ def _write_change_row(path: Path, iso_utc: str) -> None:
 
 
 def test_a_registered_page_appears_in_the_navigation(started_app: StartApp) -> None:
+    builtin = {spec.key for spec in registry.pages()}  # the module pages registered for real
     with registry.registered(_page("beta", order=20), _page("alpha", order=10)):
+        expected = tuple(spec.key for spec in registry.pages())
         handle = expect_handle(started_app())
     window = handle.window
-    assert window.page_keys() == ("alpha", "beta")
-    assert window.navigation.count() == 2
-    assert window.pages.count() == 2
-    assert window.navigation.item(0).text() == "Navigation"
+    assert set(expected) == {*builtin, "alpha", "beta"}
+    assert expected.index("alpha") < expected.index("beta")
+    assert window.page_keys() == expected
+    assert window.navigation.count() == len(expected)
+    assert window.pages.count() == len(expected)
+    alpha, beta = expected.index("alpha"), expected.index("beta")
+    assert window.navigation.item(alpha).text() == "Navigation"
+    assert window.pages.currentWidget() is window.page_widget(expected[0])
+    window.navigation.setCurrentRow(alpha)
     assert window.pages.currentWidget() is window.page_widget("alpha")
-    window.navigation.setCurrentRow(1)
+    window.navigation.setCurrentRow(beta)
     assert window.pages.currentWidget() is window.page_widget("beta")
 
 
 def test_the_navigation_title_follows_a_language_switch(started_app: StartApp) -> None:
     with registry.registered(_page("alpha")):
         handle = expect_handle(started_app(lang="en-US"))
-    item = handle.window.navigation.item(0)
+    item = handle.window.navigation.item(handle.window.page_keys().index("alpha"))
     assert item.text() == "Navigation"
     handle.window.language_actions["pt_BR"].trigger()
     assert item.text() == "Navega\u00e7\u00e3o"
@@ -153,10 +198,12 @@ def test_settings_sections_and_dialogs_are_returned_by_their_registries() -> Non
     dialog = _dialog("test_dialog")
     sections_before = registry.settings_sections()
     dialogs_before = registry.dialogs()
+    backup_before = registry.settings_sections("backup")
+    personnel_before = registry.settings_sections("personnel")
     with registry.registered(backup, personnel, dialog):
         assert registry.settings_sections() == (*sections_before, backup, personnel)
-        assert registry.settings_sections("backup") == (backup,)
-        assert registry.settings_sections("personnel") == (personnel,)
+        assert registry.settings_sections("backup") == (*backup_before, backup)
+        assert registry.settings_sections("personnel") == (*personnel_before, personnel)
         assert registry.settings_sections("reports") == ()
         assert registry.dialogs() == (*dialogs_before, dialog)
     assert registry.settings_sections() == sections_before
@@ -268,18 +315,27 @@ def _daily_files(folder: Path) -> list[Path]:
     return sorted((folder / "backups").glob("daily-*.sqlite3"))
 
 
-def test_the_daily_backup_is_the_only_registered_hook_and_declares_its_modes() -> None:
-    [hook] = app_module.STARTUP_HOOKS
-    assert hook.name == "daily-backup"
-    assert hook.run is daily_backup_startup
-    assert hook.runs_read_only is False
-    assert hook.runs_in_demo is False
-    assert hook.needs_trusted_clock is False
+def test_the_three_registered_hooks_declare_their_names_order_and_modes() -> None:
+    hooks = app_module.STARTUP_HOOKS
+    assert [hook.name for hook in hooks] == ["tmp-cleanup", "daily-backup", "monthly-snapshot"]
+    cleanup, backup, snapshot_hook = hooks
+    assert cleanup.run is tmp_cleanup_startup
+    assert cleanup.runs_read_only is False
+    assert cleanup.runs_in_demo is True
+    assert cleanup.needs_trusted_clock is False
+    assert backup.run is daily_backup_startup
+    assert backup.runs_read_only is False
+    assert backup.runs_in_demo is False
+    assert backup.needs_trusted_clock is False
+    assert snapshot_hook.run is monthly_snapshot_startup
+    assert snapshot_hook.runs_read_only is False
+    assert snapshot_hook.runs_in_demo is False
+    assert snapshot_hook.needs_trusted_clock is True
 
 
 def test_a_normal_start_makes_one_daily_backup(started_app: StartApp, tmp_path: Path) -> None:
     handle = expect_handle(started_app(hooks=REAL_HOOKS))
-    assert handle.hooks_run == ("daily-backup",)
+    assert handle.hooks_run == ("tmp-cleanup", "daily-backup", "monthly-snapshot")
     # The database was created and migrated by this very start (so the pre-migration helper had
     # nothing to copy), yet the daily backup is made: it does not skip a database without rows.
     [backup] = _daily_files(tmp_path)
@@ -329,7 +385,7 @@ def test_a_read_only_start_makes_no_daily_backup_and_writes_nothing(
 def test_a_demo_start_makes_no_daily_backup_anywhere(started_app: StartApp, tmp_path: Path) -> None:
     handle = expect_handle(started_app(demo=True, hooks=REAL_HOOKS))
     assert handle.context.is_demo
-    assert handle.hooks_run == ()
+    assert handle.hooks_run == ("tmp-cleanup",)  # the only hook that runs with a demo database
     assert not (tmp_path / "backups").exists()
     assert not (tmp_path / "demo" / "backups").exists()
     assert list(tmp_path.rglob("daily-*")) == []
@@ -341,7 +397,7 @@ def test_a_database_flagged_demo_gets_no_daily_backup_either(
     create_database(tmp_path, is_demo=True)  # opened through the NORMAL path (no --demo)
     handle = expect_handle(started_app(hooks=REAL_HOOKS))
     assert handle.context.is_demo
-    assert handle.hooks_run == ()
+    assert handle.hooks_run == ("tmp-cleanup",)
     assert list(tmp_path.rglob("daily-*")) == []
 
 
@@ -365,7 +421,8 @@ def test_a_suspect_clock_still_makes_the_daily_backup_but_does_not_rotate(
     handle = expect_handle(started_app(hooks=REAL_HOOKS))
 
     assert handle.context.clock_suspect
-    assert handle.hooks_run == ("daily-backup",)
+    # The suspect clock skips only the monthly snapshot (it needs a trusted clock).
+    assert handle.hooks_run == ("tmp-cleanup", "daily-backup")
     files = _daily_files(tmp_path)
     assert len(files) == 10
     assert all(kept in files for kept in old)
@@ -456,6 +513,15 @@ def test_the_selector_follows_the_language(started_app: StartApp) -> None:
 def test_read_only_mode_disables_every_registered_edit_action(
     started_app: StartApp, tmp_path: Path
 ) -> None:
+    # Non-vacuity: in a normal session an edit target is enabled, so the check below is about
+    # read-only mode and not about targets that are never enabled.
+    writable = expect_handle(started_app(data_dir=tmp_path / "normal"))
+    probe = QAction("edit", writable.window)
+    writable.context.register_edit_action(probe)
+    assert not writable.context.read_only
+    assert any(target.isEnabled() for target in writable.context.edit_targets())
+    writable.close()
+
     handle = _read_only_app(started_app, tmp_path)
     context = handle.context
     action = QAction("edit", handle.window)
@@ -466,11 +532,18 @@ def test_read_only_mode_disables_every_registered_edit_action(
     assert not action.isEnabled()
     assert not button.isEnabled()
 
-    context.set_edit_enabled(action, True)  # asking to enable it changes nothing
-    context.set_edit_enabled(button, True)
+    # Every registered edit target (those of the built-in pages and these two) is disabled.
+    targets = context.edit_targets()
+    assert targets[-2:] == (action, button)  # registered last, in this order
+    assert len(targets) >= 2
+    assert all(not target.isEnabled() for target in targets)
+
+    for target in targets:  # asking to enable any of them changes nothing
+        context.set_edit_enabled(target, True)
     assert not action.isEnabled()
     assert not button.isEnabled()
-    assert context.edit_targets() == (action, button)
+    assert context.edit_targets() == targets
+    assert all(not target.isEnabled() for target in context.edit_targets())
 
 
 def test_edit_actions_work_in_read_write_mode(started_app: StartApp) -> None:
@@ -693,6 +766,9 @@ def test_a_database_flagged_demo_shows_the_banner_whatever_the_command_line(
     assert handle.is_demo
     assert BannerCode.DEMO.value in _banners(handle)
     assert handle.window.banners.text("DEMO") == DEMO_TEXT
+    _assert_banner_really_shown(handle.window.banners, "DEMO")
+    handle.window.banners.hide_banner("DEMO")  # D25: the DEMO banner is permanent
+    assert BannerCode.DEMO.value in _banners(handle)
 
 
 def test_the_demo_option_shows_the_banner_and_leaves_the_real_database_alone(
@@ -723,7 +799,7 @@ def test_the_preliminary_notice_is_always_visible_and_cannot_be_hidden(
     assert banners.text("PRELIMINARY") == PRELIMINARY
     banners.hide_banner("PRELIMINARY")
     assert "PRELIMINARY" in banners.visible_codes()
-    assert banners.findChild(QLabel, "banner_text_PRELIMINARY") is not None
+    _assert_banner_really_shown(banners, "PRELIMINARY")
 
 
 @pytest.mark.parametrize("lang", sorted(PRELIMINARY_BY_LANGUAGE))
@@ -750,16 +826,22 @@ def test_location_warnings_get_a_banner_each(started_app: StartApp) -> None:
     for code in ("NETWORK_PATH", "ONEDRIVE", "POINTER_INVALID", "NO_PROFILE_DIR"):
         assert code in visible
         assert handle.window.banners.text(code)
+        _assert_banner_really_shown(handle.window.banners, code)
     assert visible[-1] == "PRELIMINARY"
 
 
 def test_banners_can_be_shown_and_hidden(started_app: StartApp) -> None:
     banners = expect_handle(started_app()).window.banners
     assert banners.visible_codes() == ("PRELIMINARY",)
+    clock_frame = banners.findChild(QFrame, "banner_CLOCK_SUSPECT")
+    assert clock_frame is not None
+    assert clock_frame.isHidden()
     banners.show_banner("CLOCK_SUSPECT")
     assert banners.visible_codes() == ("CLOCK_SUSPECT", "PRELIMINARY")
+    _assert_banner_really_shown(banners, "CLOCK_SUSPECT")
     banners.hide_banner("CLOCK_SUSPECT")
     assert banners.visible_codes() == ("PRELIMINARY",)
+    assert clock_frame.isHidden()
     with pytest.raises(ValueError, match="NOPE"):
         banners.show_banner("NOPE")
 
@@ -845,7 +927,7 @@ def test_another_database_failure_shows_a_code_only(
 def test_the_crash_callback_shows_a_code_and_never_the_message(
     started_app: StartApp, fake_prompts: FakePrompts
 ) -> None:
-    handle = expect_handle(started_app())
+    handle = expect_handle(started_app(expect_errors=True))
     sys.excepthook(ValueError, ValueError("DEMO-ZEBRA-7731"), None)
 
     [call] = fake_prompts.calls_of("error")
@@ -984,3 +1066,235 @@ def test_fake_prompts_record_calls_and_use_scripted_answers(fake_prompts: FakePr
     fake_prompts.info(None, "title", "text")
     assert [call.method for call in fake_prompts.calls][-1] == "info"
     assert fake_prompts.calls_of("info")[0].text == "text"
+
+
+# --------------------------------------------------------------------------- Phase 1 QA fixes
+
+
+def test_the_as_of_date_is_pinned_and_today_always_resyncs(started_app: StartApp) -> None:
+    clock = _MovingClock("2026-03-05T23:50:00Z")
+    handle = expect_handle(started_app(clock=clock))
+    context, window = handle.context, handle.window
+    seen: list[date] = []
+    context.as_of_changed.connect(seen.append)
+    assert context.as_of == date(2026, 3, 5)
+    assert context.is_today
+
+    clock.advance(timedelta(minutes=20))  # past midnight
+    assert context.as_of == date(2026, 3, 5)  # pinned
+    assert window.as_of_edit.date() == QDate(2026, 3, 5)  # and the selector agrees
+    assert not context.is_today
+
+    window.today_action.trigger()
+    assert context.as_of == date(2026, 3, 6)
+    assert window.as_of_edit.date() == QDate(2026, 3, 6)
+    assert seen == [date(2026, 3, 6)]
+    assert context.is_today
+
+    window.today_action.trigger()  # again: no signal, both still agree
+    assert seen == [date(2026, 3, 6)]
+    assert context.as_of == date(2026, 3, 6)
+    assert window.as_of_edit.date() == QDate(2026, 3, 6)
+
+    window.as_of_edit.blockSignals(True)  # a selector that drifted without any signal
+    window.as_of_edit.setDate(QDate(2026, 1, 1))
+    window.as_of_edit.blockSignals(False)
+    window.today_action.trigger()
+    assert window.as_of_edit.date() == QDate(2026, 3, 6)
+    assert seen == [date(2026, 3, 6)]
+
+
+def test_the_date_editor_does_not_track_keystrokes(started_app: StartApp) -> None:
+    handle = expect_handle(started_app())
+    assert not handle.window.as_of_edit.keyboardTracking()
+
+
+def test_a_failing_page_factory_becomes_a_placeholder(started_app: StartApp) -> None:
+    bad = PageSpec(key="bad", order=10, title=_navigation_title, factory=_failing_page)
+    with registry.registered(bad, _page("good", order=20)):
+        handle = expect_handle(started_app(lang="en-US"))
+    window = handle.window
+    keys = window.page_keys()
+    assert "bad" in keys
+    assert "good" in keys
+    assert window.navigation.count() == len(keys)  # the failed page keeps its entry
+    assert window.navigation.item(keys.index("bad")).text() == "Navigation"
+    placeholder = window.page_widget("bad")
+    assert isinstance(placeholder, QLabel)
+    assert placeholder.text() == "This page could not be opened."
+    good = window.page_widget("good")
+    assert isinstance(good, QLabel)
+    assert good.text() == "test page"
+    window.language_actions["pt_BR"].trigger()
+    assert placeholder.text() != "This page could not be opened."
+    handle.logging.handler.flush()
+    assert handle.logging.path is not None
+    text = handle.logging.path.read_text(encoding="utf-8")
+    assert "UI.PAGE_FAILED" in text
+    assert "RuntimeError" in text
+    assert "ZEBRA" not in text
+
+
+def test_read_only_mode_cannot_be_undone_by_set_enabled(
+    started_app: StartApp, tmp_path: Path
+) -> None:
+    handle = _read_only_app(started_app, tmp_path)
+    context = handle.context
+    action = QAction("edit", handle.window)
+    button = QPushButton("edit", handle.window)
+    context.register_edit_action(action)
+    context.register_edit_action(button)
+    action.setEnabled(True)
+    button.setEnabled(True)
+    assert not action.isEnabled()
+    assert not button.isEnabled()
+    action.setEnabled(True)
+    assert not action.isEnabled()
+
+
+def test_set_enabled_works_normally_in_read_write_mode(started_app: StartApp) -> None:
+    handle = expect_handle(started_app())
+    context = handle.context
+    action = QAction("edit", handle.window)
+    button = QPushButton("edit", handle.window)
+    context.register_edit_action(action)
+    context.register_edit_action(button)
+    action.setEnabled(False)
+    button.setEnabled(False)
+    assert not action.isEnabled()
+    assert not button.isEnabled()
+    action.setEnabled(True)
+    button.setEnabled(True)
+    assert action.isEnabled()
+    assert button.isEnabled()
+
+
+def test_the_demo_banner_is_permanent_once_shown(qtbot: QtBot) -> None:
+    area = BannerArea()
+    qtbot.addWidget(area)
+    area.hide_banner("DEMO")  # not shown yet: nothing to keep
+    assert "DEMO" not in area.visible_codes()
+    area.show_banner("DEMO")
+    area.hide_banner("DEMO")
+    assert "DEMO" in area.visible_codes()
+    area.show_banner("CLOCK_SUSPECT")
+    area.hide_banner("CLOCK_SUSPECT")  # an ordinary banner can still be hidden
+    assert "CLOCK_SUSPECT" not in area.visible_codes()
+    area.set_permanent("CLOCK_SUSPECT")
+    area.hide_banner("CLOCK_SUSPECT")
+    assert "CLOCK_SUSPECT" in area.visible_codes()
+    _assert_banner_really_shown(area, "DEMO")
+
+
+def test_the_read_only_banner_wording_is_neutral(started_app: StartApp, tmp_path: Path) -> None:
+    handle = _read_only_app(started_app, tmp_path, lang="en-US")
+    assert handle.window.banners.text("READ_ONLY") == (
+        "Read-only mode: the database cannot be written, so nothing can be changed."
+    )
+
+
+def test_shown_banners_have_a_visible_frame_an_icon_and_a_text(
+    started_app: StartApp, tmp_path: Path
+) -> None:
+    handle = _read_only_app(
+        started_app, tmp_path, warnings=(LocationWarning.ONEDRIVE,), lang="en-US"
+    )
+    banners = handle.window.banners
+    shown = banners.visible_codes()
+    assert {"READ_ONLY", "ONEDRIVE", "PRELIMINARY"} <= set(shown)
+    for code in BannerCode:
+        frame = banners.findChild(QFrame, f"banner_{code.value}")
+        assert frame is not None
+        if code.value in shown:
+            _assert_banner_really_shown(banners, code.value)
+        else:
+            assert frame.isHidden()
+
+
+def test_a_corrupt_preferences_file_raises_the_reset_banner(
+    started_app: StartApp, tmp_path: Path
+) -> None:
+    (tmp_path / PREFS_FILE_NAME).write_text("{not json", encoding="utf-8")
+    handle = expect_handle(started_app(lang=None))  # no --lang: the preferences file is read
+    assert PreferencesWarning.CORRUPT_FILE in handle.preferences.warnings
+    assert "PREFERENCES_RESET" in _banners(handle)
+    handle.window.language_actions["en_US"].trigger()
+    assert handle.window.banners.text("PREFERENCES_RESET") == (
+        "The saved preferences could not be read and were reset to their defaults."
+    )
+    _assert_banner_really_shown(handle.window.banners, "PREFERENCES_RESET")
+
+
+def test_a_settings_section_with_an_unknown_group_is_rejected() -> None:
+    with pytest.raises(ValueError, match="typo"):
+        registry.register_settings_section(_section("typo_section", "typo"))
+    assert "typo_section" not in [spec.key for spec in registry.settings_sections()]
+    for group in registry.SETTINGS_GROUPS:
+        with registry.registered(_section(f"{group}_section", group)):
+            assert registry.settings_sections(group)[-1].group == group
+    assert all(spec.group in registry.SETTINGS_GROUPS for spec in registry.SETTINGS_SECTIONS)
+
+
+class _ForbiddenPrompts:
+    """A ``Prompts`` that fails the test as soon as anything is asked."""
+
+    def _fail(self, method: str) -> None:
+        pytest.fail(f"a factory prompted at construction: {method}")
+
+    def info(self, parent: QWidget | None, title: str, text: str) -> None:
+        self._fail("info")
+
+    def warning(self, parent: QWidget | None, title: str, text: str) -> None:
+        self._fail("warning")
+
+    def error(self, parent: QWidget | None, title: str, text: str) -> None:
+        self._fail("error")
+
+    def confirm(self, parent: QWidget | None, title: str, text: str) -> bool:
+        self._fail("confirm")
+        return False
+
+    def open_file(self, parent: QWidget | None, title: str, file_filter: str) -> Path | None:
+        self._fail("open_file")
+        return None
+
+    def save_file(
+        self, parent: QWidget | None, title: str, suggested_name: str, file_filter: str
+    ) -> Path | None:
+        self._fail("save_file")
+        return None
+
+    def choose_folder(self, parent: QWidget | None, title: str) -> Path | None:
+        self._fail("choose_folder")
+        return None
+
+    def text_input(
+        self, parent: QWidget | None, title: str, label: str, *, password: bool = False
+    ) -> str | None:
+        self._fail("text_input")
+        return None
+
+
+def test_every_factory_builds_without_services_and_without_prompting(
+    app_context: AppContext, qtbot: QtBot, tmp_path: Path
+) -> None:
+    bare = AppContext(
+        conn=None,
+        clock=FixedClock.at(NOW),
+        location=app_context.location,
+        prompts=_ForbiddenPrompts(),
+        preferences=PreferencesStore(tmp_path, writable=False),
+        translator_manager=app_context.translator_manager,
+    )
+    assert bare.services.personnel is None
+    for page in registry.pages():
+        widget = page.factory(bare)
+        qtbot.addWidget(widget)
+    for section in registry.settings_sections():
+        widget = section.factory(bare)
+        qtbot.addWidget(widget)
+    for dialog_spec in registry.dialogs():
+        dialog = dialog_spec.factory(bare, None)
+        qtbot.addWidget(dialog)
+    window = MainWindow(bare)
+    qtbot.addWidget(window)

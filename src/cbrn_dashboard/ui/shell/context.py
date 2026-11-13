@@ -11,11 +11,12 @@ that must refresh; and the registry of edit actions that read-only mode disables
 ``cbrn_dashboard.storage.db.DatabaseConnection``.
 """
 
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QEvent, QObject, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QWidget
 from shiboken6 import isValid
@@ -25,6 +26,8 @@ from cbrn_dashboard.paths import DataLocation
 from cbrn_dashboard.prefs import PreferencesStore
 from cbrn_dashboard.services.alerts import AlertService
 from cbrn_dashboard.services.budget import BudgetService
+from cbrn_dashboard.services.config import ConfigService
+from cbrn_dashboard.services.dashboard import DashboardService
 from cbrn_dashboard.services.exercises import ExercisesService
 from cbrn_dashboard.services.indicators import IndicatorService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
@@ -53,6 +56,8 @@ class Services:
     budget: BudgetService | None = None
     indicators: IndicatorService | None = None
     alerts: AlertService | None = None
+    config: ConfigService | None = None
+    dashboard: DashboardService | None = None
 
 
 def build_services(
@@ -78,6 +83,14 @@ def build_services(
         budget=budget,
     )
     alerts = AlertService(personnel=personnel, infrastructure=infrastructure, indicators=indicators)
+    dashboard = DashboardService(
+        indicators=indicators,
+        alerts=alerts,
+        personnel=personnel,
+        infrastructure=infrastructure,
+        exercises=exercises,
+        budget=budget,
+    )
     return Services(
         personnel=personnel,
         infrastructure=infrastructure,
@@ -85,7 +98,22 @@ def build_services(
         budget=budget,
         indicators=indicators,
         alerts=alerts,
+        config=ConfigService(conn, clock, operator),
+        dashboard=dashboard,
     )
+
+
+class _ReadOnlyGuard(QObject):
+    """Event filter that disables a registered widget again whenever it becomes enabled."""
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if (
+            event.type() == QEvent.Type.EnabledChange
+            and isinstance(watched, QWidget)
+            and watched.isEnabled()
+        ):
+            watched.setEnabled(False)
+        return False
 
 
 class AppContext(QObject):
@@ -120,8 +148,12 @@ class AppContext(QObject):
         self.is_demo: bool = conn is not None and app_meta.read_is_demo(conn)
         self.clock_suspect: bool = clock_suspect
         self._operator_label = ""
-        self._as_of: date | None = None  # None: follow the clock's local date
+        # D13: the as-of date defaults to today at start-up and then stays PINNED until changed
+        # (so the context and the toolbar selector cannot disagree after midnight).
+        self._as_of: date = clock.local_date()
         self._edit_targets: list[EditTarget] = []
+        self._enforcing = False
+        self._read_only_guard = _ReadOnlyGuard(self)
         self.services: Services = build_services(conn, clock, self.operator_label)
 
     # ------------------------------------------------------------------ operator label
@@ -138,26 +170,27 @@ class AppContext(QObject):
 
     @property
     def as_of(self) -> date:
-        """The date every indicator is evaluated for; today's local date unless changed."""
-        return self.clock.local_date() if self._as_of is None else self._as_of
+        """The date every indicator is evaluated for: the local date at start-up unless changed."""
+        return self._as_of
+
+    @property
+    def is_today(self) -> bool:
+        """Whether the as-of date is the clock's CURRENT local date."""
+        return self._as_of == self.clock.local_date()
 
     def set_as_of(self, value: date) -> None:
         """Choose the as-of date; ``as_of_changed`` is emitted once, and not for the same date."""
         if isinstance(value, datetime) or not isinstance(value, date):
             msg = "the as-of date must be a datetime.date"
             raise TypeError(msg)
-        if value == self.as_of:
+        if value == self._as_of:
             return
         self._as_of = value
         self.as_of_changed.emit(value)
 
     def reset_as_of(self) -> None:
-        """Go back to following today's date (emits only when the effective date changes)."""
-        before = self.as_of
-        self._as_of = None
-        after = self.as_of
-        if after != before:
-            self.as_of_changed.emit(after)
+        """Set the as-of date to the CURRENT local date; emits only when that is a change."""
+        self.set_as_of(self.clock.local_date())
 
     # ------------------------------------------------------------------ data changes
 
@@ -168,11 +201,38 @@ class AppContext(QObject):
     # ------------------------------------------------------------------ edit actions
 
     def register_edit_action(self, target: EditTarget) -> None:
-        """Register an action or widget that edits data: disabled whenever the app is read-only."""
-        if target not in self._edit_targets:
+        """Register an action or widget that edits data: disabled whenever the app is read-only.
+
+        In read-only mode the target also stays disabled: a later ``setEnabled(True)`` on it is
+        undone at once (``QAction.changed`` for actions, an event filter for widgets).
+        """
+        is_new = target not in self._edit_targets
+        if is_new:
             self._edit_targets.append(target)
         if self.read_only:
             target.setEnabled(False)
+            if is_new:
+                self._keep_disabled(target)
+
+    def _keep_disabled(self, target: EditTarget) -> None:
+        if isinstance(target, QAction):
+            ref = weakref.ref(target)
+
+            def disable_again() -> None:
+                action = ref()
+                if action is None or not isValid(action) or not action.isEnabled():
+                    return
+                if self._enforcing:
+                    return
+                self._enforcing = True
+                try:
+                    action.setEnabled(False)
+                finally:
+                    self._enforcing = False
+
+            target.changed.connect(disable_again)
+        else:
+            target.installEventFilter(self._read_only_guard)
 
     def set_edit_enabled(self, target: EditTarget, enabled: bool) -> None:
         """Enable or disable a registered edit target; read-only mode keeps it disabled."""

@@ -5,11 +5,12 @@ No test compares pixels: images are only checked for size and for not being blan
 """
 
 import ast
+import dataclasses
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from PySide6.QtCharts import QValueAxis
+from PySide6.QtCharts import QAbstractBarSeries, QValueAxis
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
@@ -27,6 +28,7 @@ from cbrn_dashboard.ui.shell.charts import (
     render_to_image,
 )
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
+from tests.conftest import PSEUDO_PREFIX
 from tests.ui._walk import assert_fully_translated, collect_texts
 
 pytestmark = pytest.mark.ui
@@ -156,6 +158,7 @@ def test_a_grouped_bar_chart_has_one_bar_set_per_series(qapp: QApplication) -> N
 def test_the_series_colours_come_from_the_palette_in_order(qapp: QApplication) -> None:
     chart = build_chart(GROUPED)
     series = chart.series()[0]
+    assert isinstance(series, QAbstractBarSeries)
 
     colours = [bar_set.color().name().upper() for bar_set in series.barSets()]
 
@@ -171,6 +174,7 @@ def test_the_colours_cycle_through_the_palette(qapp: QApplication) -> None:
     )
     chart = build_chart(many)  # the chart owns its series: keep it alive while they are used
     series = chart.series()[0]
+    assert isinstance(series, QAbstractBarSeries)
 
     colours = [bar_set.color().name().upper() for bar_set in series.barSets()]
 
@@ -352,16 +356,20 @@ def test_the_pseudo_locale_walk_passes(
 ) -> None:
     manager = translator_manager_factory(pseudo_qm_dir)
     manager.set_language("en_US")
-    view = ChartView(data)
+    # The title is supplied by the caller already translated; it becomes the accessible name of
+    # the chart view, which the walker checks even on a data widget.
+    title = f"\u27e6{PSEUDO_PREFIX['en_US']}{data.title}\u27e7"
+    view = ChartView(dataclasses.replace(data, title=title))
     qtbot.addWidget(view)
 
     assert_fully_translated(view)
 
     texts = {item.text for item in collect_texts(view)}
     if data.is_empty:
-        assert texts == {"\u27e6No data\u27e7"}  # not vacuous: the one visible text is checked
+        # not vacuous: the one visible text is checked (en_US has its own pseudo marker)
+        assert texts == {f"\u27e6{PSEUDO_PREFIX['en_US']}No data\u27e7"}
     else:
-        assert texts == set()  # the chart's own texts are data
+        assert texts == {title}  # the chart's other texts are data
 
 
 # --------------------------------------------------------------------------- D08: one importer

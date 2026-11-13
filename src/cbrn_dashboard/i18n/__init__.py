@@ -22,7 +22,10 @@ SOURCE_ROOT = PACKAGE_DIR.parent
 
 AREAS: dict[str, tuple[str, ...]] = {
     "shell": ("ui/shell", "app.py", "cli.py", "selftest.py", "__main__.py"),
+    "personnel": ("ui/personnel",),
+    "infrastructure": ("ui/infrastructure",),
     "exercises": ("ui/exercises",),
+    "budget": ("ui/budget",),
 }
 """Translation areas -> source folders/files, relative to :data:`SOURCE_ROOT`.
 
