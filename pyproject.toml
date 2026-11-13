@@ -34,3 +34,60 @@ path = "src/cbrn_dashboard/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cbrn_dashboard"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "DTZ", "T20", "PTH", "N"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cbrn_dashboard", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# print() is the output channel of command-line entry points and scripts.
+"src/cbrn_dashboard/__main__.py" = ["T201"]
+"src/cbrn_dashboard/cli.py" = ["T201"]
+"scripts/**" = ["T201"]
+# Qt method overrides (headerData, closeEvent, ...) are camelCase by necessity.
+"src/cbrn_dashboard/ui/**" = ["N802", "N815"]
+"src/cbrn_dashboard/reports/pdf.py" = ["N802", "N815"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+files = ["src/cbrn_dashboard"]
+strict = true
+warn_unused_ignores = true
+
+# Only the Qt-facing modules are relaxed, and only for the flags that the
+# PySide6 stubs make noisy. PLAN.md section 4.2 requires strict checking on
+# domain, services, storage, reports/model.py and reports/anonymise.py: this
+# override must never list those modules (nor widen to cbrn_dashboard.*).
+[[tool.mypy.overrides]]
+module = [
+    "cbrn_dashboard.ui.*",
+    "cbrn_dashboard.reports.pdf",
+    "cbrn_dashboard.app",
+    "cbrn_dashboard.selftest",
+]
+disallow_untyped_calls = false
+disallow_subclassing_any = false
+warn_return_any = false
+disallow_any_generics = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "ui: tests that need a QApplication (run on the offscreen platform).",
+    "packaging: tests that build or inspect the PyInstaller bundle (deselected by default).",
+    "slow: tests that take noticeably long to run.",
+]
+addopts = '-m "not packaging"'
+qt_api = "pyside6"
+qt_log_level_fail = "WARNING"
+# Benign offscreen-platform messages are added here by exact text when first
+# seen in CI, each with a comment saying where it comes from.
+qt_log_ignore = []
