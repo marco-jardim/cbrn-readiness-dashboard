@@ -7,7 +7,7 @@ started here is closed again by the ``started_app`` fixture.
 
 import re
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -19,10 +19,13 @@ from pytestqt.qtbot import QtBot
 from cbrn_dashboard import app as app_module
 from cbrn_dashboard.app import AppHandle, StartupHook, clock_is_suspect
 from cbrn_dashboard.clock import FixedClock
+from cbrn_dashboard.domain.config import ReadinessConfig
 from cbrn_dashboard.paths import DATABASE_FILE_NAME, LocationWarning
 from cbrn_dashboard.prefs import PreferencesStore
+from cbrn_dashboard.services.backup import daily_backup_startup
 from cbrn_dashboard.services.personnel import CourseInput, StaffInput
 from cbrn_dashboard.storage import repository
+from cbrn_dashboard.storage.backup import BackupKind, DatabaseIdentity, list_backups
 from cbrn_dashboard.storage.db import HotJournalError, open_database
 from cbrn_dashboard.storage.repository import WriteContext
 from cbrn_dashboard.ui.shell import registry
@@ -48,6 +51,7 @@ LOCKED_TEXT = "Another instance is already using this data folder. Close it and 
 TOO_NEW_TEXT = "The database was written by a newer version of this application."
 HOT_JOURNAL_TEXT = "The database has an unfinished write and cannot be opened read-only."
 NO_DATABASE_TEXT = "The data folder is not writable and has no database, so nothing can be opened."
+REAL_HOOKS = app_module.STARTUP_HOOKS
 
 
 # --------------------------------------------------------------------------- helpers
@@ -252,6 +256,133 @@ def test_a_failing_hook_is_logged_and_does_not_stop_start_up(started_app: StartA
 def test_the_hook_registry_is_a_plain_tuple_of_hooks() -> None:
     assert isinstance(app_module.STARTUP_HOOKS, tuple)
     assert all(isinstance(hook, StartupHook) for hook in app_module.STARTUP_HOOKS)
+
+
+# --------------------------------------------------------------------------- the daily backup hook
+#
+# The ``started_app`` factory always passes ``hooks=`` (default: none) to ``start``, so these tests
+# hand it the REAL registry explicitly instead of relying on ``start``'s own default.
+
+
+def _daily_files(folder: Path) -> list[Path]:
+    return sorted((folder / "backups").glob("daily-*.sqlite3"))
+
+
+def test_the_daily_backup_is_the_only_registered_hook_and_declares_its_modes() -> None:
+    [hook] = app_module.STARTUP_HOOKS
+    assert hook.name == "daily-backup"
+    assert hook.run is daily_backup_startup
+    assert hook.runs_read_only is False
+    assert hook.runs_in_demo is False
+    assert hook.needs_trusted_clock is False
+
+
+def test_a_normal_start_makes_one_daily_backup(started_app: StartApp, tmp_path: Path) -> None:
+    handle = expect_handle(started_app(hooks=REAL_HOOKS))
+    assert handle.hooks_run == ("daily-backup",)
+    # The database was created and migrated by this very start (so the pre-migration helper had
+    # nothing to copy), yet the daily backup is made: it does not skip a database without rows.
+    [backup] = _daily_files(tmp_path)
+    assert backup.name.startswith("daily-20260305T120000Z-v")
+    assert [entry.name for entry in (tmp_path / "backups").iterdir()] == [backup.name]
+    [info] = list_backups(tmp_path, DatabaseIdentity.REAL, BackupKind.DAILY)
+    assert info.path == backup
+
+
+def test_several_starts_on_the_same_local_day_make_one_daily_backup(
+    started_app: StartApp, tmp_path: Path
+) -> None:
+    expect_handle(started_app(hooks=REAL_HOOKS)).close()
+    expect_handle(
+        started_app(hooks=REAL_HOOKS, clock=FixedClock.at("2026-03-05T20:30:00Z"))
+    ).close()
+    expect_handle(started_app(hooks=REAL_HOOKS))
+    assert len(_daily_files(tmp_path)) == 1
+
+
+def test_a_start_on_the_next_local_day_makes_a_second_daily_backup(
+    started_app: StartApp, tmp_path: Path
+) -> None:
+    expect_handle(started_app(hooks=REAL_HOOKS)).close()
+    tomorrow = FixedClock.at(NOW).advanced(timedelta(days=1))
+    expect_handle(started_app(hooks=REAL_HOOKS, clock=tomorrow))
+    names = [path.name for path in _daily_files(tmp_path)]
+    assert len(names) == 2
+    assert names[0].startswith("daily-20260305T120000Z-v")
+    assert names[1].startswith("daily-20260306T120000Z-v")
+
+
+def test_a_read_only_start_makes_no_daily_backup_and_writes_nothing(
+    started_app: StartApp, tmp_path: Path
+) -> None:
+    create_database(tmp_path)
+    before = snapshot(tmp_path)
+    handle = expect_handle(started_app(writable=False, hooks=REAL_HOOKS))
+    assert handle.context.read_only
+    assert handle.hooks_run == ()
+    assert not (tmp_path / "backups").exists()
+    assert snapshot(tmp_path) == before
+    handle.close()
+    assert snapshot(tmp_path) == before
+
+
+def test_a_demo_start_makes_no_daily_backup_anywhere(started_app: StartApp, tmp_path: Path) -> None:
+    handle = expect_handle(started_app(demo=True, hooks=REAL_HOOKS))
+    assert handle.context.is_demo
+    assert handle.hooks_run == ()
+    assert not (tmp_path / "backups").exists()
+    assert not (tmp_path / "demo" / "backups").exists()
+    assert list(tmp_path.rglob("daily-*")) == []
+
+
+def test_a_database_flagged_demo_gets_no_daily_backup_either(
+    started_app: StartApp, tmp_path: Path
+) -> None:
+    create_database(tmp_path, is_demo=True)  # opened through the NORMAL path (no --demo)
+    handle = expect_handle(started_app(hooks=REAL_HOOKS))
+    assert handle.context.is_demo
+    assert handle.hooks_run == ()
+    assert list(tmp_path.rglob("daily-*")) == []
+
+
+def _old_daily_files(folder: Path, count: int) -> list[Path]:
+    """``count`` daily backups dated on earlier days (February 2026), with parseable names."""
+    pool = folder / "backups"
+    pool.mkdir(parents=True, exist_ok=True)
+    paths = [pool / f"daily-202602{day:02d}T120000Z-v0001.sqlite3" for day in range(1, count + 1)]
+    for path in paths:
+        path.write_bytes(b"old copy")
+    return paths
+
+
+def test_a_suspect_clock_still_makes_the_daily_backup_but_does_not_rotate(
+    started_app: StartApp, tmp_path: Path
+) -> None:
+    path = create_database(tmp_path)
+    _write_change_row(path, "2026-06-01T00:00:00Z")  # newer than the clock: the clock is suspect
+    old = _old_daily_files(tmp_path, 9)
+
+    handle = expect_handle(started_app(hooks=REAL_HOOKS))
+
+    assert handle.context.clock_suspect
+    assert handle.hooks_run == ("daily-backup",)
+    files = _daily_files(tmp_path)
+    assert len(files) == 10
+    assert all(kept in files for kept in old)
+    assert any(f.name.startswith("daily-20260305T120000Z-v") for f in files)
+
+
+def test_a_trusted_clock_rotates_the_daily_backups(started_app: StartApp, tmp_path: Path) -> None:
+    create_database(tmp_path)  # no change_log row: the clock is trusted
+    old = _old_daily_files(tmp_path, 9)
+
+    handle = expect_handle(started_app(hooks=REAL_HOOKS))
+
+    assert not handle.context.clock_suspect
+    files = _daily_files(tmp_path)
+    assert len(files) == ReadinessConfig().daily_backups_kept
+    assert any(f.name.startswith("daily-20260305T120000Z-v") for f in files)  # the new one stays
+    assert not old[0].exists()  # the oldest went
 
 
 # --------------------------------------------------------------------------- the as-of date

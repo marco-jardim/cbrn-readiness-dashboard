@@ -206,6 +206,60 @@ def _check_chart(context: SelfTestContext) -> None:
     _require(not empty.isNull(), "the empty chart image is null")
 
 
+# A fixed, fictitious passphrase: it protects nothing (the file lives only in the throwaway folder).
+_SELFTEST_PASSPHRASE = "selftest-not-a-secret-0123"
+_SELFTEST_WRONG_PASSPHRASE = "selftest-not-the-secret-4567"
+
+
+@register("encrypted_backup")
+def _check_encrypted_backup(context: SelfTestContext) -> None:
+    # Imported here so that the other checks still run if ``cryptography`` fails to load in a
+    # frozen build.
+    import base64
+
+    from cbrn_dashboard.storage import crypto_backup
+
+    # Cheap parameters keep the round trip fast; the production derivation is tried further down.
+    cheap = crypto_backup.ScryptParams(n=2**12, r=8, p=1)
+    allowed = frozenset({cheap})
+
+    # A throwaway database with one fictitious row; never the real database.
+    path = context.workdir / "selftest-backup.sqlite3"
+    conn = open_and_migrate(
+        path, data_dir=context.workdir, identity=DatabaseIdentity.REAL, backup=False
+    )
+    with contextlib.closing(conn):
+        conn.execute("INSERT INTO setting (key, value_json) VALUES ('selftest', '1')")
+        snapshot, schema_version = crypto_backup.database_snapshot_bytes(conn)
+
+    target = context.workdir / "selftest.cbrnbak"
+    crypto_backup.write_backup(
+        target,
+        snapshot,
+        _SELFTEST_PASSPHRASE,
+        app_version=__version__,
+        schema_version=schema_version,
+        params=cheap,
+    )
+    restored = crypto_backup.read_backup(target, _SELFTEST_PASSPHRASE, allowed_params=allowed)
+    _require(restored.database_bytes == snapshot, "the encrypted backup did not round-trip")
+
+    try:
+        crypto_backup.read_backup(target, _SELFTEST_WRONG_PASSPHRASE, allowed_params=allowed)
+    except crypto_backup.WrongPassphraseError:
+        pass
+    else:
+        raise SelfTestError("a wrong passphrase was accepted")
+
+    # The cheap parameters would hide an interpreter whose scrypt cannot do the production cost
+    # (n = 2**17, 128 MiB), so derive once at full strength.
+    fernet_key, hmac_key = crypto_backup.derive_keys(
+        _SELFTEST_PASSPHRASE, bytes(crypto_backup.SALT_BYTES), crypto_backup.DEFAULT_PARAMS
+    )
+    material = len(base64.urlsafe_b64decode(fernet_key)) + len(hmac_key)
+    _require(material == crypto_backup.KEY_MATERIAL_BYTES, "the key derivation gave a wrong size")
+
+
 # --------------------------------------------------------------------------- the runner
 
 

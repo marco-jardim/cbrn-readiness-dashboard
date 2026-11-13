@@ -60,6 +60,7 @@ from cbrn_dashboard.logging_setup import (
 )
 from cbrn_dashboard.paths import DataLocation, is_file_writable, resolve_data_location
 from cbrn_dashboard.prefs import PreferencesStore
+from cbrn_dashboard.services.backup import daily_backup_startup
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import (
     DatabaseConnection,
@@ -103,9 +104,19 @@ class StartupHook:
     needs_trusted_clock: bool = False
 
 
-#: The registered start-up hooks, ONE LINE each, run in this order: T7.1 (daily backup), T7.3
-#: (tmp clean-up) and T8.1 (monthly snapshot) each add one line.
-STARTUP_HOOKS: tuple[StartupHook, ...] = ()
+#: The registered start-up hooks, one entry each, run in this order. T7.1 (daily backup) is
+#: registered; T7.3 (tmp clean-up) and T8.1 (monthly snapshot) each still add one entry. The daily
+#: backup is skipped in read-only and demo mode; it does not need a trusted clock because only its
+#: rotation is skipped for a suspect clock (inside the service).
+STARTUP_HOOKS: tuple[StartupHook, ...] = (
+    StartupHook(
+        "daily-backup",
+        daily_backup_startup,
+        runs_read_only=False,
+        runs_in_demo=False,
+        needs_trusted_clock=False,
+    ),
+)
 
 
 def hook_applies(hook: StartupHook, context: AppContext) -> bool:

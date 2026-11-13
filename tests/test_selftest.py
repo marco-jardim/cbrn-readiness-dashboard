@@ -3,6 +3,7 @@
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,8 @@ import cbrn_dashboard
 from cbrn_dashboard import selftest
 from cbrn_dashboard.app import main
 from cbrn_dashboard.paths import DATABASE_FILE_NAME, DataLocation, LocationSource
+from cbrn_dashboard.storage import crypto_backup
+from cbrn_dashboard.storage.crypto_backup import DEFAULT_PARAMS, BackupHeader, DecryptedBackup
 
 pytestmark = pytest.mark.ui
 
@@ -25,6 +28,7 @@ EXPECTED_CHECKS = [
     "main_window",
     "database",
     "chart",
+    "encrypted_backup",
 ]
 
 
@@ -223,6 +227,64 @@ def test_database_check_works_inside_the_throwaway_folder(tmp_path: Path) -> Non
 
     assert [entry.name for entry in workdir.iterdir()] == ["selftest.sqlite3"]
     assert not (tmp_path / "data").exists()
+
+
+def test_the_encrypted_backup_check_is_registered_after_the_earlier_ones() -> None:
+    names = [name for name, _ in selftest.CHECKS]
+    assert names.index("database") < names.index("chart") < names.index("encrypted_backup")
+
+
+def test_encrypted_backup_check_passes_inside_the_throwaway_folder(tmp_path: Path) -> None:
+    location = DataLocation(path=tmp_path / "data", source=LocationSource.CLI, writable=True)
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    check = dict(selftest.CHECKS)["encrypted_backup"]
+
+    check(selftest.SelfTestContext(location, workdir, None))
+
+    assert (workdir / "selftest.cbrnbak").is_file()
+    assert not (tmp_path / "data").exists()
+    assert [entry.name for entry in tmp_path.iterdir()] == ["work"]
+    shutil.rmtree(workdir)  # every handle is closed, so the folder can be removed (Windows)
+    assert not workdir.exists()
+
+
+def test_a_run_with_the_encrypted_backup_check_leaves_only_the_result_file(
+    qapp: QApplication, qm_dir: Path, tmp_path: Path
+) -> None:
+    data = tmp_path / "data"
+    assert _run(data, qm_dir) == 0
+    assert _checks_by_name(data)["encrypted_backup"] == {
+        "name": "encrypted_backup",
+        "passed": True,
+        "error": None,
+    }
+    assert [entry.name for entry in data.iterdir()] == ["selftest.json"]
+
+
+def test_encrypted_backup_check_fails_with_the_type_name_only_when_the_bytes_differ(
+    qapp: QApplication, qm_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data = tmp_path / "data"
+
+    def wrong_bytes(path: Path, passphrase: str, **kwargs: object) -> DecryptedBackup:
+        header = BackupHeader(1, DEFAULT_PARAMS, b"", "DEMO-SECRET", 1)
+        return DecryptedBackup(header, b"DEMO-SECRET")
+
+    monkeypatch.setattr(crypto_backup, "read_backup", wrong_bytes)
+
+    assert _run(data, qm_dir) == 1
+
+    text = (data / "selftest.json").read_text(encoding="utf-8")
+    assert "DEMO-SECRET" not in text
+    by_name = _checks_by_name(data)
+    assert by_name["encrypted_backup"] == {
+        "name": "encrypted_backup",
+        "passed": False,
+        "error": "SelfTestError",
+    }
+    assert all(c["passed"] for name, c in by_name.items() if name != "encrypted_backup")
+    assert [entry.name for entry in data.iterdir()] == ["selftest.json"]
 
 
 def test_register_appends_a_check(monkeypatch: pytest.MonkeyPatch) -> None:
