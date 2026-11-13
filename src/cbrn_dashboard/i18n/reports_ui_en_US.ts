@@ -143,7 +143,7 @@
     </message>
     <message>
         <source>The data is read-only: nothing was changed.</source>
-        <extracomment>The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
+        <extracomment>The label functions of the module pages, asked in turn for a code this UI has no label for. The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
         <translation>The data is read-only: nothing was changed.</translation>
     </message>
     <message>
@@ -339,9 +339,19 @@
         <source>The files contain internal data: staff, assets, exercises and budget.</source>
         <translation>The files contain internal data: staff, assets, exercises and budget.</translation>
     </message>
-    <message>
-        <source>%1 files were written to %2.</source>
-        <translation>%1 files were written to %2.</translation>
+    <message numerus="yes">
+        <source>%n existing file(s) in this folder will be replaced. Continue?</source>
+        <translation>
+            <numerusform>%n existing file in this folder will be replaced. Continue?</numerusform>
+            <numerusform>%n existing files in this folder will be replaced. Continue?</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n file(s) were written to %1.</source>
+        <translation>
+            <numerusform>%n file was written to %1.</numerusform>
+            <numerusform>%n files were written to %1.</numerusform>
+        </translation>
     </message>
     <message>
         <source>Report</source>
@@ -557,6 +567,7 @@
     </message>
     <message>
         <source>Save settings</source>
+        <extracomment>The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation>Save settings</translation>
     </message>
     <message>
@@ -594,6 +605,55 @@
     <message>
         <source>Reports and anonymisation</source>
         <translation>Reports and anonymisation</translation>
+    </message>
+    <message>
+        <source>The file name belongs to another kind of report (%1), but the chosen report is: %2. Change the file name or the report.</source>
+        <translation>The file name belongs to another kind of report (%1), but the chosen report is: %2. Change the file name or the report.</translation>
+    </message>
+    <message>
+        <source>Snapshot number</source>
+        <translation>Snapshot number</translation>
+    </message>
+    <message>
+        <source>Record a retroactive snapshot for %1?</source>
+        <translation>Record a retroactive snapshot for %1?</translation>
+    </message>
+    <message>
+        <source>Retroactive snapshots were recorded before the export failed (snapshot numbers: %1). They stay stored; withdraw them in the snapshot list if they are not wanted.</source>
+        <translation>Retroactive snapshots were recorded before the export failed (snapshot numbers: %1). They stay stored; withdraw them in the snapshot list if they are not wanted.</translation>
+    </message>
+    <message>
+        <source>Write import templates</source>
+        <translation>Write import templates</translation>
+    </message>
+    <message>
+        <source>Write templates...</source>
+        <translation>Write templates...</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n existing template file(s) in this folder will be replaced. Continue?</source>
+        <translation>
+            <numerusform>%n existing template file in this folder will be replaced. Continue?</numerusform>
+            <numerusform>%n existing template files in this folder will be replaced. Continue?</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n template file(s) were written to %1.</source>
+        <translation>
+            <numerusform>%n template file was written to %1.</numerusform>
+            <numerusform>%n template files were written to %1.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n in-service asset(s) have no status event yet and count as in service with an unknown status until their status events are imported.</source>
+        <translation>
+            <numerusform>%n in-service asset has no status event yet and counts as in service with an unknown status until its status events are imported.</numerusform>
+            <numerusform>%n in-service assets have no status event yet and count as in service with an unknown status until their status events are imported.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>The stored data refused the row because it breaks one of its rules.</source>
+        <translation>The stored data refused the row because it breaks one of its rules.</translation>
     </message>
 </context>
 </TS>

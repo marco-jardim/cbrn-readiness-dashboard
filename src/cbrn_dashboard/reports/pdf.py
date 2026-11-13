@@ -83,6 +83,7 @@ from cbrn_dashboard.ui.shell.formatting import (
     format_money,
     format_number,
     format_percent,
+    locale_for,
 )
 
 __all__ = [
@@ -200,6 +201,8 @@ class _Format:
         if unit is UnitKind.RATIO:
             return self.percent(value)
         if unit is UnitKind.DAYS:
+            if math.isfinite(value) and float(value).is_integer():
+                return self._texts.translate("Reports", "%n day(s)", None, int(value))
             return fill(self._texts.translate("Reports", "%1 days"), self.number(value))
         return self.number(value)
 
@@ -344,10 +347,22 @@ def _dimension_text(row: IndicatorRow, texts: ReportTexts) -> str:
             shown = texts.asset_type(value)
         elif name == "source":
             shown = texts.funding_source(value)
+        elif name == "level":
+            shown = texts.degree_level(value)  # a protection level (A, B, C) stays as it is
+        elif name == "status":
+            shown = texts.degree_status(value)
+        elif name == "kind":
+            shown = texts.exercise_kind(value)
         else:
             shown = value
-        parts.append(f"{texts.dimension_name(name)}: {shown}")
-    return "; ".join(parts) if parts else _EMPTY
+        pattern = texts.translate("Reports", "%1: %2")
+        parts.append(fill(pattern, texts.dimension_name(name), shown))
+    if not parts:
+        return _EMPTY
+    joined = parts[0]
+    for part in parts[1:]:
+        joined = fill(texts.translate("Reports", "%1; %2"), joined, part)
+    return joined
 
 
 def _indicator_value(row: IndicatorRow, threshold: int, texts: ReportTexts, fmt: _Format) -> str:
@@ -394,12 +409,20 @@ def _add_alerts(doc: _Doc, document: ReportDocument, texts: ReportTexts, fmt: _F
     doc.heading(2, texts.translate("Reports", "Open alerts"))
     threshold = document.small_count_threshold
     doc.table(
-        (texts.translate("Reports", "Severity"), texts.translate("Reports", "Open alerts")),
+        (
+            texts.translate("Reports", "Severity"),
+            texts.translate("Reports", "Source"),
+            texts.translate("Reports", "Open alerts"),
+        ),
         [
-            (texts.severity(alert.severity.value), fmt.cell(alert.cell, threshold))
+            (
+                texts.severity(alert.severity.value),
+                texts.alert_source(alert.source.value),
+                fmt.cell(alert.cell, threshold),
+            )
             for alert in document.alert_summary
         ],
-        right=(1,),
+        right=(2,),
     )
 
 
@@ -499,7 +522,8 @@ def build_layout(
     doc.box(notice, bold=True)
     if internal and document.handling_notice:
         handling_label = texts.translate("Reports", "Handling notice")
-        doc.box(f"{handling_label}: {document.handling_notice}")
+        pattern = texts.translate("Reports", "%1: %2")
+        doc.box(fill(pattern, handling_label, document.handling_notice))
     if not internal:
         doc.paragraph(
             fill(
@@ -632,7 +656,7 @@ def render_pdf_bytes(layout: ReportLayout, *, resolution: int = RESOLUTION) -> b
         document.setDocumentMargin(0.0)
         document.setPageSize(QSizeF(float(width), float(body)))
         for index, data in enumerate(layout.charts):
-            image = render_to_image(data, *_CHART_IMAGE)
+            image = render_to_image(data, *_CHART_IMAGE, locale=locale_for(layout.language))
             document.addResource(
                 int(QTextDocument.ResourceType.ImageResource.value), QUrl(f"chart:{index}"), image
             )

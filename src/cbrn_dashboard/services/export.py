@@ -12,13 +12,19 @@ about network, cloud or removable-media folders is the job of the UI (T8.7). The
 internal data (staff qualifications, infrastructure status, budget); they stay where the operator
 puts them.
 
-An existing file of the same name is overwritten (the UI asks first). Every file is written under a
-temporary name and renamed when complete; if writing fails (``EXPORT_FAILED``) the temporary file
-is removed. Files completed before the failure stay in the folder.
+An existing file of the same name is overwritten (the UI asks first, using
+:meth:`ExportService.existing_files`). :meth:`ExportService.export_all` writes every file into a
+staging folder inside the target and moves the files into place only after ALL were written. If
+writing fails (``EXPORT_FAILED``, with the entity in ``field``; a ``CsvFormatError`` is mapped to
+it too) the staging folder is removed and the files already in the folder are untouched, so a
+failed export never leaves a mix of this run's files and older ones. (This replaces the earlier
+rule that finished files stay after a failure, P8-07.)
 """
 
 from __future__ import annotations
 
+import shutil
+import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +55,8 @@ UNKNOWN_ENTITY = "UNKNOWN_ENTITY"
 EXPORT_FAILED = "EXPORT_FAILED"
 
 type _Row = dict[str, object]
+
+_STAGING_PREFIX = ".export-"
 
 
 @dataclass(frozen=True)
@@ -358,7 +366,13 @@ class ExportService:
         loaded = [(spec, _LOADERS[spec.name](self._conn)) for spec in csv_io.ENTITIES]
         is_demo = app_meta.read_is_demo(self._conn)
         _make_folder(out_dir)
-        return [_write(out_dir, spec, rows, is_demo=is_demo) for spec, rows in loaded]
+        return _write_all(out_dir, loaded, is_demo=is_demo)
+
+    def existing_files(self, out_dir: Path) -> list[Path]:
+        """The files of :meth:`export_all` that already exist in ``out_dir`` (the UI asks first)."""
+        is_demo = app_meta.read_is_demo(self._conn)
+        names = (csv_io.export_file_name(spec, is_demo=is_demo) for spec in csv_io.ENTITIES)
+        return [out_dir / name for name in names if (out_dir / name).exists()]
 
     def export_entity(self, name: str, out_dir: Path) -> ExportedFile:
         """Write the file of one entity; ``UNKNOWN_ENTITY`` for a name that is not an entity."""
@@ -382,6 +396,36 @@ def _write(out_dir: Path, spec: EntitySpec, rows: list[_Row], *, is_demo: bool) 
     path = out_dir / csv_io.export_file_name(spec, is_demo=is_demo)
     try:
         count = csv_io.write_entity(path, spec, rows)
-    except OSError:
+    except (OSError, csv_io.CsvFormatError):
         raise ServiceError(EXPORT_FAILED, spec.name) from None
     return ExportedFile(entity=spec.name, path=path, rows=count)
+
+
+def _write_all(
+    out_dir: Path, loaded: list[tuple[EntitySpec, list[_Row]]], *, is_demo: bool
+) -> list[ExportedFile]:
+    """Write every file into a staging folder, then move them all into ``out_dir``.
+
+    A failure while writing removes the staging folder and leaves ``out_dir`` as it was.
+    """
+    try:
+        staging = Path(tempfile.mkdtemp(prefix=_STAGING_PREFIX, dir=out_dir))
+    except OSError:
+        raise ServiceError(EXPORT_FAILED, "out_dir") from None
+    try:
+        staged = [(spec, _write(staging, spec, rows, is_demo=is_demo)) for spec, rows in loaded]
+        for spec, item in staged:
+            target = out_dir / item.path.name
+            if target.exists() and not target.is_file():  # nothing is moved before all can be
+                raise ServiceError(EXPORT_FAILED, spec.name)
+        files: list[ExportedFile] = []
+        for spec, item in staged:
+            final = out_dir / item.path.name
+            try:
+                item.path.replace(final)
+            except OSError:
+                raise ServiceError(EXPORT_FAILED, spec.name) from None
+            files.append(ExportedFile(entity=spec.name, path=final, rows=item.rows))
+        return files
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)

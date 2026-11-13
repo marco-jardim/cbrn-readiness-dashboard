@@ -143,7 +143,7 @@
     </message>
     <message>
         <source>The data is read-only: nothing was changed.</source>
-        <extracomment>The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
+        <extracomment>The label functions of the module pages, asked in turn for a code this UI has no label for. The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
         <translation type="unfinished">Os dados estão somente para leitura: nada foi alterado.</translation>
     </message>
     <message>
@@ -339,9 +339,19 @@
         <source>The files contain internal data: staff, assets, exercises and budget.</source>
         <translation type="unfinished">Os arquivos contêm dados internos: pessoal, ativos, exercícios e orçamento.</translation>
     </message>
-    <message>
-        <source>%1 files were written to %2.</source>
-        <translation type="unfinished">%1 arquivos foram gravados em %2.</translation>
+    <message numerus="yes">
+        <source>%n existing file(s) in this folder will be replaced. Continue?</source>
+        <translation type="unfinished">
+            <numerusform>%n arquivo existente nesta pasta será substituído. Continuar?</numerusform>
+            <numerusform>%n arquivos existentes nesta pasta serão substituídos. Continuar?</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n file(s) were written to %1.</source>
+        <translation type="unfinished">
+            <numerusform>%n arquivo foi gravado em %1.</numerusform>
+            <numerusform>%n arquivos foram gravados em %1.</numerusform>
+        </translation>
     </message>
     <message>
         <source>Report</source>
@@ -557,6 +567,7 @@
     </message>
     <message>
         <source>Save settings</source>
+        <extracomment>The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation type="unfinished">Salvar configurações</translation>
     </message>
     <message>
@@ -594,6 +605,55 @@
     <message>
         <source>Reports and anonymisation</source>
         <translation type="unfinished">Relatórios e anonimização</translation>
+    </message>
+    <message>
+        <source>The file name belongs to another kind of report (%1), but the chosen report is: %2. Change the file name or the report.</source>
+        <translation type="unfinished">O nome do arquivo pertence a outro tipo de relatório (%1), mas o relatório escolhido é: %2. Altere o nome do arquivo ou o relatório.</translation>
+    </message>
+    <message>
+        <source>Snapshot number</source>
+        <translation type="unfinished">Número do registro</translation>
+    </message>
+    <message>
+        <source>Record a retroactive snapshot for %1?</source>
+        <translation type="unfinished">Gravar um registro retroativo para %1?</translation>
+    </message>
+    <message>
+        <source>Retroactive snapshots were recorded before the export failed (snapshot numbers: %1). They stay stored; withdraw them in the snapshot list if they are not wanted.</source>
+        <translation type="unfinished">Registros retroativos foram gravados antes de a exportação falhar (números dos registros: %1). Eles permanecem armazenados; retire-os na lista de registros se não forem desejados.</translation>
+    </message>
+    <message>
+        <source>Write import templates</source>
+        <translation type="unfinished">Gravar modelos de importação</translation>
+    </message>
+    <message>
+        <source>Write templates...</source>
+        <translation type="unfinished">Gravar modelos...</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n existing template file(s) in this folder will be replaced. Continue?</source>
+        <translation type="unfinished">
+            <numerusform>%n arquivo de modelo existente nesta pasta será substituído. Continuar?</numerusform>
+            <numerusform>%n arquivos de modelo existentes nesta pasta serão substituídos. Continuar?</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n template file(s) were written to %1.</source>
+        <translation type="unfinished">
+            <numerusform>%n arquivo de modelo foi gravado em %1.</numerusform>
+            <numerusform>%n arquivos de modelo foram gravados em %1.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n in-service asset(s) have no status event yet and count as in service with an unknown status until their status events are imported.</source>
+        <translation type="unfinished">
+            <numerusform>%n ativo em serviço ainda não tem evento de situação e conta como em serviço com situação desconhecida até que seus eventos de situação sejam importados.</numerusform>
+            <numerusform>%n ativos em serviço ainda não têm evento de situação e contam como em serviço com situação desconhecida até que seus eventos de situação sejam importados.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>The stored data refused the row because it breaks one of its rules.</source>
+        <translation type="unfinished">Os dados armazenados recusaram a linha porque ela viola uma de suas regras.</translation>
     </message>
 </context>
 </TS>

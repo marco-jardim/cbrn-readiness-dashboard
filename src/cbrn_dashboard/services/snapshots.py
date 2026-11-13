@@ -418,8 +418,8 @@ class SnapshotService:
     # ----- monthly snapshot (P04)
 
     def monthly_due(self) -> bool:
-        """Whether a monthly snapshot is due: P04 is on and no NON-WITHDRAWN snapshot of origin
-        ``monthly`` was taken in the current LOCAL calendar month."""
+        """Whether a monthly snapshot is due: P04 is on and no snapshot of origin ``monthly``, a
+        withdrawn one included, was taken in the current LOCAL calendar month."""
         if not load_config(self._conn).snapshot_monthly:
             return False
         today = self._clock.local_date()

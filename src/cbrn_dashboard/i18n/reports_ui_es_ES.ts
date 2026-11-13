@@ -143,7 +143,7 @@
     </message>
     <message>
         <source>The data is read-only: nothing was changed.</source>
-        <extracomment>The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
+        <extracomment>The label functions of the module pages, asked in turn for a code this UI has no label for. The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
         <translation type="unfinished">Los datos son de solo lectura: no se cambió nada.</translation>
     </message>
     <message>
@@ -339,9 +339,19 @@
         <source>The files contain internal data: staff, assets, exercises and budget.</source>
         <translation type="unfinished">Los archivos contienen datos internos: personal, activos, ejercicios y presupuesto.</translation>
     </message>
-    <message>
-        <source>%1 files were written to %2.</source>
-        <translation type="unfinished">Se escribieron %1 archivos en %2.</translation>
+    <message numerus="yes">
+        <source>%n existing file(s) in this folder will be replaced. Continue?</source>
+        <translation type="unfinished">
+            <numerusform>Se reemplazará %n archivo existente de esta carpeta. ¿Continuar?</numerusform>
+            <numerusform>Se reemplazarán %n archivos existentes de esta carpeta. ¿Continuar?</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n file(s) were written to %1.</source>
+        <translation type="unfinished">
+            <numerusform>Se escribió %n archivo en %1.</numerusform>
+            <numerusform>Se escribieron %n archivos en %1.</numerusform>
+        </translation>
     </message>
     <message>
         <source>Report</source>
@@ -557,6 +567,7 @@
     </message>
     <message>
         <source>Save settings</source>
+        <extracomment>The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation type="unfinished">Guardar ajustes</translation>
     </message>
     <message>
@@ -594,6 +605,55 @@
     <message>
         <source>Reports and anonymisation</source>
         <translation type="unfinished">Informes y anonimización</translation>
+    </message>
+    <message>
+        <source>The file name belongs to another kind of report (%1), but the chosen report is: %2. Change the file name or the report.</source>
+        <translation type="unfinished">El nombre del archivo pertenece a otro tipo de informe (%1), pero el informe elegido es: %2. Cambie el nombre del archivo o el informe.</translation>
+    </message>
+    <message>
+        <source>Snapshot number</source>
+        <translation type="unfinished">Número del registro</translation>
+    </message>
+    <message>
+        <source>Record a retroactive snapshot for %1?</source>
+        <translation type="unfinished">¿Registrar una instantánea retroactiva para %1?</translation>
+    </message>
+    <message>
+        <source>Retroactive snapshots were recorded before the export failed (snapshot numbers: %1). They stay stored; withdraw them in the snapshot list if they are not wanted.</source>
+        <translation type="unfinished">Se registraron instantáneas retroactivas antes de que fallara la exportación (números de instantánea: %1). Siguen almacenadas; retírelas en la lista de instantáneas si no las desea.</translation>
+    </message>
+    <message>
+        <source>Write import templates</source>
+        <translation type="unfinished">Escribir plantillas de importación</translation>
+    </message>
+    <message>
+        <source>Write templates...</source>
+        <translation type="unfinished">Escribir plantillas...</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n existing template file(s) in this folder will be replaced. Continue?</source>
+        <translation type="unfinished">
+            <numerusform>Se reemplazará %n archivo de plantilla existente de esta carpeta. ¿Continuar?</numerusform>
+            <numerusform>Se reemplazarán %n archivos de plantilla existentes de esta carpeta. ¿Continuar?</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n template file(s) were written to %1.</source>
+        <translation type="unfinished">
+            <numerusform>Se escribió %n archivo de plantilla en %1.</numerusform>
+            <numerusform>Se escribieron %n archivos de plantilla en %1.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>%n in-service asset(s) have no status event yet and count as in service with an unknown status until their status events are imported.</source>
+        <translation type="unfinished">
+            <numerusform>%n activo en servicio aún no tiene evento de estado y cuenta como en servicio con estado desconocido hasta que se importen sus eventos de estado.</numerusform>
+            <numerusform>%n activos en servicio aún no tienen evento de estado y cuentan como en servicio con estado desconocido hasta que se importen sus eventos de estado.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>The stored data refused the row because it breaks one of its rules.</source>
+        <translation type="unfinished">Los datos almacenados rechazaron la fila porque infringe una de sus reglas.</translation>
     </message>
 </context>
 </TS>

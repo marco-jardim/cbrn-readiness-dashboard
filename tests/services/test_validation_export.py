@@ -41,6 +41,7 @@ from cbrn_dashboard.services.validation_export import (
     RESULTS_ENTITY,
     SUPPRESSED_BANNER,
     UNSUPPRESSED_BANNER,
+    ValidationExportError,
     ValidationExportService,
     readings_spec,
     results_spec,
@@ -400,6 +401,91 @@ def test_asking_twice_records_nothing_new(world: Stack, tmp_path: Path) -> None:
     assert second.recorded_snapshot_ids == ()
     assert len(world.snapshots.list_snapshots()) == 6
     assert first.readings.path.read_bytes() == second.readings.path.read_bytes()
+
+
+def test_a_failure_after_recording_names_the_recorded_snapshots(
+    world: Stack, tmp_path: Path
+) -> None:
+    # P8-08: the snapshot id is written into the files, so the snapshot is recorded first; when
+    # the files then fail, the error says which snapshots stay recorded.
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "validation_results_unsuppressed_internal.csv").mkdir()
+    with pytest.raises(ValidationExportError) as caught:
+        world.export.export(out, record_retroactive=True)
+    assert (caught.value.code, caught.value.field) == (EXPORT_FAILED, RESULTS_ENTITY)
+    assert caught.value.recorded_snapshot_ids == (6,)
+    assert isinstance(caught.value, ServiceError)
+    assert len(world.snapshots.list_snapshots()) == 6  # the snapshot stays (never deleted)
+
+
+def test_a_failure_with_nothing_recorded_is_the_plain_service_error(
+    world: Stack, tmp_path: Path
+) -> None:
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "validation_results_unsuppressed_internal.csv").mkdir()
+    with pytest.raises(ServiceError) as without_request:
+        world.export.export(out)
+    assert not isinstance(without_request.value, ValidationExportError)
+
+    world.export.export(tmp_path / "first", record_retroactive=True)  # records snapshot 6
+    with pytest.raises(ServiceError) as reused:
+        world.export.export(out, record_retroactive=True)  # reuses it: nothing new
+    assert not isinstance(reused.value, ValidationExportError)
+    assert reused.value.code == EXPORT_FAILED
+
+
+# --------------------------------------------------------------------------- the day boundaries
+
+
+def _edition(stack: Stack) -> None:
+    stack.exercises.create_edition(
+        EditionInput(code="DEMO-EX-09", kind="OTHER", start_on="2026-02-10", end_on="2026-02-11")
+    )
+
+
+def test_a_snapshot_taken_on_the_start_day_is_not_a_prior_reading(
+    db: DatabaseConnection, tmp_path: Path
+) -> None:
+    before = _stack(db, _at("2026-02-09"))
+    _edition(before)
+    before.snapshots.record(date(2026, 2, 9), origin=MANUAL)
+    on_day = _stack(db, _at("2026-02-10"))
+    on_day.snapshots.record(date(2026, 2, 10), origin=MANUAL)
+
+    rows = _data(on_day.export.export(tmp_path / "out").readings.path)
+
+    assert {(r[3], r[4], r[6]) for r in rows} == {("1", "2026-02-09", "1")}
+
+
+def test_the_local_date_of_a_west_of_utc_clock_decides_the_pairing(
+    db: DatabaseConnection, tmp_path: Path
+) -> None:
+    # UTC-3: 01:00Z on 10 February is 22:00 on 9 February locally, the day BEFORE the start,
+    # although the UTC date is the start day itself.
+    stack = _stack(db, FixedClock.at("2026-02-10T01:00:00Z", utc_offset_hours=-3))
+    _edition(stack)
+    stack.snapshots.record(date(2026, 2, 9), origin=MANUAL)
+
+    rows = _data(stack.export.export(tmp_path / "out").readings.path)
+
+    paired = {(r[3], r[4], r[5], r[6]) for r in rows}
+    assert paired == {("1", "2026-02-09", "2026-02-10T01:00:00Z", "1")}
+
+
+def test_the_local_date_of_an_east_of_utc_clock_decides_the_pairing(
+    db: DatabaseConnection, tmp_path: Path
+) -> None:
+    # UTC+3: 22:00Z on 9 February is 01:00 on 10 February locally, the start day itself,
+    # although the UTC date is the day before: the snapshot is not a prior reading.
+    stack = _stack(db, FixedClock.at("2026-02-09T22:00:00Z", utc_offset_hours=3))
+    _edition(stack)
+    stack.snapshots.record(date(2026, 2, 10), origin=MANUAL)
+
+    rows = _data(stack.export.export(tmp_path / "out").readings.path)
+
+    assert rows == [["DEMO-EX-09", "OTHER", "2026-02-10", *[""] * 9, NO_PRIOR_SNAPSHOT]]
 
 
 def test_a_retroactive_snapshot_of_another_day_is_not_used(world: Stack, tmp_path: Path) -> None:

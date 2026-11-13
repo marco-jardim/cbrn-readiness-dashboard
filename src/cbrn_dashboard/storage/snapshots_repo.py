@@ -170,11 +170,13 @@ def list_values(conn: DatabaseConnection, snapshot_id: int) -> list[SnapshotValu
 
 
 def monthly_taken_times(conn: DatabaseConnection) -> list[str]:
-    """``taken_at_utc`` of every NON-WITHDRAWN snapshot of origin ``monthly`` (P04)."""
+    """``taken_at_utc`` of every snapshot of origin ``monthly``, WITHDRAWN ONES INCLUDED (P04).
+
+    The month is done once its monthly snapshot was taken, whatever happened to it afterwards
+    (T8.1: several starts in one month produce exactly one monthly snapshot).
+    """
     cursor = conn.execute(
-        "SELECT s.taken_at_utc AS taken_at_utc FROM readiness_snapshot AS s"
-        " LEFT JOIN snapshot_withdrawal AS w ON w.snapshot_id = s.id"
-        " WHERE s.origin = 'monthly' AND w.id IS NULL ORDER BY s.taken_at_utc"
+        "SELECT taken_at_utc FROM readiness_snapshot WHERE origin = 'monthly' ORDER BY taken_at_utc"
     )
     return [_text(row["taken_at_utc"]) for row in cursor.fetchall()]
 

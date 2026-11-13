@@ -25,6 +25,8 @@ from cbrn_dashboard.reports.message_keys import (
     ASSET_TYPE_KEYS,
     CERT_STATUS_KEYS,
     DEGREE_LEVEL_KEYS,
+    DEGREE_STATUS_KEYS,
+    EXERCISE_KIND_KEYS,
     FUNDING_SOURCE_KEYS,
     PRELIMINARY_KEY,
     SHARED_AREAS,
@@ -138,20 +140,29 @@ class ReportTexts:
 
     # ------------------------------------------------------------------ lookup
 
-    def translate(self, context: str, source: str) -> str:
-        """The text of ``source`` in the report language (the English source when not found)."""
-        return self._find(context, source)
+    def translate(
+        self, context: str, source: str, disambiguation: str | None = None, n: int = -1
+    ) -> str:
+        """The text of ``source`` in the report language (the English source when not found).
+
+        With ``n`` >= 0 the source is a plural pattern: ``%n`` becomes the count and the plural
+        form of the language is chosen.
+        """
+        return self._find(context, source, disambiguation, n)
 
     def lookup(self, key: MessageKey) -> str:
         """The text of a shared message key."""
         return self._find(key[0], key[1])
 
-    def _find(self, context: str, source: str) -> str:
+    def _find(
+        self, context: str, source: str, disambiguation: str | None = None, n: int = -1
+    ) -> str:
         for translator in self._translators:
-            found = _LOOKUP(translator, context, source)
+            found = _LOOKUP(translator, context, source, disambiguation, n)
             if found:
-                return found
-        return source
+                # A translator only picks the plural form; the count is put in here.
+                return found if n < 0 else found.replace("%n", str(n))
+        return source if n < 0 else source.replace("%n", str(n))
 
     # ------------------------------------------------------------------ tables
 
@@ -255,6 +266,26 @@ class ReportTexts:
         key = DEGREE_LEVEL_KEYS.get(code)
         return code if key is None else self.lookup(key)
 
+    def degree_status(self, code: str) -> str:
+        """The label of a degree status (shared with the personnel page)."""
+        key = DEGREE_STATUS_KEYS.get(code)
+        return code if key is None else self.lookup(key)
+
+    def exercise_kind(self, code: str) -> str:
+        """The label of an exercise kind (``CBRAMED`` and ``EXBRAMED`` are names, shown as is)."""
+        key = EXERCISE_KIND_KEYS.get(code)
+        return code if key is None else self.lookup(key)
+
+    def alert_source(self, code: str) -> str:
+        """The label of the source of an alert count (``AlertSource`` value)."""
+        if code == "ALL":
+            return self.translate("Reports", "All sources")
+        if code in {"PERSONNEL", "INFRASTRUCTURE"}:
+            return self.module(code)
+        if code == "INDICATORS":
+            return self.translate("Reports", "Indicators")
+        return code
+
     def asset_type(self, code: str) -> str:
         """The name of a built-in asset type; any other code is shown as itself."""
         key = ASSET_TYPE_KEYS.get(code)
@@ -293,7 +324,7 @@ class ReportTexts:
             if name == "last_countries":
                 return self.translate("Reports", "Countries in the last exercise")
         elif module == "BUDGET" and argument:
-            return f"{self.series_name(name)} ({argument})"
+            return fill(self.translate("Reports", "%1 (%2)"), self.series_name(name), argument)
         return key
 
     def _personnel_cell(self, key: str, name: str, argument: str) -> str:
@@ -303,6 +334,8 @@ class ReportTexts:
             return fill(self.translate("Reports", "Valid certificates, level %1"), argument)
         if name == "expiring":
             return fill(self.translate("Reports", "Certificates expiring, level %1"), argument)
+        if name == "expired":
+            return fill(self.translate("Reports", "Certificates expired, level %1"), argument)
         if name == "retraining":
             return fill(self.translate("Reports", "Staff needing retraining, level %1"), argument)
         if name == "degree_completed":
@@ -325,7 +358,7 @@ class ReportTexts:
             currency = parameters.get("currency", key.removeprefix(_BUDGET_CHART_PREFIX))
             year = parameters.get("fiscal_year", "")
             text = fill(self.translate("Reports", "Budget by funding source (%1)"), currency)
-            return f"{text}, {year}" if year else text
+            return fill(self.translate("Reports", "%1, %2"), text, year) if year else text
         return key
 
     def chart_category(self, chart_key: str, category: str) -> str:

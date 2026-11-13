@@ -82,6 +82,7 @@ __all__ = [
     "RESULTS_ENTITY",
     "SUPPRESSED_BANNER",
     "UNSUPPRESSED_BANNER",
+    "ValidationExportError",
     "ValidationExportResult",
     "ValidationExportService",
     "readings_spec",
@@ -147,6 +148,19 @@ def results_spec(*, suppressed: bool) -> EntitySpec:
         ),
         ("edition_code", "metric_code"),
     )
+
+
+class ValidationExportError(ServiceError):
+    """An export failed AFTER retroactive snapshots were recorded for it (P8-08).
+
+    ``recorded_snapshot_ids`` are those snapshots; they stay stored (snapshots are never deleted).
+    """
+
+    def __init__(
+        self, code: str, field: str | None = None, recorded_snapshot_ids: tuple[int, ...] = ()
+    ) -> None:
+        super().__init__(code, field)
+        self.recorded_snapshot_ids = recorded_snapshot_ids
 
 
 @dataclass(frozen=True)
@@ -308,6 +322,27 @@ class ValidationExportService:
 
     # ----- the export
 
+    def _write(
+        self,
+        editions: list[EditionView],
+        chosen: dict[str, SnapshotView | None],
+        out_dir: Path,
+        suppress_small_counts: bool,
+    ) -> list[ExportedFile]:
+        threshold: int | None = None
+        if suppress_small_counts:
+            threshold = load_config(self._conn).small_count_threshold
+        readings_rows = self._readings_rows(editions, chosen, threshold)
+        results_rows = self._results_rows(editions)
+        banner = SUPPRESSED_BANNER if suppress_small_counts else UNSUPPRESSED_BANNER
+        jobs = (
+            (readings_spec(suppressed=suppress_small_counts), readings_rows),
+            (results_spec(suppressed=suppress_small_counts), results_rows),
+        )
+        is_demo = app_meta.read_is_demo(self._conn)
+        _make_folder(out_dir)
+        return _write_all(out_dir, jobs, banner, is_demo=is_demo)
+
     def export(
         self,
         out_dir: Path,
@@ -323,19 +358,14 @@ class ValidationExportService:
         """
         editions = self._exercises.list_editions()
         chosen, recorded = self._choose(editions, record_retroactive=record_retroactive)
-        threshold: int | None = None
-        if suppress_small_counts:
-            threshold = load_config(self._conn).small_count_threshold
-        readings_rows = self._readings_rows(editions, chosen, threshold)
-        results_rows = self._results_rows(editions)
-        banner = SUPPRESSED_BANNER if suppress_small_counts else UNSUPPRESSED_BANNER
-        jobs = (
-            (readings_spec(suppressed=suppress_small_counts), readings_rows),
-            (results_spec(suppressed=suppress_small_counts), results_rows),
-        )
-        is_demo = app_meta.read_is_demo(self._conn)
-        _make_folder(out_dir)
-        written = _write_all(out_dir, jobs, banner, is_demo=is_demo)
+        try:
+            written = self._write(editions, chosen, out_dir, suppress_small_counts)
+        except ServiceError as error:
+            if not recorded:
+                raise
+            # P8-08: the snapshot ids are written into the files, so the snapshots are recorded
+            # first; when the files then fail the caller must learn which ones were recorded.
+            raise ValidationExportError(error.code, error.field, tuple(recorded)) from None
         log_event("VALIDATION_EXPORT.WRITTEN", count=sum(f.rows for f in written))
         return ValidationExportResult(
             readings=written[0],

@@ -534,18 +534,17 @@ def test_with_the_monthly_switch_off_none_is_taken(
     assert _count(db, "readiness_snapshot") == 0
 
 
-def test_a_withdrawn_monthly_snapshot_does_not_count(stack: Stack) -> None:
+def test_a_withdrawn_monthly_snapshot_still_counts_for_its_month(stack: Stack) -> None:
+    # P8-14 (replaces "a withdrawn monthly snapshot does not count"): T8.1 says several starts in
+    # one month produce exactly one monthly snapshot, withdrawn or not.
     first = stack.snapshots.record_monthly_if_due()
     assert first is not None
     assert not stack.snapshots.monthly_due()
     stack.snapshots.withdraw(first.id, "recorded with incomplete data")
-    assert stack.snapshots.monthly_due()
-    second = stack.snapshots.record_monthly_if_due()
-    assert second is not None
-    assert second.id != first.id
-    assert [v.id for v in _monthly(stack)] == [second.id]
-    assert [v.id for v in _monthly(stack, include_withdrawn=True)] == [second.id, first.id]
+    assert not stack.snapshots.monthly_due()
     assert stack.snapshots.record_monthly_if_due() is None
+    assert _monthly(stack) == []
+    assert [v.id for v in _monthly(stack, include_withdrawn=True)] == [first.id]
 
 
 def test_other_snapshots_do_not_count_as_the_monthly_one(stack: Stack) -> None:

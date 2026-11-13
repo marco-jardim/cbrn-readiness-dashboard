@@ -283,9 +283,10 @@ never changed or merged.
 ### Templates
 
 A template is a file with the header row only, in the export format (BOM, `;`, CRLF). It is named
-`<entity>-template.csv` (for example `staff_member-template.csv`). The application writes the
-template of one entity or of all entities into a folder; the header of every template is exactly
-the column list in the tables above.
+`<entity>-template.csv` (for example `staff_member-template.csv`). The Reports page has a "Write
+templates..." action that writes the templates of all entities into a folder you choose (it asks
+before replacing existing files); the header of every template is exactly the column list in the
+tables above.
 
 ### Encoding
 

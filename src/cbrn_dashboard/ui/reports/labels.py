@@ -23,6 +23,7 @@ from cbrn_dashboard.services.importer import (
     DUPLICATE_IN_FILE,
     DUPLICATE_KEY,
     FILE_UNREADABLE,
+    STORAGE_REFUSED,
     UNKNOWN_REFERENCE,
 )
 from cbrn_dashboard.services.personnel import (
@@ -36,7 +37,19 @@ from cbrn_dashboard.services.snapshots import (
     ORIGIN_NOT_ALLOWED,
     REASON_REQUIRED,
 )
+from cbrn_dashboard.ui.budget.labels import error_label as _budget_error_label
+from cbrn_dashboard.ui.exercises.labels import error_label as _exercises_error_label
+from cbrn_dashboard.ui.infrastructure.labels import error_label as _infrastructure_error_label
+from cbrn_dashboard.ui.personnel.labels import error_label as _personnel_error_label
 from cbrn_dashboard.ui.shell.widgets import label_for
+
+#: The label functions of the module pages, asked in turn for a code this UI has no label for.
+_MODULE_LABELS: tuple[Callable[[str], str], ...] = (
+    _personnel_error_label,
+    _infrastructure_error_label,
+    _exercises_error_label,
+    _budget_error_label,
+)
 
 __all__ = [
     "ALL_ERROR_CODES",
@@ -139,6 +152,9 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     BUILT_IN_NOT_ALLOWED: lambda: QCoreApplication.translate(
         "ReportsUi", "Built-in items cannot be imported."
     ),
+    STORAGE_REFUSED: lambda: QCoreApplication.translate(
+        "ReportsUi", "The stored data refused the row because it breaks one of its rules."
+    ),
     # import: codes of the module services that are common in practice
     END_BEFORE_START: lambda: QCoreApplication.translate(
         "ReportsUi", "The end date is before the start date."
@@ -182,8 +198,18 @@ ALL_ERROR_CODES: tuple[str, ...] = tuple(_ERROR_LABELS)
 
 
 def error_label(code: str) -> str:
-    """The translated message of an error code (the code itself when unknown)."""
-    return label_for(_ERROR_LABELS, code)
+    """The translated message of an error code.
+
+    A code of this UI first; then the four module label maps (an imported row reports the codes of
+    the module services, P8-09); the code itself when nobody knows it.
+    """
+    if code in _ERROR_LABELS:
+        return label_for(_ERROR_LABELS, code)
+    for module_label in _MODULE_LABELS:
+        text = module_label(code)
+        if text != code:
+            return text
+    return code
 
 
 _VARIANT_LABELS: dict[str, Callable[[], str]] = {

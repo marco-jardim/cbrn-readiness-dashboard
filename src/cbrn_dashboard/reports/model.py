@@ -18,24 +18,48 @@ records (``personnel_derived``; only those are suppressed) and, for totals, the 
 they are the sum of (``total_of``; the input of the secondary suppression). Charts hold the cells
 of the document (the same keys), so that they can be rebuilt from the suppressed cells alone.
 
+The alert summary is split by source (P8-01): per severity a total and the personnel (certificate),
+infrastructure (maintenance) and indicator parts. Each cell that sums staff-derived counts declares
+them in ``total_of``, so that no cell printed in the anonymised report is the difference of two
+others that hides a small count.
+
 The threshold of the small-count suppression is read from the configuration and carried on the
 document (``small_count_threshold``); the renderer prints "< threshold" for a suppressed cell.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 
 from cbrn_dashboard import __version__
 from cbrn_dashboard.clock import Clock
-from cbrn_dashboard.domain.alerts import Severity
+from cbrn_dashboard.domain.alerts import (
+    AlertKind,
+    Severity,
+    certificate_alerts,
+    maintenance_alerts,
+)
+from cbrn_dashboard.domain.budget import (
+    BudgetTotal,
+    InvalidCurrencyError,
+    currency_decimals,
+    fiscal_year_of,
+)
 from cbrn_dashboard.domain.config import ReadinessConfig
 from cbrn_dashboard.domain.dates import format_utc_timestamp
-from cbrn_dashboard.domain.indicators import Direction, IndicatorStatus, Module, UnitKind
+from cbrn_dashboard.domain.indicators import (
+    Direction,
+    IndicatorStatus,
+    Module,
+    UnitKind,
+    encode_dimension,
+)
 from cbrn_dashboard.domain.personnel import CertStatus, PpeLevel, is_active
+from cbrn_dashboard.services.budget import BudgetService
 from cbrn_dashboard.services.dashboard import (
     CHART_BUDGET_PREFIX,
     CHART_PERSONNEL,
@@ -52,6 +76,7 @@ from cbrn_dashboard.storage.db import DatabaseConnection
 __all__ = [
     "PRELIMINARY_NOTICE_CODE",
     "AlertCountRow",
+    "AlertSource",
     "AssetListRow",
     "Cell",
     "IndicatorRow",
@@ -75,6 +100,8 @@ _PERS_DEGREE = "PERS_DEGREE"
 _EX_DAYS = "EX_DAYS_SINCE_LAST"
 _EX_PARTICIPANTS = "EX_LAST_PARTICIPANTS"
 _EX_COUNTRIES = "EX_LAST_COUNTRIES"
+_DEFAULT_CURRENCY_DECIMALS = 2
+_EXPIRING_KEYS = tuple(f"kf:PERSONNEL:expiring:{level.value}" for level in PpeLevel)
 
 
 class ReportVariant(StrEnum):
@@ -138,12 +165,22 @@ class IndicatorRow:
     critical_value: float | None
 
 
+class AlertSource(StrEnum):
+    """Where the alerts of a count come from (P8-01): all sources, or one of the three."""
+
+    ALL = "ALL"
+    PERSONNEL = "PERSONNEL"
+    INFRASTRUCTURE = "INFRASTRUCTURE"
+    INDICATORS = "INDICATORS"
+
+
 @dataclass(frozen=True)
 class AlertCountRow:
-    """The number of open alerts of one severity."""
+    """The number of open alerts of one severity, in total or from one source."""
 
     severity: Severity
     cell: Cell
+    source: AlertSource = AlertSource.ALL
 
 
 @dataclass(frozen=True)
@@ -218,12 +255,20 @@ def _tile_value(tiles: tuple[Tile, ...], code: str, **parts: str) -> float | Non
     return None
 
 
+def _retraining_parts(level: str) -> tuple[str, str]:
+    """Retraining needed = expiring + expired at a level (A03); the cells it is the sum of."""
+    return (f"kf:PERSONNEL:expiring:{level}", f"kf:PERSONNEL:expired:{level}")
+
+
 def _indicator_cell(tile: Tile) -> Cell:
+    level = tile.dimension_parts.get("level")
+    declared = tile.code == _PERS_RETRAINING and level is not None
     return Cell(
         key=_indicator_key(tile.code, tile.dimension),
         value=tile.value,
         personnel_derived=tile.module is Module.PERSONNEL,
         is_count=tile.unit is UnitKind.COUNT,
+        total_of=_retraining_parts(level) if declared and level is not None else (),
     )
 
 
@@ -242,21 +287,34 @@ def _indicator_row(tile: Tile, cell: Cell) -> IndicatorRow:
     )
 
 
-def _personnel_figures(tiles: tuple[Tile, ...], active_staff: int) -> KeyFigureGroup:
+def _personnel_figures(
+    tiles: tuple[Tile, ...], active_staff: int, expired: Mapping[PpeLevel, int]
+) -> KeyFigureGroup:
+    """The personnel key figures; ``expired`` is the number of expired certificates per level.
+
+    Retraining needed is expiring plus expired at each level (A03), so the retraining cell declares
+    both and is hidden whenever one of them is (P8-01).
+    """
     cells: list[Cell] = [
         Cell(key="kf:PERSONNEL:active_staff", value=float(active_staff), personnel_derived=True)
     ]
     for prefix, code in (
         ("valid", _PERS_CERT_VALID),
         ("expiring", _PERS_CERT_EXPIRING),
+        ("expired", None),
         ("retraining", _PERS_RETRAINING),
     ):
         for level in PpeLevel:
             cells.append(
                 Cell(
                     key=f"kf:PERSONNEL:{prefix}:{level.value}",
-                    value=_tile_value(tiles, code, level=level.value),
+                    value=(
+                        float(expired.get(level, 0))
+                        if code is None
+                        else _tile_value(tiles, code, level=level.value)
+                    ),
                     personnel_derived=True,
+                    total_of=_retraining_parts(level.value) if prefix == "retraining" else (),
                 )
             )
     parts: list[Cell] = [
@@ -302,23 +360,126 @@ def _exercise_figures(tiles: tuple[Tile, ...]) -> KeyFigureGroup:
     )
 
 
-def _budget_figures(charts: tuple[ChartSpec, ...]) -> KeyFigureGroup:
-    """Allocated and executed amounts (major units, display only) per currency."""
+def _to_minor(amount: float, decimals: int) -> int:
+    """The whole minor units of a displayed amount, read from its shortest decimal form."""
+    scaled = Decimal(repr(amount)).scaleb(decimals)
+    return int(scaled.to_integral_value(rounding=ROUND_HALF_UP))
+
+
+def _exact_minor(totals: Sequence[BudgetTotal], currency: str, series_key: str) -> int | None:
+    """The exact sum of the minor units of a series from the budget totals, if it is known."""
+    group = [total for total in totals if total.currency == currency]
+    if series_key == "allocated":
+        return sum(t.allocated_minor for t in group if t.allocated_minor is not None)
+    if series_key == "executed":
+        return sum(t.executed_minor for t in group)
+    return None
+
+
+def _budget_figures(
+    charts: tuple[ChartSpec, ...], totals: Sequence[BudgetTotal] | None = None
+) -> KeyFigureGroup:
+    """Allocated and executed amounts (major units, display only) per currency.
+
+    With the budget ``totals`` the whole minor units are added as integers (D15) and converted
+    once for display. Without them (no budget service) each charted amount is turned back into the
+    whole minor units of its currency from its shortest decimal form and the integers are added.
+    """
     cells: list[Cell] = []
     for chart in charts:
         if not chart.key.startswith(CHART_BUDGET_PREFIX):
             continue
         currency = chart.parameters.get("currency", "")
+        try:
+            decimals = currency_decimals(currency)
+        except InvalidCurrencyError:
+            decimals = _DEFAULT_CURRENCY_DECIMALS
         for series in chart.series:
-            amounts = [v for v in series.values if v is not None]
+            exact = None if totals is None else _exact_minor(totals, currency, series.key)
+            minor = (
+                exact
+                if exact is not None
+                else sum(_to_minor(v, decimals) for v in series.values if v is not None)
+            )
             cells.append(
                 Cell(
                     key=f"kf:BUDGET:{series.key}:{currency}",
-                    value=round(sum(amounts), 2),
+                    value=float(Decimal(minor).scaleb(-decimals)),
                     is_count=False,
                 )
             )
     return KeyFigureGroup(Module.BUDGET, tuple(cells))
+
+
+def _alert_summary(
+    *,
+    expiring: int,
+    expired: int,
+    expired_keys: tuple[str, ...],
+    maintenance: list[Severity],
+    tiles: tuple[Tile, ...],
+    indicator_cells: dict[str, Cell],
+) -> tuple[AlertCountRow, ...]:
+    """The alert counts per severity, split by source (P8-01).
+
+    A count that sums certificate alerts is personnel-derived and declares the per-level cells it
+    sums; a count of indicator alerts declares the personnel count rows that can carry a status, so
+    that it is hidden whenever one of them is; the total declares its three parts. The INFO count
+    is maintenance only (``MAINT_SCHEDULE_UNKNOWN``) and is not personnel-derived.
+    """
+    watched = tuple(
+        _indicator_key(tile.code, tile.dimension)
+        for tile in tiles
+        if tile.module is Module.PERSONNEL
+        and tile.unit is UnitKind.COUNT
+        and tile.status in (IndicatorStatus.OK, IndicatorStatus.WARNING, IndicatorStatus.CRITICAL)
+        and _indicator_key(tile.code, tile.dimension) in indicator_cells
+    )
+    rows: list[AlertCountRow] = []
+    for severity in Severity:
+        if severity is Severity.INFO:
+            count = maintenance.count(Severity.INFO)
+            rows.append(AlertCountRow(severity, Cell(key="alert:INFO", value=float(count))))
+            continue
+        warning = severity is Severity.WARNING
+        indicator_status = IndicatorStatus.WARNING if warning else IndicatorStatus.CRITICAL
+        parts = (
+            AlertCountRow(
+                severity,
+                Cell(
+                    key=f"alert:{severity.value}:personnel",
+                    value=float(expiring if warning else expired),
+                    personnel_derived=True,
+                    total_of=_EXPIRING_KEYS if warning else expired_keys,
+                ),
+                AlertSource.PERSONNEL,
+            ),
+            AlertCountRow(
+                severity,
+                Cell(
+                    key=f"alert:{severity.value}:infrastructure",
+                    value=float(maintenance.count(severity)),
+                ),
+                AlertSource.INFRASTRUCTURE,
+            ),
+            AlertCountRow(
+                severity,
+                Cell(
+                    key=f"alert:{severity.value}:indicators",
+                    value=float(sum(1 for tile in tiles if tile.status is indicator_status)),
+                    total_of=watched,
+                ),
+                AlertSource.INDICATORS,
+            ),
+        )
+        total = Cell(
+            key=f"alert:{severity.value}",
+            value=sum(part.cell.value or 0.0 for part in parts),
+            total_of=tuple(part.cell.key for part in parts),
+        )
+        rows.append(AlertCountRow(severity, total))
+        rows.extend(parts)
+    return tuple(rows)
 
 
 def _chart(spec: ChartSpec, indicator_cells: dict[str, Cell]) -> ReportChart:
@@ -363,7 +524,9 @@ class ReportBuilder:
         infrastructure: InfrastructureService,
         config_loader: Callable[[], ReadinessConfig],
         app_version: str | None = None,
+        budget: BudgetService | None = None,
     ) -> None:
+        self._budget = budget
         self._conn = conn
         self._clock = clock
         self._dashboard = dashboard
@@ -382,12 +545,19 @@ class ReportBuilder:
 
         return anonymise(document)
 
+    def _budget_totals(self, as_of: date) -> list[BudgetTotal] | None:
+        """The exact budget totals of the as-of fiscal year (``None`` without a budget service)."""
+        if self._budget is None:
+            return None
+        return self._budget.totals_for_year(fiscal_year_of(as_of), as_of)
+
     def _internal(self, as_of: date) -> ReportDocument:
         config = self._config_loader()
         data: DashboardData = self._dashboard.data(as_of)
         tiles = data.tiles
         lists = self._infrastructure.maintenance_due_lists(as_of)
-        active_staff = sum(1 for p in self._personnel.alert_inputs().staff if is_active(p, as_of))
+        people = self._personnel.alert_inputs()
+        active_staff = sum(1 for p in people.staff if is_active(p, as_of))
 
         indicator_cells = {_indicator_key(t.code, t.dimension): _indicator_cell(t) for t in tiles}
         indicators = tuple(
@@ -400,17 +570,36 @@ class ReportBuilder:
                 Cell(key="kf:INFRASTRUCTURE:due_soon", value=float(len(lists.due_soon))),
             ),
         )
-        # Alert counts include the certificate alerts, so they are personnel-derived.
-        alerts = tuple(
-            AlertCountRow(
-                severity,
-                Cell(
-                    key=f"alert:{severity.value}",
-                    value=float(data.alert_counts.get(severity, 0)),
-                    personnel_derived=True,
-                ),
+        assets = self._infrastructure.alert_inputs()
+        certificates = certificate_alerts(people.staff, people.certificates, as_of, people.rules)
+        certificate_kinds = [alert.kind for alert in certificates]
+        expired_by_level = {
+            level: sum(
+                1
+                for alert in certificates
+                if alert.kind is AlertKind.CERT_EXPIRED
+                and alert.dimension == encode_dimension({"level": level.value})
             )
-            for severity in Severity
+            for level in PpeLevel
+        }
+        maintenance_severities = [
+            alert.severity
+            for alert in maintenance_alerts(
+                assets.assets,
+                assets.types,
+                assets.status_events,
+                assets.maintenance,
+                as_of,
+                assets.rules,
+            )
+        ]
+        alerts = _alert_summary(
+            expiring=certificate_kinds.count(AlertKind.CERT_EXPIRING),
+            expired=certificate_kinds.count(AlertKind.CERT_EXPIRED),
+            expired_keys=tuple(f"kf:PERSONNEL:expired:{level.value}" for level in PpeLevel),
+            maintenance=maintenance_severities,
+            tiles=tiles,
+            indicator_cells=indicator_cells,
         )
         return ReportDocument(
             variant=ReportVariant.INTERNAL,
@@ -426,10 +615,10 @@ class ReportBuilder:
             is_demo=app_meta.read_is_demo(self._conn),
             small_count_threshold=config.small_count_threshold,
             key_figures=(
-                _personnel_figures(tiles, active_staff),
+                _personnel_figures(tiles, active_staff, expired_by_level),
                 infrastructure,
                 _exercise_figures(tiles),
-                _budget_figures(data.charts),
+                _budget_figures(data.charts, self._budget_totals(as_of)),
             ),
             indicators=indicators,
             alert_summary=alerts,

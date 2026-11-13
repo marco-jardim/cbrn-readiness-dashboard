@@ -17,14 +17,18 @@ from types import ModuleType
 import pytest
 from PySide6.QtCore import QAbstractItemModel, QDate, Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QDialogButtonBox, QWidget
+from PySide6.QtWidgets import QDialogButtonBox, QLabel, QWidget
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard.paths import DATABASE_FILE_NAME, DataLocation, LocationSource
 from cbrn_dashboard.prefs import PreferencesStore
 from cbrn_dashboard.reports.model import ReportVariant
+from cbrn_dashboard.services import budget as budget_module
+from cbrn_dashboard.services import exercises as exercises_module
 from cbrn_dashboard.services import export as export_module
 from cbrn_dashboard.services import importer as importer_module
+from cbrn_dashboard.services import infrastructure as infrastructure_module
+from cbrn_dashboard.services import personnel as personnel_module
 from cbrn_dashboard.services import snapshots as snapshots_module
 from cbrn_dashboard.services.config import ConfigService
 from cbrn_dashboard.services.exercises import EditionInput
@@ -154,6 +158,7 @@ EXPECTED_ENGLISH: dict[str, str] = {
     "DUPLICATE_IN_FILE": "The row repeats an earlier row of the file.",
     "DUPLICATE_KEY": "The item already exists, so the row was refused.",
     "BUILT_IN_NOT_ALLOWED": "Built-in items cannot be imported.",
+    "STORAGE_REFUSED": "The stored data refused the row because it breaks one of its rules.",
     "END_BEFORE_START": "The end date is before the start date.",
     "VALUE_OUT_OF_SCALE": "The value is outside the scale of the metric.",
     "INVALID_PPE_LEVEL": "The protection level is not valid.",
@@ -921,7 +926,9 @@ def test_a_snapshot_is_recorded_and_listed(app_context: AppContext, qtbot: QtBot
         "Version",
         "State",
         "Reason for withdrawal",
+        "Snapshot number",
     ]
+    assert cells[6] == "1"  # the id the validation export cites as snapshot_id (P8-19)
 
 
 def test_withdrawing_asks_for_a_reason_keeps_the_snapshot_and_hides_it(
@@ -982,15 +989,41 @@ def test_a_blank_reason_is_refused_and_a_cancelled_question_changes_nothing(
     assert not stored.withdrawn
 
 
-def test_a_snapshot_for_a_past_as_of_date_is_recorded_as_retroactive(
-    app_context: AppContext, qtbot: QtBot
+def test_a_snapshot_for_a_past_as_of_date_is_recorded_as_retroactive_after_asking(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
 ) -> None:
     page = ReportsPage(app_context)
     qtbot.addWidget(page)
     app_context.set_as_of(date(2026, 2, 1))
+    fake_prompts.script("confirm", True)  # P8-19: the page asks first, as the dashboard does
     page.record_snapshot()
+    (question,) = fake_prompts.calls_of("confirm")
+    assert question.title == "Record snapshot"
+    assert question.text == "Record a retroactive snapshot for 02/01/2026?"
     cells = _cells(page.snapshots_model, 0)
     assert (cells[0], cells[2]) == ("02/01/2026", "Retroactive")
+
+
+def test_declining_the_retroactive_question_records_nothing(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    page = ReportsPage(app_context)
+    qtbot.addWidget(page)
+    app_context.set_as_of(date(2026, 2, 1))
+    page.record_snapshot()  # the fake answers "no"
+    assert len(fake_prompts.calls_of("confirm")) == 1
+    assert page.snapshots_model.rowCount() == 0
+    assert _snapshots(app_context).list_snapshots() == []
+
+
+def test_a_snapshot_for_today_is_recorded_without_a_question(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    page = ReportsPage(app_context)
+    qtbot.addWidget(page)
+    page.record_snapshot()
+    assert fake_prompts.calls_of("confirm") == []
+    assert page.snapshots_model.rowCount() == 1
 
 
 def test_the_snapshot_list_survives_a_data_change(app_context: AppContext, qtbot: QtBot) -> None:
@@ -1346,6 +1379,74 @@ def test_the_snapshots_section_badges_follow_p04(app_context: AppContext, qtbot:
     assert section.on_report_row.badge.isHidden()  # one placeholder, both fields
 
 
+def _corrupt_setting(context: AppContext) -> None:
+    """A stored setting that no longer validates (what a restored older backup can leave)."""
+    _conn(context).execute(
+        "INSERT INTO setting (key, value_json) VALUES (?, ?)",
+        ("config.cert_warning_days", "not json"),
+    )
+
+
+def _repair_setting(context: AppContext) -> None:
+    _conn(context).execute("DELETE FROM setting WHERE key = ?", ("config.cert_warning_days",))
+
+
+def test_an_unreadable_setting_is_explained_and_the_inputs_wait_for_the_repair(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    reports = ReportsSettingsSection(app_context)
+    snapshots = SnapshotsSettingsSection(app_context)
+    sections = (reports, snapshots)
+    inputs: tuple[QWidget, ...] = (
+        reports.threshold_spin,
+        reports.notice_edit,
+        snapshots.monthly_check,
+        snapshots.on_report_check,
+    )
+    for section in sections:
+        qtbot.addWidget(section)
+        assert section.config_error_label.isHidden()
+    assert all(widget.isEnabled() for widget in inputs)
+
+    _corrupt_setting(app_context)
+    app_context.notify_data_changed()  # a raising slot would fail the test
+
+    for section in sections:
+        assert not section.config_error_label.isHidden()
+        assert section.config_error_label.text() == "A stored setting cannot be read."
+        assert not section.save_action.isEnabled()
+    for row in (
+        reports.threshold_row,
+        reports.notice_row,
+        snapshots.monthly_row,
+        snapshots.on_report_row,
+    ):
+        assert row.badge.isHidden()
+        assert row.confirm.isHidden()
+    assert not any(widget.isEnabled() for widget in inputs)
+    assert fake_prompts.calls == []
+
+    app_context.translator_manager.set_language("pt_BR")
+    portuguese = "Uma configura\u00e7\u00e3o armazenada n\u00e3o pode ser lida."
+    english = "A stored setting cannot be read."
+
+    def all_show(text: str) -> bool:
+        return all(section.config_error_label.text() == text for section in sections)
+
+    qtbot.waitUntil(lambda: all_show(portuguese))
+    app_context.translator_manager.set_language("en_US")
+    qtbot.waitUntil(lambda: all_show(english))
+
+    _repair_setting(app_context)
+    app_context.notify_data_changed()
+
+    for section in sections:
+        assert section.config_error_label.isHidden()
+        assert section.save_action.isEnabled()
+    assert all(widget.isEnabled() for widget in inputs)
+    assert not reports.threshold_row.badge.isHidden()
+
+
 def test_the_sections_and_the_page_are_reachable_through_the_registry(
     app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
 ) -> None:
@@ -1515,6 +1616,24 @@ def test_everything_is_translated_in_each_pseudo_language(
 
 
 @pytest.mark.parametrize("lang", LANGUAGES)
+@pytest.mark.parametrize("name", ["reports_section", "snapshots_section"])
+def test_the_unreadable_setting_message_is_translated_in_each_pseudo_language(
+    pseudo_context: AppContext, qtbot: QtBot, name: str, lang: str
+) -> None:
+    pseudo_context.translator_manager.set_language(lang)
+    widget = FACTORIES[name](pseudo_context)
+    qtbot.addWidget(widget)
+    _corrupt_setting(pseudo_context)
+    pseudo_context.notify_data_changed()
+    label = widget.findChild(QLabel, "config_error_label")
+    assert label is not None
+    assert not label.isHidden()
+    assert label.text() != "A stored setting cannot be read."
+    qtbot.waitUntil(lambda: not find_untranslated(widget, lang), timeout=3000)
+    assert_fully_translated(widget, lang)
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
 def test_the_page_with_data_is_translated_in_each_pseudo_language(
     pseudo_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot, lang: str
 ) -> None:
@@ -1630,6 +1749,7 @@ def test_all_error_codes_lists_every_code_of_the_snapshot_export_and_import_serv
         "DUPLICATE_KEY",
         "BUILT_IN_NOT_ALLOWED",
         "FILE_UNREADABLE",
+        "STORAGE_REFUSED",
     }
     covered = (
         _own_constants(snapshots_module)
@@ -1691,3 +1811,298 @@ def test_a_snapshot_view_type_is_what_the_list_holds(app_context: AppContext, qt
     page.record_snapshot()
     page.snapshots_view.selectRow(0)
     assert isinstance(page.selected_snapshot(), SnapshotView)
+
+
+# --------------------------------------------------------------------------- Phase 8 review
+
+
+def test_the_suggested_file_name_follows_the_variant_and_the_date(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    workflow: ReportsWorkflow,
+    anchor: QWidget,
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    dialog = _report_dialog(app_context, anchor, workflow, qtbot)
+    folder = _out(tmp_path)
+    fake_prompts.script("save_file", folder / "cbrn-report-internal-2026-03-05.pdf")
+    dialog.choose_button.click()
+
+    _choose(dialog, "ANONYMISED")
+    assert dialog.path_edit.text() == str(folder / "cbrn-report-anonymised-2026-03-05.pdf")
+    dialog.date_edit.setDate(QDate(2026, 3, 1))
+    assert dialog.path_edit.text() == str(folder / "cbrn-report-anonymised-2026-03-01.pdf")
+    _choose(dialog, "INTERNAL")
+    assert dialog.path_edit.text() == str(folder / "cbrn-report-internal-2026-03-01.pdf")
+
+
+def test_a_name_the_user_chose_or_typed_is_never_renamed(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    workflow: ReportsWorkflow,
+    anchor: QWidget,
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    dialog = _report_dialog(app_context, anchor, workflow, qtbot)
+    folder = _out(tmp_path)
+    fake_prompts.script("save_file", folder / "mine.pdf")
+    dialog.choose_button.click()
+    _choose(dialog, "ANONYMISED")
+    assert dialog.path_edit.text() == str(folder / "mine.pdf")
+
+    _choose(dialog, "INTERNAL")
+    fake_prompts.script("save_file", folder / "cbrn-report-internal-2026-03-05.pdf")
+    dialog.choose_button.click()
+    dialog.path_edit.setText(str(folder / "typed.pdf"))  # the user edits the suggestion
+    _choose(dialog, "ANONYMISED")
+    assert dialog.path_edit.text() == str(folder / "typed.pdf")
+
+
+@pytest.mark.parametrize(
+    ("variant", "name", "other", "chosen"),
+    [
+        (
+            "INTERNAL",
+            "cbrn-report-anonymised-2026-03-05.pdf",
+            "Anonymised report",
+            "Internal report",
+        ),
+        (
+            "ANONYMISED",
+            "cbrn-report-internal-2026-03-05.pdf",
+            "Internal report",
+            "Anonymised report",
+        ),
+    ],
+    ids=["internal-under-anonymised-name", "anonymised-under-internal-name"],
+)
+def test_a_file_name_of_the_other_variant_is_refused_and_nothing_is_written(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    workflow: ReportsWorkflow,
+    anchor: QWidget,
+    qtbot: QtBot,
+    tmp_path: Path,
+    variant: str,
+    name: str,
+    other: str,
+    chosen: str,
+) -> None:
+    dialog = _report_dialog(app_context, anchor, workflow, qtbot)
+    _choose(dialog, variant)
+    folder = _out(tmp_path)
+    dialog.path_edit.setText(str(folder / name))
+
+    assert dialog.submit() is False
+
+    assert _warnings(fake_prompts) == [
+        f"The file name belongs to another kind of report ({other}), but the chosen report is: "
+        f"{chosen}. Change the file name or the report."
+    ]
+    assert list(folder.iterdir()) == []
+    assert _snapshots(app_context).list_snapshots() == []
+    assert dialog.isVisible()  # the dialog stays open
+
+
+def test_the_csv_export_asks_before_replacing_existing_files(
+    app_context: AppContext, fake_prompts: FakePrompts, workflow: ReportsWorkflow, tmp_path: Path
+) -> None:
+    folder = _out(tmp_path, "csv")
+    (folder / "staff_member.csv").write_text("old", encoding="utf-8")
+    (folder / "asset.csv").write_text("old", encoding="utf-8")
+    fake_prompts.script("choose_folder", folder)
+    fake_prompts.script("confirm", True, False)  # the internal-data notice, then the replacement
+
+    workflow.export_csv()
+
+    first, second = fake_prompts.calls_of("confirm")
+    assert second.text == "2 existing files in this folder will be replaced. Continue?"
+    assert first.text != second.text
+    assert sorted(path.name for path in folder.iterdir()) == ["asset.csv", "staff_member.csv"]
+    assert (folder / "staff_member.csv").read_text(encoding="utf-8") == "old"
+    assert _infos(fake_prompts) == []
+
+
+def test_the_csv_export_replaces_existing_files_once_confirmed(
+    fake_prompts: FakePrompts, workflow: ReportsWorkflow, tmp_path: Path
+) -> None:
+    folder = _out(tmp_path, "csv")
+    (folder / "staff_member.csv").write_text("old", encoding="utf-8")
+    fake_prompts.script("choose_folder", folder)
+    fake_prompts.script("confirm", True, True)
+
+    workflow.export_csv()
+
+    assert fake_prompts.calls_of("confirm")[1].text == (
+        "1 existing file in this folder will be replaced. Continue?"
+    )
+    assert sorted(path.name for path in folder.iterdir()) == sorted(CSV_FILES)
+    assert (folder / "staff_member.csv").read_text(encoding="utf-8-sig") != "old"
+
+
+def test_the_csv_export_asks_nothing_about_replacing_in_an_empty_folder(
+    fake_prompts: FakePrompts, workflow: ReportsWorkflow, tmp_path: Path
+) -> None:
+    fake_prompts.script("choose_folder", _out(tmp_path, "csv"))
+    fake_prompts.script("confirm", True)
+
+    workflow.export_csv()
+
+    assert len(fake_prompts.calls_of("confirm")) == 1
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_the_error_codes_of_the_module_services_have_a_label_on_an_import_row(
+    app_context: AppContext, language: str
+) -> None:
+    app_context.translator_manager.set_language(language)
+    codes = {
+        "ACTIVE_UNTIL_BEFORE_FROM",
+        "UNKNOWN_COUNTRY",
+        "NEGATIVE_AMOUNT",
+        "COURSE_INACTIVE",
+        "TYPE_INACTIVE",
+        "METRIC_INACTIVE",
+        "SOURCE_INACTIVE",
+        "IN_SERVICE_UNTIL_BEFORE_FROM",
+        "INVALID_KIND",
+        "INVALID_YEAR",
+        "NEGATIVE_PARTICIPANTS",
+        "NEGATIVE_RESPONDENTS",
+        "EXECUTION_OUTSIDE_FISCAL_YEAR",
+        "CURRENCY_IN_USE",
+        "ONLY_STATUS_EVENT",
+        "SCALE_EXCLUDES_RESULTS",
+    }
+    for module in (personnel_module, infrastructure_module, exercises_module, budget_module):
+        codes |= _own_constants(module)
+
+    for code in sorted(codes):
+        label = error_label(code)
+        assert label.strip(), code
+        assert label != code, (language, code)
+
+
+def test_a_failed_validation_export_after_recording_reports_the_snapshots_and_refreshes(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    workflow: ReportsWorkflow,
+    anchor: QWidget,
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    _add_edition(app_context, "DEMO-EX-24", "2024-03-01", "2024-03-05")
+    dialog = _validation_dialog(app_context, anchor, workflow, qtbot)
+    dialog.retro_check.setChecked(True)
+    changed: list[int] = []
+    app_context.data_changed.connect(lambda: changed.append(1))
+    folder = _out(tmp_path, "validation")
+    (folder / "validation_results_unsuppressed_internal.csv").mkdir()  # the second file fails
+    _export_validation(dialog, fake_prompts, folder)
+
+    (stored,) = _snapshots(app_context).list_snapshots()
+    assert stored.origin.value == "retroactive"  # the snapshot stays
+    assert _warnings(fake_prompts) == [
+        "The export files could not be written. Check the chosen folder.",
+        "Retroactive snapshots were recorded before the export failed (snapshot numbers: 1). "
+        "They stay stored; withdraw them in the snapshot list if they are not wanted.",
+    ]
+    assert changed == [1]
+    assert _infos(fake_prompts) == []
+
+
+def test_a_failed_validation_export_that_recorded_nothing_adds_no_second_warning(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    workflow: ReportsWorkflow,
+    anchor: QWidget,
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    dialog = _validation_dialog(app_context, anchor, workflow, qtbot)
+    changed: list[int] = []
+    app_context.data_changed.connect(lambda: changed.append(1))
+    folder = _out(tmp_path, "validation")
+    (folder / "validation_results_unsuppressed_internal.csv").mkdir()
+    _export_validation(dialog, fake_prompts, folder)
+
+    assert _warnings(fake_prompts) == [
+        "The export files could not be written. Check the chosen folder."
+    ]
+    assert changed == []
+
+
+def test_the_templates_of_every_entity_are_written_after_asking_about_existing_ones(
+    app_context: AppContext, fake_prompts: FakePrompts, workflow: ReportsWorkflow, tmp_path: Path
+) -> None:
+    folder = _out(tmp_path, "templates")
+    fake_prompts.script("choose_folder", folder)
+    workflow.write_templates()
+
+    assert _infos(fake_prompts) == [f"16 template files were written to {folder}."]
+    assert fake_prompts.calls_of("confirm") == []  # a plain, empty place: nothing to ask
+    names = sorted(path.name for path in folder.iterdir())
+    assert len(names) == 16
+    assert "staff_member-template.csv" in names
+
+    (folder / "staff_member-template.csv").write_text("old", encoding="utf-8")
+    fake_prompts.script("choose_folder", folder)
+    workflow.write_templates()  # the fake answers "no" to the replacement question
+    (question,) = fake_prompts.calls_of("confirm")
+    assert question.text == "16 existing template files in this folder will be replaced. Continue?"
+    assert (folder / "staff_member-template.csv").read_text(encoding="utf-8") == "old"
+
+    fake_prompts.script("choose_folder", folder)
+    fake_prompts.script("confirm", True)
+    workflow.write_templates()
+    assert (folder / "staff_member-template.csv").read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_the_templates_action_is_on_the_page_and_cancelling_writes_nothing(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot, tmp_path: Path
+) -> None:
+    page = ReportsPage(app_context)
+    qtbot.addWidget(page)
+    assert page.templates_action.isEnabled()
+    assert page.templates_action.text() == "Write templates..."
+    page.templates_action.trigger()  # the fake cancels the folder choice
+    assert len(fake_prompts.calls_of("choose_folder")) == 1
+    assert _infos(fake_prompts) == []
+
+
+def test_a_template_folder_in_a_risky_place_asks_first(
+    fake_prompts: FakePrompts, workflow: ReportsWorkflow, tmp_path: Path
+) -> None:
+    checks, warning = PLACES["network"]
+    workflow.checks = checks
+    fake_prompts.script("choose_folder", _out(tmp_path, "templates"))
+    workflow.write_templates()
+    (question,) = fake_prompts.calls_of("confirm")
+    assert question.text == f"{warning} {CLOSING}"
+    assert list(_out(tmp_path, "templates").iterdir()) == []
+
+
+def test_the_import_wizard_warns_about_assets_without_a_status_event(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    workflow: ReportsWorkflow,
+    anchor: QWidget,
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    source = _out(tmp_path) / "asset.csv"
+    source.write_text(
+        "tag;type_code;description;location;in_service_from;in_service_until;"
+        "maintenance_interval_days;notes\r\nDEMO-T1;bay;;;2020-01-01;;;\r\n",
+        encoding="utf-8",
+    )
+    dialog = _import_dialog(app_context, anchor, workflow, qtbot, "asset")
+    fake_prompts.script("open_file", source)
+    dialog.choose_button.click()
+
+    assert dialog.summary_label.text() == (
+        "No problems found: 1 rows can be imported. 1 in-service asset has no status event yet "
+        "and counts as in service with an unknown status until its status events are imported."
+    )

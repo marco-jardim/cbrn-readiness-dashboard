@@ -12,7 +12,7 @@ from PySide6.QtCore import QCoreApplication
 from cbrn_dashboard.services.importer import ImportError as ImportIssue
 from cbrn_dashboard.services.snapshots import SnapshotView
 from cbrn_dashboard.ui.reports.labels import error_label, origin_label, state_label
-from cbrn_dashboard.ui.shell.formatting import format_date
+from cbrn_dashboard.ui.shell.formatting import format_date, format_number
 from cbrn_dashboard.ui.shell.widgets import Column, ModuleTableModel
 
 __all__ = ["IssuesModel", "SnapshotsModel"]
@@ -55,6 +55,12 @@ class SnapshotsModel(ModuleTableModel):
             lambda: QCoreApplication.translate("ReportsUi", "Reason for withdrawal"),
             lambda row, lang: row.withdrawal_reason or NOT_RECORDED,
         ),
+        Column[Any](
+            "id",
+            lambda: QCoreApplication.translate("ReportsUi", "Snapshot number"),
+            lambda row, lang: format_number(row.id, lang, decimals=0),
+            align_right=True,
+        ),
     )
 
     def set_snapshots(self, snapshots: list[SnapshotView]) -> None:
@@ -68,7 +74,9 @@ class IssuesModel(ModuleTableModel):
         Column[Any](
             "line",
             lambda: QCoreApplication.translate("ReportsUi", "Line"),
-            lambda row, lang: str(row.line) if row.line > 0 else NOT_RECORDED,
+            lambda row, lang: (
+                format_number(row.line, lang, decimals=0) if row.line > 0 else NOT_RECORDED
+            ),
             align_right=True,
         ),
         Column[Any](

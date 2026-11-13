@@ -38,7 +38,12 @@ from cbrn_dashboard.reports.model import ReportVariant
 from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.services.importer import ImportReport
 from cbrn_dashboard.services.snapshots import SnapshotOrigin
+from cbrn_dashboard.services.validation_export import (
+    ValidationExportError,
+    ValidationExportResult,
+)
 from cbrn_dashboard.storage import csv_io
+from cbrn_dashboard.ui.budget.labels import fill_placeholders
 from cbrn_dashboard.ui.reports.actions import ReportsWorkflow
 from cbrn_dashboard.ui.reports.labels import (
     NO_FILE_CHOSEN,
@@ -49,7 +54,7 @@ from cbrn_dashboard.ui.reports.labels import (
 )
 from cbrn_dashboard.ui.reports.models import IssuesModel
 from cbrn_dashboard.ui.shell.context import AppContext
-from cbrn_dashboard.ui.shell.formatting import apply_locale, from_qdate, to_qdate
+from cbrn_dashboard.ui.shell.formatting import apply_locale, format_number, from_qdate, to_qdate
 from cbrn_dashboard.ui.shell.i18n import language_display_name
 from cbrn_dashboard.ui.shell.widgets import (
     FormDialog,
@@ -152,8 +157,9 @@ class ReportDialog(FormDialog):
         self.form.addRow(self.snapshot_note)
 
         self.choose_button.clicked.connect(lambda: self.choose_path())
-        self.variant_combo.currentIndexChanged.connect(lambda _index: self._update_notes())
-        self.date_edit.dateChanged.connect(lambda _day: self._update_notes())
+        self._suggested: Path | None = None
+        self.variant_combo.currentIndexChanged.connect(lambda _index: self._choice_changed())
+        self.date_edit.dateChanged.connect(lambda _day: self._choice_changed())
         self.snapshot_check.toggled.connect(lambda _on: self._update_notes())
         self._load_defaults()
         self.retranslate()
@@ -208,9 +214,12 @@ class ReportDialog(FormDialog):
             text = QCoreApplication.translate(
                 "ReportsUi", "Anonymised report: staff identifiers, labels and notes are left out."
             )
-            text += " " + QCoreApplication.translate(
-                "ReportsUi", "Personnel counts below %1 are shown as '< %1'."
-            ).replace("%1", str(_threshold(self.context)))
+            text += " " + fill_placeholders(
+                QCoreApplication.translate(
+                    "ReportsUi", "Personnel counts below %1 are shown as '< %1'."
+                ),
+                format_number(_threshold(self.context), self.language, decimals=0),
+            )
         else:
             text = QCoreApplication.translate(
                 "ReportsUi",
@@ -234,14 +243,58 @@ class ReportDialog(FormDialog):
         chosen = self.context.prompts.save_file(self, title, name, file_filter)
         if chosen is not None:
             self.path_edit.setText(str(chosen))
+            self._suggested = chosen if chosen.name == name else None
+
+    def _resuggest(self) -> None:
+        """While the path is still the suggested one, follow a change of variant or date (P8-02)."""
+        suggested = self._suggested
+        if suggested is None or self.path_edit.text().strip() != str(suggested):
+            return
+        name = self.workflow.default_report_name(self.variant(), self.as_of())
+        renamed = suggested.with_name(name)
+        self._suggested = renamed
+        self.path_edit.setText(str(renamed))
+
+    def _choice_changed(self) -> None:
+        self._resuggest()
+        self._update_notes()
 
     # ----- the report
 
+    def _name_contradicts_variant(self, target: Path) -> bool:
+        """Whether the file name carries the marker of the OTHER variant (P8-02)."""
+        other = (
+            ReportVariant.ANONYMISED
+            if self.variant() is ReportVariant.INTERNAL
+            else ReportVariant.INTERNAL
+        )
+        return other.value.lower() in target.name.lower()
+
     def submit(self) -> bool:
-        if self.workflow.report_builder() is None:
-            return False
         title = QCoreApplication.translate("ReportsUi", "Create report")
         text = self.path_edit.text().strip()
+        if text and self._name_contradicts_variant(Path(text)):
+            other = (
+                ReportVariant.ANONYMISED
+                if self.variant() is ReportVariant.INTERNAL
+                else ReportVariant.INTERNAL
+            )
+            self.context.prompts.warning(
+                self,
+                title,
+                fill_placeholders(
+                    QCoreApplication.translate(
+                        "ReportsUi",
+                        "The file name belongs to another kind of report (%1), but the chosen "
+                        "report is: %2. Change the file name or the report.",
+                    ),
+                    variant_label(other.value),
+                    variant_label(self.variant().value),
+                ),
+            )
+            return False
+        if self.workflow.report_builder() is None:
+            return False
         if not text:
             self.context.prompts.warning(self, title, error_label(NO_OUTPUT_CHOSEN))
             return False
@@ -259,7 +312,7 @@ class ReportDialog(FormDialog):
             )
         else:
             done = QCoreApplication.translate("ReportsUi", "The internal report was written to %1.")
-        done = done.replace("%1", str(target))
+        done = fill_placeholders(done, str(target))
         done += self._record_snapshot(as_of)
         self.context.prompts.info(self, title, done)
         return True
@@ -358,10 +411,13 @@ class ValidationExportDialog(FormDialog):
             )
         )
         if self.suppress_check.isChecked():
-            notice = QCoreApplication.translate(
-                "ReportsUi",
-                "Counts below %1 are replaced by '< %1'. The files are still internal data.",
-            ).replace("%1", str(_threshold(self.context)))
+            notice = fill_placeholders(
+                QCoreApplication.translate(
+                    "ReportsUi",
+                    "Counts below %1 are replaced by '< %1'. The files are still internal data.",
+                ),
+                format_number(_threshold(self.context), self.language, decimals=0),
+            )
         else:
             notice = QCoreApplication.translate(
                 "ReportsUi",
@@ -369,9 +425,10 @@ class ValidationExportDialog(FormDialog):
             )
         self.notice_label.setText(notice)
         if self._missing:
-            listing = QCoreApplication.translate(
-                "ReportsUi", "Editions without an earlier snapshot: %1"
-            ).replace("%1", ", ".join(self._missing))
+            listing = fill_placeholders(
+                QCoreApplication.translate("ReportsUi", "Editions without an earlier snapshot: %1"),
+                ", ".join(self._missing),
+            )
         else:
             listing = QCoreApplication.translate(
                 "ReportsUi", "Every edition has an earlier snapshot."
@@ -399,27 +456,55 @@ class ValidationExportDialog(FormDialog):
             return False
         suppress = self.suppress_check.isChecked()
         retroactive = self.retro_check.isChecked() and self.retro_check.isEnabled()
-        result = guarded(
-            self.context,
-            self,
-            error_label,
-            lambda: service.export(
-                folder, suppress_small_counts=suppress, record_retroactive=retroactive
-            ),
-        )
+        failures: list[ValidationExportError] = []
+
+        def run() -> ValidationExportResult:
+            try:
+                return service.export(
+                    folder, suppress_small_counts=suppress, record_retroactive=retroactive
+                )
+            except ValidationExportError as error:
+                failures.append(error)
+                raise
+
+        result = guarded(self.context, self, error_label, run)
         if result is None:
+            if failures and failures[0].recorded_snapshot_ids:
+                # P8-08: the snapshots recorded for the failed export stay; say which, refresh
+                self.context.notify_data_changed()
+                numbers = ", ".join(
+                    format_number(number, self.language, decimals=0)
+                    for number in failures[0].recorded_snapshot_ids
+                )
+                self.context.prompts.warning(
+                    self,
+                    title,
+                    fill_placeholders(
+                        QCoreApplication.translate(
+                            "ReportsUi",
+                            "Retroactive snapshots were recorded before the export failed "
+                            "(snapshot numbers: %1). They stay stored; withdraw them in the "
+                            "snapshot list if they are not wanted.",
+                        ),
+                        numbers,
+                    ),
+                )
             return False
-        done = QCoreApplication.translate("ReportsUi", "The validation export was written to %1.")
-        done = done.replace("%1", str(folder))
+        done = fill_placeholders(
+            QCoreApplication.translate("ReportsUi", "The validation export was written to %1."),
+            str(folder),
+        )
         if result.recorded_snapshot_ids:
-            done += " " + QCoreApplication.translate(
-                "ReportsUi", "Retroactive snapshots recorded: %1."
-            ).replace("%1", str(len(result.recorded_snapshot_ids)))
+            done += " " + fill_placeholders(
+                QCoreApplication.translate("ReportsUi", "Retroactive snapshots recorded: %1."),
+                format_number(len(result.recorded_snapshot_ids), self.language, decimals=0),
+            )
             self.context.notify_data_changed()
         if result.editions_without_reading:
-            done += " " + QCoreApplication.translate(
-                "ReportsUi", "Editions without a reading: %1."
-            ).replace("%1", ", ".join(result.editions_without_reading))
+            done += " " + fill_placeholders(
+                QCoreApplication.translate("ReportsUi", "Editions without a reading: %1."),
+                ", ".join(result.editions_without_reading),
+            )
         self.context.prompts.info(self, title, done)
         return True
 
@@ -507,17 +592,28 @@ class ImportDialog(FormDialog):
                 "ReportsUi", "Choose a file to check it before anything is imported."
             )
         elif report.ok:
-            text = QCoreApplication.translate(
-                "ReportsUi", "No problems found: %1 rows can be imported."
-            ).replace("%1", str(report.total_rows))
+            text = fill_placeholders(
+                QCoreApplication.translate(
+                    "ReportsUi", "No problems found: %1 rows can be imported."
+                ),
+                format_number(report.total_rows, self.language, decimals=0),
+            )
         else:
-            text = (
+            text = fill_placeholders(
                 QCoreApplication.translate(
                     "ReportsUi",
                     "%1 problems found in %2 rows. Nothing is imported until they are fixed.",
-                )
-                .replace("%1", str(len(report.errors)))
-                .replace("%2", str(report.total_rows))
+                ),
+                format_number(len(report.errors), self.language, decimals=0),
+                format_number(report.total_rows, self.language, decimals=0),
+            )
+        if report is not None and report.assets_without_status_event:
+            text += " " + QCoreApplication.translate(
+                "ReportsUi",
+                "%n in-service asset(s) have no status event yet and count as in service with "
+                "an unknown status until their status events are imported.",
+                None,
+                report.assets_without_status_event,
             )
         self.summary_label.setText(text)
 
@@ -568,10 +664,10 @@ class ImportDialog(FormDialog):
         if not checked.ok:
             self.context.prompts.warning(self, title, problems)
             return False
-        question = (
-            QCoreApplication.translate("ReportsUi", "Import %1 rows of %2?")
-            .replace("%1", str(checked.total_rows))
-            .replace("%2", entity_label(entity))
+        question = fill_placeholders(
+            QCoreApplication.translate("ReportsUi", "Import %1 rows of %2?"),
+            format_number(checked.total_rows, self.language, decimals=0),
+            entity_label(entity),
         )
         if not self.context.prompts.confirm(self, title, question):
             return False
@@ -586,10 +682,10 @@ class ImportDialog(FormDialog):
             return False
         if report.imported:
             self.context.notify_data_changed()
-        done = (
-            QCoreApplication.translate("ReportsUi", "%1 rows of %2 were imported.")
-            .replace("%1", str(report.imported))
-            .replace("%2", entity_label(entity))
+        done = fill_placeholders(
+            QCoreApplication.translate("ReportsUi", "%1 rows of %2 were imported."),
+            format_number(report.imported, self.language, decimals=0),
+            entity_label(entity),
         )
         self.context.prompts.info(self, title, done)
         return True

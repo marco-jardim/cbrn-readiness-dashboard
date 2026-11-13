@@ -16,6 +16,8 @@ __all__ = [
     "ASSET_TYPE_KEYS",
     "CERT_STATUS_KEYS",
     "DEGREE_LEVEL_KEYS",
+    "DEGREE_STATUS_KEYS",
+    "EXERCISE_KIND_KEYS",
     "FUNDING_SOURCE_KEYS",
     "PRELIMINARY_KEY",
     "SHARED_AREAS",
@@ -26,7 +28,13 @@ __all__ = [
 type MessageKey = tuple[str, str]
 
 #: The areas whose catalogues the renderer loads besides its own ``reports`` area.
-SHARED_AREAS: Final[tuple[str, ...]] = ("shell", "personnel", "infrastructure", "budget")
+SHARED_AREAS: Final[tuple[str, ...]] = (
+    "shell",
+    "personnel",
+    "infrastructure",
+    "exercises",
+    "budget",
+)
 
 #: The preliminary-version notice (I06, P07), as the shell banner words it (an em dash).
 PRELIMINARY_KEY: Final[MessageKey] = (
@@ -50,6 +58,17 @@ DEGREE_LEVEL_KEYS: Final[dict[str, MessageKey]] = {
     "doctorate": ("Personnel", "Doctorate"),
 }
 
+#: ``DegreeStatus`` values.
+DEGREE_STATUS_KEYS: Final[dict[str, MessageKey]] = {
+    "completed": ("Personnel", "Completed"),
+    "in_progress": ("Personnel", "In progress"),
+}
+
+#: ``ExerciseKind`` values with a translated name (``CBRAMED`` and ``EXBRAMED`` are proper names).
+EXERCISE_KIND_KEYS: Final[dict[str, MessageKey]] = {
+    "OTHER": ("Exercises", "Other"),
+}
+
 #: The built-in asset types; a user-defined type is shown by its code.
 ASSET_TYPE_KEYS: Final[dict[str, MessageKey]] = {
     "bed": ("Infrastructure", "Bed"),
@@ -66,7 +85,14 @@ FUNDING_SOURCE_KEYS: Final[dict[str, MessageKey]] = {
 
 def all_shared_keys() -> tuple[MessageKey, ...]:
     """Every shared message key (for the catalogue check)."""
-    tables = (CERT_STATUS_KEYS, DEGREE_LEVEL_KEYS, ASSET_TYPE_KEYS, FUNDING_SOURCE_KEYS)
+    tables = (
+        CERT_STATUS_KEYS,
+        DEGREE_LEVEL_KEYS,
+        DEGREE_STATUS_KEYS,
+        EXERCISE_KIND_KEYS,
+        ASSET_TYPE_KEYS,
+        FUNDING_SOURCE_KEYS,
+    )
     keys = [PRELIMINARY_KEY]
     for table in tables:
         keys.extend(table.values())

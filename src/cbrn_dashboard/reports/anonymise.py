@@ -24,11 +24,29 @@
 * CHARTS are rebuilt from the suppressed cells only: a suppressed cell has no value, and a category
   whose cells are ALL suppressed is removed from the chart together with those cells, so no value,
   label or category of a suppressed cell remains.
+* THE ALERT SUMMARY is split by source (P8-01) so that its sums are declared. Per severity
+  (critical, warning) the document holds the personnel part (certificate alerts; personnel-derived;
+  the warning part declares the per-level ``kf:PERSONNEL:expiring:<level>`` cells it sums, the
+  critical part the per-level ``kf:PERSONNEL:expired:<level>`` cells), the
+  infrastructure part (maintenance alerts; never suppressed, like the infrastructure key figures),
+  the indicator part (it declares the personnel count rows that can carry a status, so it is
+  hidden whenever one of them is) and the total (it declares the three parts). The INFO count is
+  maintenance only and is not personnel-derived. Hence a personnel count hidden in a level, in the
+  expired-certificate sum or in an indicator row is not the difference of a visible alert total
+  and the visible parts: a total with a hidden part is hidden too.
+* RETRAINING NEEDED is expiring plus expired at each level (A03). The retraining cells (key
+  figure and indicator row) declare ``expiring`` and ``expired`` of their level, so a hidden
+  expired count cannot be recovered as retraining minus expiring.
 
-Limits (recorded as residual risk Q10): the rule works on the declared ``total_of`` structure only,
-so relations that are not declared (for example active staff against valid certificates) are not
-considered, and DIFFERENCING between successive reports (the same population read at two dates)
-is NOT prevented.
+Covered: every staff-derived count that appears in a declared sum; the tests check that every
+visible total has only visible parts and that no hidden personnel cell is part of a visible total.
+
+Not covered (recorded as residual risk Q10): relations that are not declared are not considered.
+In particular ``active_staff - valid:<level>`` is the number of people without a valid certificate
+at that level (expired, no renewal or none), so where every active person holds the level it is
+the hidden expired count; this relation is NOT declared and not prevented. DIFFERENCING between
+successive reports (the same population read at two dates) is NOT prevented. The operator-entered
+codes (funding-source, asset-type and edition codes) are printed as they are.
 """
 
 from __future__ import annotations
@@ -148,7 +166,8 @@ def anonymise(document: ReportDocument) -> ReportDocument:
         ),
         indicators=tuple(_indicator(row, state[row.value.key]) for row in document.indicators),
         alert_summary=tuple(
-            AlertCountRow(alert.severity, state[alert.cell.key]) for alert in document.alert_summary
+            AlertCountRow(alert.severity, state[alert.cell.key], alert.source)
+            for alert in document.alert_summary
         ),
         charts=tuple(_chart(chart, state) for chart in document.charts),
         retraining=(),

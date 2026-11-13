@@ -833,16 +833,50 @@ def test_a_failing_write_reports_the_entity_and_leaves_no_partial_file(
 ) -> None:
     out = tmp_path / "blocked"
     (out / "staff_member.csv").mkdir(parents=True)
+    stale = _file(out, "training_course")
+    stale.write_text("stale", encoding="utf-8")
     with pytest.raises(ServiceError) as info:
         ExportService(seeded, CLOCK).export_all(out)
     assert info.value.code == EXPORT_FAILED
     assert info.value.field == "staff_member"
     assert list(out.glob("*.part")) == []
     assert (out / "staff_member.csv").is_dir()
-    # the files finished before the failure stay, complete and readable
-    for name in ("training_course", "asset_type", "evaluation_metric", "funding_source"):
-        assert read_entity(_file(out, name), _spec(name))
-    assert not _file(out, "ppe_certification").exists()
+    # P8-07 (replaces "the files finished before the failure stay"): the failed run leaves the
+    # folder as it was: the older file is untouched and no file of this run is mixed in
+    assert stale.read_text(encoding="utf-8") == "stale"
+    assert sorted(path.name for path in out.iterdir()) == ["staff_member.csv", stale.name]
+
+
+def test_a_format_error_is_reported_as_a_coded_export_failure(
+    seeded: DatabaseConnection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(path: Path, spec: EntitySpec, rows: object, *, banner: str | None = None) -> int:
+        raise CsvFormatError("INVALID_VALUE", column="code")
+
+    monkeypatch.setattr("cbrn_dashboard.services.export.csv_io.write_entity", refuse)
+    out = tmp_path / "format"
+
+    with pytest.raises(ServiceError) as info:
+        ExportService(seeded, CLOCK).export_all(out)
+
+    assert info.value.code == EXPORT_FAILED
+    assert info.value.field == "training_course"
+    assert list(out.iterdir()) == []  # no staging folder, no file
+
+
+def test_existing_files_lists_the_names_an_export_would_overwrite(
+    seeded: DatabaseConnection, tmp_path: Path
+) -> None:
+    service = ExportService(seeded, CLOCK)
+    out = tmp_path / "again"
+    assert service.existing_files(out) == []
+
+    service.export_all(out)
+
+    assert sorted(path.name for path in service.existing_files(out)) == sorted(
+        path.name for path in out.iterdir()
+    )
+    assert len(service.existing_files(out)) == 16
 
 
 def test_write_entity_leaves_no_temporary_file_on_failure(tmp_path: Path) -> None:

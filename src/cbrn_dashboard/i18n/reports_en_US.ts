@@ -5,6 +5,7 @@
     <name>Reports</name>
     <message>
         <source>Personnel</source>
+        <extracomment>The translation area of the report&apos;s own texts. Every indicator code the dashboard can put in a report. The keys of the fixed charts (a budget chart is ``budget_&lt;currency&gt;``). The series keys of the charts. The names of the dimension parts of an indicator row. Areas whose compiled catalogue was not found; their texts appear in English.</extracomment>
         <translation>Personnel</translation>
     </message>
     <message>
@@ -37,6 +38,7 @@
     </message>
     <message>
         <source>No data</source>
+        <extracomment>The error code of a report that could not be produced or written (the UI translates it). The application name written to the PDF as its creator (a product name, not translated).</extracomment>
         <translation>No data</translation>
     </message>
     <message>
@@ -318,6 +320,41 @@
     <message>
         <source>Staff-derived counts below %1 (zero included) are suppressed and shown as &lt; %1. Totals that would reveal a suppressed count are suppressed too.</source>
         <translation>Staff-derived counts below %1 (zero included) are suppressed and shown as &lt; %1. Totals that would reveal a suppressed count are suppressed too.</translation>
+    </message>
+    <message>
+        <source>All sources</source>
+        <translation>All sources</translation>
+    </message>
+    <message>
+        <source>Source</source>
+        <translation>Source</translation>
+    </message>
+    <message>
+        <source>Certificates expired, level %1</source>
+        <translation>Certificates expired, level %1</translation>
+    </message>
+    <message>
+        <source>%1: %2</source>
+        <translation>%1: %2</translation>
+    </message>
+    <message>
+        <source>%1; %2</source>
+        <translation>%1; %2</translation>
+    </message>
+    <message>
+        <source>%1 (%2)</source>
+        <translation>%1 (%2)</translation>
+    </message>
+    <message>
+        <source>%1, %2</source>
+        <translation>%1, %2</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n day(s)</source>
+        <translation>
+            <numerusform>%n day</numerusform>
+            <numerusform>%n days</numerusform>
+        </translation>
     </message>
 </context>
 </TS>

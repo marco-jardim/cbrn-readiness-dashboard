@@ -88,13 +88,14 @@ from cbrn_dashboard.storage import (
 from cbrn_dashboard.storage.csv_io import CsvFormatError, EntitySpec
 from cbrn_dashboard.storage.db import DatabaseConnection, transaction
 from cbrn_dashboard.storage.infrastructure_repo import AssetRow
-from cbrn_dashboard.storage.repository import WriteContext
+from cbrn_dashboard.storage.repository import RepositoryError, WriteContext
 
 __all__ = [
     "BUILT_IN_NOT_ALLOWED",
     "DUPLICATE_IN_FILE",
     "DUPLICATE_KEY",
     "FILE_UNREADABLE",
+    "STORAGE_REFUSED",
     "UNKNOWN_REFERENCE",
     "ImportError",
     "ImportReport",
@@ -111,6 +112,8 @@ DUPLICATE_KEY = "DUPLICATE_KEY"
 BUILT_IN_NOT_ALLOWED = "BUILT_IN_NOT_ALLOWED"
 #: The file cannot be read (missing, a folder, no permission).
 FILE_UNREADABLE = "FILE_UNREADABLE"
+#: The storage layer refused a row (a constraint no service check caught first).
+STORAGE_REFUSED = "STORAGE_REFUSED"
 
 #: The codes the module services use for "this natural key exists"; reported as DUPLICATE_KEY.
 _SERVICE_DUPLICATE_CODES = frozenset(
@@ -171,6 +174,9 @@ class ImportReport:
     total_rows: int
     imported: int
     errors: tuple[ImportError, ...]
+    #: Assets of an ``asset`` file that are in service today and have no status event (a warning,
+    #: not an error: the CSV contract is unchanged; the count is the same for a dry run).
+    assets_without_status_event: int = 0
 
     @property
     def ok(self) -> bool:
@@ -722,17 +728,46 @@ class ImportService:
             errors = tuple(ImportError(e.line, e.column, e.code) for e in parsed.errors)
             return self._finish(spec, total, 0, errors, commit=commit)
         issues: list[ImportError] = []
+        created: list[int] = []
         imported = 0
+        without_status = 0
         try:
             with transaction(self._conn):
-                imported = self._rows(spec, parsed, issues)
+                imported = self._rows(spec, parsed, issues, created)
+                without_status = self._without_status_event(created)  # read before any rollback
                 if issues or not commit:
                     raise _RollbackError
         except _RollbackError:
             imported = 0
-        return self._finish(spec, total, imported, tuple(issues), commit=commit)
+        return self._finish(
+            spec, total, imported, tuple(issues), commit=commit, without_status=without_status
+        )
 
-    def _rows(self, spec: EntitySpec, parsed: csv_io.ImportFile, issues: list[ImportError]) -> int:
+    def _without_status_event(self, asset_ids: list[int]) -> int:
+        """How many of the assets just read are in service today and have no status event (P8-12).
+
+        Until their ``asset_status_event`` rows are imported such an asset counts as in service
+        with a status that is unknown, which a snapshot taken meanwhile would store as it is.
+        """
+        today = self._clock.local_date().isoformat()
+        count = 0
+        for asset_id in asset_ids:
+            asset = infrastructure_repo.get_asset(self._conn, asset_id)
+            if asset is None or asset.in_service_from > today:
+                continue
+            if asset.in_service_until is not None and asset.in_service_until < today:
+                continue
+            if not infrastructure_repo.list_status_events(self._conn, asset_id):
+                count += 1
+        return count
+
+    def _rows(
+        self,
+        spec: EntitySpec,
+        parsed: csv_io.ImportFile,
+        issues: list[ImportError],
+        created: list[int],
+    ) -> int:
         handler = _IMPORTERS[spec.name]
         seen: set[tuple[object, ...]] = set()
         imported = 0
@@ -757,8 +792,13 @@ class ImportService:
                     )
             except (ServiceError, CsvFormatError) as exc:
                 issues.append(_issue(spec, row.line, exc))
+            except RepositoryError:
+                # P8-13: a constraint of the storage layer refused the row; report it, go on
+                issues.append(ImportError(row.line, "", STORAGE_REFUSED))
             else:
                 imported += 1
+                if spec.name == "asset" and target.entity_id is not None:
+                    created.append(target.entity_id)
         return imported
 
     def _finish(
@@ -769,10 +809,17 @@ class ImportService:
         errors: tuple[ImportError, ...],
         *,
         commit: bool,
+        without_status: int = 0,
     ) -> ImportReport:
         if commit:
             if errors:
                 logging_setup.log_event("IMPORT.FAILED", level=logging.WARNING, count=len(errors))
             else:
                 logging_setup.log_event("IMPORT.DONE", count=imported)
-        return ImportReport(entity=spec.name, total_rows=total, imported=imported, errors=errors)
+        return ImportReport(
+            entity=spec.name,
+            total_rows=total,
+            imported=imported,
+            errors=errors,
+            assets_without_status_event=without_status,
+        )

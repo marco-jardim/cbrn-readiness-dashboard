@@ -11,11 +11,13 @@ import json
 import re
 from collections import Counter
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain.dates import format_utc_timestamp
+from cbrn_dashboard.services import importer as importer_module
 from cbrn_dashboard.services.budget import BudgetService
 from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.services.exercises import ExercisesService
@@ -41,6 +43,7 @@ from cbrn_dashboard.storage.csv_io import (
     template_file_name,
 )
 from cbrn_dashboard.storage.db import DatabaseConnection
+from cbrn_dashboard.storage.repository import ConstraintViolationError
 from tests.services.conftest import ChangeLogRows
 
 OPERATOR = "demo.operator"
@@ -207,6 +210,64 @@ def test_asset_import_creates_no_status_event(
     events = importer.import_file("asset_status_event", _fixture("asset_status_event"))
     assert events.imported == 6
     assert len(infrastructure_repo.list_status_events(db)) == 6
+
+
+def test_a_storage_constraint_error_is_reported_per_row_and_never_escapes(
+    importer: ImportService, db: DatabaseConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # P8-13: a repository error (not a ServiceError) used to abort the whole run
+    def refuse(env: object, row: object) -> NoReturn:
+        raise ConstraintViolationError("a constraint broke")
+
+    # ``_IMPORTERS`` is a read-only mapping: the module attribute is replaced for the test.
+    monkeypatch.setattr(importer_module, "_IMPORTERS", {**_IMPORTERS, "training_course": refuse})
+    before = _count(db, "training_course")
+
+    for run in (importer.dry_run, importer.import_file):
+        report = run("training_course", _fixture("training_course"))
+
+        assert report.total_rows > 0
+        assert report.imported == 0
+        assert len(report.errors) == report.total_rows
+        assert {(e.column, e.code) for e in report.errors} == {("", "STORAGE_REFUSED")}
+        assert _count(db, "training_course") == before
+
+
+def test_assets_without_a_status_event_are_counted_for_a_dry_run_and_the_import(
+    importer: ImportService, db: DatabaseConnection
+) -> None:
+    # P8-12: the three fixture assets are in service on 2026-03-05 and have no status event
+    types = importer.import_file("asset_type", _fixture("asset_type"))
+    assert types.assets_without_status_event == 0
+
+    dry = importer.dry_run("asset", _fixture("asset"))
+    assert (dry.ok, dry.imported, dry.assets_without_status_event) == (True, 0, 3)
+    assert len(infrastructure_repo.list_assets(db)) == 0
+
+    real = importer.import_file("asset", _fixture("asset"))
+    assert (real.ok, real.imported, real.assets_without_status_event) == (True, 3, 3)
+
+
+def test_a_retired_or_future_asset_is_not_counted_as_without_a_status_event(
+    importer: ImportService, tmp_path: Path
+) -> None:
+    header = "tag;type_code;description;location;in_service_from;in_service_until"
+    header += ";maintenance_interval_days;notes\n"
+    rows = "DEMO-OLD;bay;;;2020-01-01;2021-01-01;;\nDEMO-NEW;bay;;;2030-01-01;;;\n"
+    rows += "DEMO-NOW;bay;;;2020-01-01;;;\n"
+
+    report = importer.dry_run("asset", _write(tmp_path, "asset.csv", header + rows))
+
+    assert (report.ok, report.imported) == (True, 0)
+    assert report.assets_without_status_event == 1  # only DEMO-NOW is in service today
+
+
+def test_other_files_report_no_assets_without_a_status_event(
+    importer: ImportService,
+) -> None:
+    report = importer.dry_run("training_course", _fixture("training_course"))
+
+    assert report.assets_without_status_event == 0
 
 
 # --------------------------------------------------------------------------- all or nothing

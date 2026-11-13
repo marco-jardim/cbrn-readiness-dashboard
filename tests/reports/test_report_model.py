@@ -27,6 +27,7 @@ from cbrn_dashboard.domain.personnel import PpeLevel
 from cbrn_dashboard.reports.anonymise import anonymise
 from cbrn_dashboard.reports.model import (
     PRELIMINARY_NOTICE_CODE,
+    AlertSource,
     Cell,
     IndicatorRow,
     KeyFigureGroup,
@@ -381,14 +382,25 @@ def test_internal_key_figures_per_module(world: World) -> None:
 
 def test_internal_indicator_table_has_statuses_and_thresholds(world: World) -> None:
     document = world.builder.build(AS_OF, ReportVariant.INTERNAL)
-    tiles = world.dashboard.data(AS_OF).tiles
 
-    assert [(r.code, r.dimension, r.value.value, r.status) for r in document.indicators] == [
-        (t.code, t.dimension, t.value, t.status) for t in tiles
-    ]
-    assert [(r.warning_value, r.critical_value) for r in document.indicators] == [
-        (t.warning_value, t.critical_value) for t in tiles
-    ]
+    # worked out by hand from the seed (see ``_seed``); only PERS_CERT_VALID level B has a target
+    none = IndicatorStatus.NO_TARGET
+    expected = {
+        ("PERS_CERT_VALID", "level=A"): (9.0, none, None, None),
+        ("PERS_CERT_VALID", "level=B"): (2.0, IndicatorStatus.WARNING, 3.0, 1.0),
+        ("PERS_CERT_VALID", "level=C"): (0.0, none, None, None),
+        ("PERS_CERT_EXPIRING", "level=A"): (4.0, none, None, None),
+        ("PERS_CERT_EXPIRING", "level=B"): (0.0, none, None, None),
+        ("PERS_RETRAINING_NEEDED", "level=A"): (4.0, none, None, None),
+        ("PERS_RETRAINING_NEEDED", "level=B"): (1.0, none, None, None),
+        ("PERS_RETRAINING_NEEDED", "level=C"): (0.0, none, None, None),
+    }
+    found = {
+        (r.code, r.dimension): (r.value.value, r.status, r.warning_value, r.critical_value)
+        for r in document.indicators
+    }
+    for key, row_values in expected.items():
+        assert found[key] == row_values, key
     valid_b = _row(document, "PERS_CERT_VALID", "level=B")
     assert valid_b.status is IndicatorStatus.WARNING
     assert (valid_b.warning_value, valid_b.critical_value) == (3.0, 1.0)
@@ -397,17 +409,61 @@ def test_internal_indicator_table_has_statuses_and_thresholds(world: World) -> N
     assert not _row(document, "INFRA_AVAILABLE", "type=DEMO-TYPE-A").value.personnel_derived
 
 
-def test_internal_alert_summary_matches_the_dashboard_and_is_personnel_derived(
+def _alerts(document: ReportDocument) -> dict[str, Cell]:
+    return {a.cell.key: a.cell for a in document.alert_summary}
+
+
+def test_internal_alert_summary_is_split_by_source_with_hand_computed_values(
     world: World,
 ) -> None:
+    # Seed: expiring certificates A 4 (S05..S08), expired B 1 (ZEBRA); one overdue asset; the
+    # target of PERS_CERT_VALID level B is crossed (2 < 3): one indicator warning.
     document = world.builder.build(AS_OF, ReportVariant.INTERNAL)
-    counts = world.dashboard.data(AS_OF).alert_counts
+    cells = _alerts(document)
 
-    assert [a.severity for a in document.alert_summary] == list(Severity)
-    for alert in document.alert_summary:
-        assert alert.cell.value == float(counts[alert.severity])
-        assert alert.cell.personnel_derived
-    assert sum(counts.values()) > 0
+    assert [(a.severity, a.source) for a in document.alert_summary] == [
+        (Severity.CRITICAL, AlertSource.ALL),
+        (Severity.CRITICAL, AlertSource.PERSONNEL),
+        (Severity.CRITICAL, AlertSource.INFRASTRUCTURE),
+        (Severity.CRITICAL, AlertSource.INDICATORS),
+        (Severity.WARNING, AlertSource.ALL),
+        (Severity.WARNING, AlertSource.PERSONNEL),
+        (Severity.WARNING, AlertSource.INFRASTRUCTURE),
+        (Severity.WARNING, AlertSource.INDICATORS),
+        (Severity.INFO, AlertSource.ALL),
+    ]
+    values = {key: cell.value for key, cell in cells.items()}
+    assert values == {
+        "alert:CRITICAL": 2.0,
+        "alert:CRITICAL:personnel": 1.0,
+        "alert:CRITICAL:infrastructure": 1.0,
+        "alert:CRITICAL:indicators": 0.0,
+        "alert:WARNING": 5.0,
+        "alert:WARNING:personnel": 4.0,
+        "alert:WARNING:infrastructure": 0.0,
+        "alert:WARNING:indicators": 1.0,
+        "alert:INFO": 0.0,
+    }
+    assert cells["alert:WARNING"].total_of == (
+        "alert:WARNING:personnel",
+        "alert:WARNING:infrastructure",
+        "alert:WARNING:indicators",
+    )
+    assert cells["alert:WARNING:personnel"].total_of == (
+        "kf:PERSONNEL:expiring:A",
+        "kf:PERSONNEL:expiring:B",
+        "kf:PERSONNEL:expiring:C",
+    )
+    assert cells["alert:CRITICAL:personnel"].total_of == (
+        "kf:PERSONNEL:expired:A",
+        "kf:PERSONNEL:expired:B",
+        "kf:PERSONNEL:expired:C",
+    )
+    assert cells["alert:WARNING:indicators"].total_of == ("indicator:PERS_CERT_VALID:level=B",)
+    assert cells["alert:WARNING:personnel"].personnel_derived
+    assert not cells["alert:WARNING:infrastructure"].personnel_derived
+    assert not cells["alert:INFO"].personnel_derived  # maintenance only (P8-03)
+    assert cells["alert:INFO"].total_of == ()
 
 
 def test_internal_lists_carry_identifiers_and_tags(world: World) -> None:
@@ -483,6 +539,26 @@ def test_anonymised_variant_contains_none_of_the_fixture_strings(world: World) -
             assert forbidden not in text, (forbidden, text)
 
 
+def test_operator_entered_codes_are_the_only_seeded_text_in_the_anonymised_variant(
+    world: World,
+) -> None:
+    # P8-16 / Q10: asset-type, edition and funding-source codes are printed as entered. Every
+    # seeded text carries the prefix DEMO, so once those codes are removed nothing may be left.
+    allowed = ("DEMO-TYPE-A", "DEMO-EX-24")
+    document = world.builder.build(AS_OF, ReportVariant.ANONYMISED)
+
+    found = set()
+    for text in _strings(document):
+        rest = text
+        for code in allowed:
+            if code in rest:
+                found.add(code)
+                rest = rest.replace(code, "")
+        assert "DEMO" not in rest, text
+    assert found == set(allowed)  # the scan does see the codes
+    assert "DIRSA" in "\n".join(_strings(document))
+
+
 def test_anonymised_header_lists_and_notice(world: World) -> None:
     internal = world.builder.build(AS_OF, ReportVariant.INTERNAL)
     document = world.builder.build(AS_OF, ReportVariant.ANONYMISED)
@@ -501,7 +577,16 @@ def test_anonymised_header_lists_and_notice(world: World) -> None:
     assert document.overdue_assets == ()
     assert document.preliminary_notice_code == "PRELIMINARY"
     assert document.small_count_threshold == 5
-    assert document == anonymise(internal)
+    assert [g.module for g in document.key_figures] == [
+        Module.PERSONNEL,
+        Module.INFRASTRUCTURE,
+        Module.EXERCISES,
+        Module.BUDGET,
+    ]
+    assert len(document.indicators) == len(internal.indicators)
+    assert [a.cell.key for a in document.alert_summary] == [
+        a.cell.key for a in internal.alert_summary
+    ]
 
 
 def test_zero_and_small_personnel_counts_are_suppressed_including_the_zero(
@@ -529,17 +614,22 @@ def test_a_count_equal_to_the_threshold_is_shown(world: World) -> None:
     _shown(_row(document, "PERS_TRAINING_12M").value, 5.0)
 
 
-def test_alert_counts_below_the_threshold_are_suppressed(world: World) -> None:
-    document = world.builder.build(AS_OF, ReportVariant.ANONYMISED)
+def test_alert_counts_are_suppressed_with_hand_computed_expectations(world: World) -> None:
+    # values: see test_internal_alert_summary_is_split_by_source_with_hand_computed_values
+    cells = _alerts(world.builder.build(AS_OF, ReportVariant.ANONYMISED))
 
-    counts = world.dashboard.data(AS_OF).alert_counts
-    assert min(counts.values()) < 5
-    for alert in document.alert_summary:
-        count = counts[alert.severity]
-        if count < 5:
-            _hidden(alert.cell)
-        else:
-            _shown(alert.cell, float(count))
+    for key in (
+        "alert:WARNING",  # a part is hidden
+        "alert:WARNING:personnel",  # 4 < 5
+        "alert:WARNING:indicators",  # its row PERS_CERT_VALID level B (2) is hidden
+        "alert:CRITICAL",
+        "alert:CRITICAL:personnel",  # 1 < 5
+        "alert:CRITICAL:indicators",
+    ):
+        _hidden(cells[key])
+    _shown(cells["alert:WARNING:infrastructure"], 0.0)
+    _shown(cells["alert:CRITICAL:infrastructure"], 1.0)
+    _shown(cells["alert:INFO"], 0.0)  # maintenance only: never suppressed (P8-03)
 
 
 def test_suppressed_rows_lose_status_and_thresholds(world: World) -> None:
@@ -610,7 +700,10 @@ def test_the_threshold_comes_from_the_configuration(world: World) -> None:
 
     assert after.small_count_threshold == 3
     _shown(_figure(after, people, "expiring:A"), 4.0)  # 3 <= 4
-    _shown(_figure(after, people, "retraining:A"), 4.0)
+    # retraining = expiring + expired: nobody of level A is expired (0 < 3, hidden), so showing
+    # the 4 would give that zero away; the total goes with its hidden part.
+    _hidden(_figure(after, people, "expired:A"))
+    _hidden(_figure(after, people, "retraining:A"))
     _hidden(_figure(after, people, "valid:B"))  # 2 < 3
     _hidden(_figure(after, people, "valid:C"))  # zero is always below the threshold
     # the institution names are still blanked, whatever the threshold

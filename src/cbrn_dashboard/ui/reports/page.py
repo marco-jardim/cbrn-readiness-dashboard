@@ -35,6 +35,7 @@ from cbrn_dashboard.domain.config import (
 from cbrn_dashboard.services.config import ConfigService
 from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.services.snapshots import SnapshotOrigin, SnapshotService, SnapshotView
+from cbrn_dashboard.ui.budget.labels import fill_placeholders
 from cbrn_dashboard.ui.reports.actions import ReportsWorkflow
 from cbrn_dashboard.ui.reports.dialogs import (
     ImportDialog,
@@ -45,6 +46,7 @@ from cbrn_dashboard.ui.reports.dialogs import (
 from cbrn_dashboard.ui.reports.labels import error_label
 from cbrn_dashboard.ui.reports.models import SnapshotsModel
 from cbrn_dashboard.ui.shell.context import AppContext
+from cbrn_dashboard.ui.shell.formatting import format_date
 from cbrn_dashboard.ui.shell.widgets import (
     EditAction,
     action_row,
@@ -111,6 +113,10 @@ class ReportsPage(QWidget):
             self, lambda: QCoreApplication.translate("ReportsUi", "Validation export...")
         )
         self.validation_action.triggered.connect(self.export_validation)
+        self.templates_action = EditAction(
+            self, lambda: QCoreApplication.translate("ReportsUi", "Write templates...")
+        )
+        self.templates_action.triggered.connect(self.write_templates)
         # Edit actions: they write to the database.
         self.import_action = make_edit_action(
             context,
@@ -134,6 +140,7 @@ class ReportsPage(QWidget):
             self.report_action,
             self.csv_action,
             self.validation_action,
+            self.templates_action,
             self.import_action,
             self.record_action,
             self.withdraw_action,
@@ -148,7 +155,7 @@ class ReportsPage(QWidget):
         layout.addLayout(action_row((self.csv_action, self.validation_action), self))
         layout.addWidget(self.import_caption)
         layout.addWidget(self.import_hint)
-        layout.addLayout(action_row((self.import_action,), self))
+        layout.addLayout(action_row((self.import_action, self.templates_action), self))
         header = QHBoxLayout()
         header.addWidget(self.snapshots_caption)
         header.addStretch(1)
@@ -232,6 +239,7 @@ class ReportsPage(QWidget):
         self.report_action.setEnabled(self.workflow.report_builder() is not None)
         self.csv_action.setEnabled(self.workflow.exporter() is not None)
         self.validation_action.setEnabled(context.services.validation_export is not None)
+        self.templates_action.setEnabled(self.workflow.importer() is not None)
         context.set_edit_enabled(self.import_action, self.workflow.importer() is not None)
         service = self._snapshot_service()
         context.set_edit_enabled(self.record_action, service is not None)
@@ -253,6 +261,10 @@ class ReportsPage(QWidget):
         """Open the validation-export dialog (non-blocking)."""
         open_dialog(ValidationExportDialog(self.context, self, workflow=self.workflow))
 
+    def write_templates(self) -> None:
+        """Choose a folder and write the empty CSV templates of every kind of data."""
+        self.workflow.write_templates()
+
     def open_import(self) -> None:
         """Open the import wizard (non-blocking)."""
         open_dialog(ImportDialog(self.context, self, workflow=self.workflow))
@@ -263,6 +275,14 @@ class ReportsPage(QWidget):
         if service is None:
             return
         as_of = self.context.as_of
+        if as_of < self.context.clock.local_date():  # P8-19: ask first, as the dashboard does
+            question = fill_placeholders(
+                QCoreApplication.translate("ReportsUi", "Record a retroactive snapshot for %1?"),
+                format_date(as_of, current_language(self.context)),
+            )
+            title = QCoreApplication.translate("ReportsUi", "Record snapshot")
+            if not self.context.prompts.confirm(self, title, question):
+                return
         apply_change(
             self.context,
             self,
@@ -312,6 +332,12 @@ class _SettingsSection(QWidget):
         self.setObjectName(name)
         self.context = context
         self._rows: list[_Row] = []
+        #: The error code of a configuration that cannot be read (``None`` while it can be).
+        self._config_error: str | None = None
+        self.config_error_label = QLabel(self)
+        self.config_error_label.setObjectName("config_error_label")
+        self.config_error_label.setWordWrap(True)
+        self.config_error_label.setVisible(False)
         self.save_action = make_edit_action(
             context,
             self,
@@ -351,6 +377,13 @@ class _SettingsSection(QWidget):
             row.badge.setText(badge)
             row.confirm.setText(confirm)
         self.save_action.retranslate()
+        self._show_config_error()
+
+    def _show_config_error(self) -> None:
+        """Show why the settings inputs are off (a configuration that cannot be read)."""
+        code = self._config_error
+        self.config_error_label.setVisible(code is not None)
+        self.config_error_label.setText("" if code is None else error_label(code))
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
@@ -374,11 +407,14 @@ class _SettingsSection(QWidget):
         """Show the stored settings with their badges."""
         config = self._config()
         stored = ReadinessConfig()
+        self._config_error = None
         if config is not None:
             try:
                 stored = config.load()
-            except ServiceError:
+            except ServiceError as error:
+                self._config_error = error.code
                 config = None
+        self._show_config_error()
         self._show_values(stored)
         for row in self._rows:
             row.placeholder = None
@@ -422,6 +458,7 @@ class ReportsSettingsSection(_SettingsSection):
         self.notice_hint.setWordWrap(True)
 
         layout = QVBoxLayout(self)
+        layout.addWidget(self.config_error_label)
         layout.addLayout(self._row_layout(self.threshold_row))
         layout.addLayout(self._row_layout(self.notice_row))
         layout.addWidget(self.notice_hint)
@@ -491,6 +528,7 @@ class SnapshotsSettingsSection(_SettingsSection):
         )
 
         layout = QVBoxLayout(self)
+        layout.addWidget(self.config_error_label)
         layout.addLayout(self._row_layout(self.monthly_row))
         layout.addLayout(self._row_layout(self.on_report_row))
         layout.addLayout(action_row((self.save_action,), self))

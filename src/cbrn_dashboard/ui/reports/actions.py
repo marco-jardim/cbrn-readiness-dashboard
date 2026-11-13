@@ -19,11 +19,14 @@ from PySide6.QtWidgets import QWidget
 
 from cbrn_dashboard.reports.model import ReportBuilder, ReportVariant
 from cbrn_dashboard.reports.pdf import write_report_pdf
+from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.services.exercises import ExercisesService
-from cbrn_dashboard.services.export import ExportService
+from cbrn_dashboard.services.export import EXPORT_FAILED, ExportService
 from cbrn_dashboard.services.importer import ImportService
+from cbrn_dashboard.storage import csv_io
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.ui.backup.actions import DestinationChecks
+from cbrn_dashboard.ui.budget.labels import fill_placeholders
 from cbrn_dashboard.ui.reports.labels import error_label
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.widgets import guarded
@@ -86,6 +89,7 @@ class ReportsWorkflow(QObject):
                 personnel=personnel,
                 infrastructure=infrastructure,
                 config_loader=config.load,
+                budget=services.budget,
             )
         return self._builder
 
@@ -199,6 +203,46 @@ class ReportsWorkflow(QObject):
 
         return guarded(self.context, self.anchor, error_label, run) is True
 
+    # ----- the import templates
+
+    def write_templates(self) -> None:
+        """Choose a folder and write the header-only template of every entity (P8-10)."""
+        service = self.importer()
+        if service is None:
+            return
+        title = QCoreApplication.translate("ReportsUi", "Write import templates")
+        folder = self.context.prompts.choose_folder(self.anchor, title)
+        if folder is None or not self.confirm_destination(folder, title, None):
+            return
+        existing = [
+            name
+            for name in (csv_io.template_file_name(spec) for spec in csv_io.ENTITIES)
+            if (folder / name).exists()
+        ]
+        if existing:
+            question = QCoreApplication.translate(
+                "ReportsUi",
+                "%n existing template file(s) in this folder will be replaced. Continue?",
+                None,
+                len(existing),
+            )
+            if not self.context.prompts.confirm(self.anchor, title, question):
+                return
+
+        def run() -> list[Path]:
+            try:
+                return service.write_all_templates(folder)
+            except ServiceError:
+                raise ServiceError(EXPORT_FAILED, "out_dir") from None
+
+        written = guarded(self.context, self.anchor, error_label, run)
+        if written is None:
+            return
+        text = QCoreApplication.translate(
+            "ReportsUi", "%n template file(s) were written to %1.", None, len(written)
+        )
+        self.context.prompts.info(self.anchor, title, fill_placeholders(text, str(folder)))
+
     # ----- CSV export
 
     def export_csv(self) -> None:
@@ -215,11 +259,22 @@ class ReportsWorkflow(QObject):
         )
         if not self.confirm_destination(folder, title, notice):
             return
+        existing = service.existing_files(folder)
+        if existing:
+            question = QCoreApplication.translate(
+                "ReportsUi",
+                "%n existing file(s) in this folder will be replaced. Continue?",
+                None,
+                len(existing),
+            )
+            if not self.context.prompts.confirm(self.anchor, title, question):
+                return
         written = guarded(
             self.context, self.anchor, error_label, lambda: service.export_all(folder)
         )
         if written is None:
             return
-        text = QCoreApplication.translate("ReportsUi", "%1 files were written to %2.")
-        text = text.replace("%1", str(len(written))).replace("%2", str(folder))
-        self.context.prompts.info(self.anchor, title, text)
+        text = QCoreApplication.translate(
+            "ReportsUi", "%n file(s) were written to %1.", None, len(written)
+        )
+        self.context.prompts.info(self.anchor, title, fill_placeholders(text, str(folder)))
