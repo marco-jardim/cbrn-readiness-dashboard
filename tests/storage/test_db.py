@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import gc
 import shutil
 import sqlite3
 import stat
@@ -24,6 +25,7 @@ from cbrn_dashboard.storage.db import (
     check_sqlite_version,
     classify_sqlite_error,
     database_is_writable,
+    open_connections,
     open_database,
     read_only_uri,
     read_pragmas,
@@ -678,3 +680,69 @@ def test_error_codes_are_stable() -> None:
     assert DatabaseNotFoundError.code == "DATABASE_NOT_FOUND"
     assert DatabaseMovedError.code == "DATABASE_MOVED"
     assert NotADatabaseError.code == "NOT_A_DATABASE"
+
+
+# --------------------------------------------------------------------------- open connections
+
+
+def test_open_connections_is_zero_for_an_unknown_path(tmp_path: Path) -> None:
+    assert open_connections(tmp_path / "never-opened.sqlite3") == 0
+
+
+def test_open_connections_counts_open_connections_and_drops_closed_ones(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite3"
+    _create(path)
+    assert open_connections(path) == 0
+    first = open_database(path)
+    assert open_connections(path) == 1
+    second = open_database(path)
+    assert open_connections(path) == 2
+    second.close()
+    assert open_connections(path) == 1
+    second.close()  # closing twice changes nothing
+    assert open_connections(path) == 1
+    first.close()
+    assert open_connections(path) == 0
+
+
+def test_open_connections_counts_read_only_connections(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite3"
+    _create(path)
+    writer = open_database(path)
+    reader = open_database(path, read_only=True)
+    try:
+        assert open_connections(path) == 2
+    finally:
+        reader.close()
+        writer.close()
+    assert open_connections(path) == 0
+
+
+def test_open_connections_is_per_file_and_ignores_how_the_path_is_spelled(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite3"
+    other = tmp_path / "other.sqlite3"
+    _create(path)
+    _create(other)
+    conn = open_database(path)
+    try:
+        assert open_connections(other) == 0
+        assert open_connections(tmp_path / "sub" / ".." / "registry.sqlite3") == 1
+    finally:
+        conn.close()
+
+
+def test_open_connections_does_not_count_a_garbage_collected_connection(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite3"
+    _create(path)
+    conn = open_database(path)
+    assert open_connections(path) == 1
+    del conn
+    gc.collect()
+    assert open_connections(path) == 0
+
+
+def test_a_failed_open_leaves_nothing_registered(tmp_path: Path) -> None:
+    path = tmp_path / "missing.sqlite3"
+    with pytest.raises(DatabaseNotFoundError):
+        open_database(path, read_only=True)
+    assert open_connections(path) == 0

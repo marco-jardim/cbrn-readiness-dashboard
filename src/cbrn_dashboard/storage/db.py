@@ -27,7 +27,9 @@ a read-write connection whose database file has turned read-only is reported as 
 from __future__ import annotations
 
 import itertools
+import os
 import sqlite3
+import weakref
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path, PurePath
@@ -51,6 +53,7 @@ __all__ = [
     "check_sqlite_version",
     "classify_sqlite_error",
     "database_is_writable",
+    "open_connections",
     "open_database",
     "read_only_uri",
     "read_pragmas",
@@ -176,6 +179,13 @@ class DatabaseConnection(sqlite3.Connection):
     """``sqlite3.Connection`` that reports read-only failures as :class:`ReadOnlyDatabaseError`."""
 
     read_only: bool = False
+    #: Key of the file in the in-process registry (see :func:`open_connections`); set by
+    #: :func:`open_database`.
+    registry_key: str | None = None
+
+    def close(self) -> None:
+        _OPEN_CONNECTIONS.discard(self)
+        super().close()
 
     def execute(self, sql: str, parameters: _Params = (), /) -> sqlite3.Cursor:
         try:
@@ -339,9 +349,37 @@ def open_database(
     if busy_timeout_ms < 0:
         msg = "busy_timeout_ms must not be negative"
         raise ValueError(msg)
-    if read_only:
-        return _open_read_only(path, busy_timeout_ms)
-    return _open_read_write(path, busy_timeout_ms)
+    conn = (
+        _open_read_only(path, busy_timeout_ms)
+        if read_only
+        else _open_read_write(path, busy_timeout_ms)
+    )
+    conn.registry_key = _registry_key(path)
+    _OPEN_CONNECTIONS.add(conn)
+    return conn
+
+
+# --------------------------------------------------------------------------- open connections
+
+#: Every connection returned by :func:`open_database` that is still open. Weak references: a
+#: connection that is garbage collected drops out; ``close()`` removes it at once.
+_OPEN_CONNECTIONS: weakref.WeakSet[DatabaseConnection] = weakref.WeakSet()
+
+
+def _registry_key(path: Path) -> str:
+    """The absolute, normalised (and on Windows case-folded) form of ``path``."""
+    return os.path.normcase(os.path.normpath(str(path.absolute())))
+
+
+def open_connections(path: Path) -> int:
+    """How many connections opened by this process on the file ``path`` are still open.
+
+    Read-only connections count; closed and garbage-collected ones do not; an unknown path gives 0.
+    Used by the restore service, which must not copy into a file another connection is using
+    (other processes are excluded by the single-instance lock).
+    """
+    key = _registry_key(path)
+    return sum(1 for conn in list(_OPEN_CONNECTIONS) if conn.registry_key == key)
 
 
 # --------------------------------------------------------------------------- transactions
