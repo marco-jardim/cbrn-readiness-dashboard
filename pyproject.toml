@@ -28,6 +28,9 @@ dev = [
 build = [
     "pyinstaller>=6.10",
 ]
+# Development-time data generation only (scripts/gen_countries.py); never a runtime
+# dependency (PLAN section 4.2).
+tools = ["babel>=2.16"]
 
 [tool.hatch.version]
 path = "src/cbrn_dashboard/__init__.py"
