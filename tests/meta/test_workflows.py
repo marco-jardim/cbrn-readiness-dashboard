@@ -43,9 +43,12 @@ REQUIRED_COVERAGE_PACKAGES: tuple[str, ...] = (
 # --------------------------------------------------------------------------------------------
 
 
-def workflow_files() -> list[Path]:
-    """Return every ``.github/workflows/*.yml`` file, sorted by name."""
-    return sorted(WORKFLOWS_DIR.glob("*.yml"))
+def workflow_files(directory: Path = WORKFLOWS_DIR) -> list[Path]:
+    """Return every ``*.yml`` and ``*.yaml`` file in ``directory``, sorted.
+
+    GitHub runs both extensions, so both must go through the checks.
+    """
+    return sorted([*directory.glob("*.yml"), *directory.glob("*.yaml")])
 
 
 def read_workflow(name: str) -> str:
@@ -333,6 +336,13 @@ def test_ci_build_job_has_its_own_pinned_runner_and_setup() -> None:
 # --------------------------------------------------------------------------------------------
 
 GOOD_SHA = "3d3c42e5aac5ba805825da76410c181273ba90b1"
+
+
+def test_workflow_files_finds_yml_and_yaml(tmp_path: Path) -> None:
+    for name in ("b.yaml", "a.yml", "notes.txt", "c.yml.bak"):
+        (tmp_path / name).write_text("name: x\n", encoding="utf-8")
+    assert workflow_files(tmp_path) == [tmp_path / "a.yml", tmp_path / "b.yaml"]
+    assert workflow_files(tmp_path / "missing") == []
 
 
 def test_uses_refs_ignores_comments_and_local_actions() -> None:

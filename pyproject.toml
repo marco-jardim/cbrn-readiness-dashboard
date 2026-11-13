@@ -38,6 +38,11 @@ path = "src/cbrn_dashboard/__init__.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/cbrn_dashboard"]
 
+[tool.uv]
+# The version is read by hatch from the package (dynamic), so the editable install must be
+# rebuilt when that file changes, not only when pyproject.toml does.
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/cbrn_dashboard/__init__.py" }]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -88,7 +93,7 @@ markers = [
     "packaging: tests that build or inspect the PyInstaller bundle (deselected by default).",
     "slow: tests that take noticeably long to run.",
 ]
-addopts = '-m "not packaging"'
+addopts = '-m "not packaging" --strict-markers'
 qt_api = "pyside6"
 qt_log_level_fail = "WARNING"
 # Benign offscreen-platform messages are added here by exact text when first
