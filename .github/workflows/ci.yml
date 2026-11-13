@@ -18,7 +18,8 @@ concurrency:
 jobs:
   test:
     runs-on: windows-2025
-    timeout-minutes: 30
+    # The first runs on GitHub took about 23 minutes (the suite with coverage).
+    timeout-minutes: 45
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
