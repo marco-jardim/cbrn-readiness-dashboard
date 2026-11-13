@@ -95,6 +95,33 @@ def test_bundle_contains_all_package_data(bundle_dir: Path, build_script: Module
     assert not missing, f"package data missing from the bundle: {missing}"
 
 
+def test_bundle_has_the_core_migration_by_name(bundle_dir: Path) -> None:
+    package_root = _internal(bundle_dir) / "cbrn_dashboard"
+    migration = package_root / "storage" / "migrations" / "0001_core.sql"
+    assert migration.is_file(), f"missing {migration}"
+
+
+def test_bundle_has_licenses_folder_with_index(bundle_dir: Path) -> None:
+    folder = bundle_dir / "licenses"
+    assert folder.is_dir(), "no licenses folder at the bundle root"
+    assert not (_internal(bundle_dir) / "licenses").exists()
+    for name in ("index.json", "INDEX.md", "GPL-3.0.txt", "LGPL-3.0.txt", "SOURCE-OFFER.md"):
+        path = folder / name
+        assert path.is_file(), f"missing {path}"
+        assert path.stat().st_size > 0, f"empty {path}"
+    index = json.loads((folder / "index.json").read_text(encoding="utf-8"))
+    components = {item["component"].lower(): item for item in index}
+    assert components["qt charts"]["chosen"] == "GPL-3.0-only"
+    assert components["pyside6"]["chosen"] == "LGPL-3.0-only"
+    missing = [
+        relative
+        for item in index
+        for relative in item["files"]
+        if not (folder / relative).is_file()
+    ]
+    assert not missing, f"index entries without a file: {missing}"
+
+
 def test_bundle_has_no_ts_catalogues(bundle_dir: Path) -> None:
     ts_files = [str(path.relative_to(bundle_dir)) for path in bundle_dir.rglob("*.ts")]
     assert not ts_files, f".ts files in the bundle: {ts_files}"

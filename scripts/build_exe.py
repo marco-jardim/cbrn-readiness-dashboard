@@ -5,7 +5,9 @@
     Compile the translation catalogues, run PyInstaller through its Python API (no committed
     ``.spec`` file: the spec is generated into the work folder), then delete the Qt libraries and
     plug-ins that only serve modules the application does not use. The result is the folder
-    ``<dist-dir>/cbrn-dashboard`` holding ``cbrn-dashboard.exe`` and ``_internal/``.
+    ``<dist-dir>/cbrn-dashboard`` holding ``cbrn-dashboard.exe`` and ``_internal/``. The last step
+    writes the third-party licence folder ``licenses/`` beside the executable
+    (``scripts/collect_licenses.py``).
 
 The functions are importable (the packaging tests load this file by path, since ``scripts/`` is
 not a package): :func:`build`, :func:`package_data_files`, :func:`prune_bundle` and the tables
@@ -32,6 +34,9 @@ PACKAGE_NAME = "cbrn_dashboard"
 PACKAGE_DIR = SRC_DIR / PACKAGE_NAME
 ICON_PATH = PACKAGE_DIR / "resources" / "app.ico"
 I18N_SCRIPT = REPO_ROOT / "scripts" / "i18n.py"
+COLLECT_LICENSES_SCRIPT = REPO_ROOT / "scripts" / "collect_licenses.py"
+#: The licence folder sits at the bundle root, beside the executable (PLAN.md section 8).
+LICENSES_DIR_NAME = "licenses"
 
 APP_NAME = "cbrn-dashboard"
 INTERNAL_DIR_NAME = "_internal"
@@ -123,6 +128,18 @@ def _load_i18n_script() -> ModuleType:
     if spec is None or spec.loader is None:
         raise BuildError(f"Cannot load {I18N_SCRIPT}")
     module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_collect_licenses_script() -> ModuleType:
+    """Import ``scripts/collect_licenses.py`` by path; it is registered in ``sys.modules`` first."""
+    name = "cbrn_build_collect_licenses_script"
+    spec = importlib.util.spec_from_file_location(name, COLLECT_LICENSES_SCRIPT)
+    if spec is None or spec.loader is None:
+        raise BuildError(f"Cannot load {COLLECT_LICENSES_SCRIPT}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -256,6 +273,9 @@ def build(dist_dir: Path, work_dir: Path) -> Path:
     if not (bundle / f"{APP_NAME}.exe").is_file():
         raise BuildError(f"PyInstaller did not produce {bundle / (APP_NAME + '.exe')}")
     pruned = prune_bundle(bundle)
+    licenses_dir = bundle / LICENSES_DIR_NAME
+    license_entries = _load_collect_licenses_script().collect(licenses_dir, repo_root=REPO_ROOT)
+    print(f"licenses: {len(license_entries)} component(s) in {licenses_dir}")
     megabytes = bundle_size_bytes(bundle) / (1024 * 1024)
     print(f"pruned {pruned} file(s)")
     print(f"bundle size: {megabytes:.1f} MB ({bundle})")
