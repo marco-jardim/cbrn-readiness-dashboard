@@ -5,10 +5,12 @@
 the main window. ``build_application`` does everything except entering the event loop, so tests
 (and the self-test) can create the real window without blocking.
 
-No database is opened here; preferences (and therefore a saved language) arrive with T1.5, so the
-language is ``--lang`` or the default, Brazilian Portuguese.
+The only database opened here is the demo database of ``--demo`` (T1.7); the start-up sequence that
+opens the real database arrives with T1.9. Preferences (and therefore a saved language) arrive with
+T1.5, so the language is ``--lang`` or the default, Brazilian Portuguese.
 """
 
+import sqlite3
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -17,8 +19,12 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication
 
 from cbrn_dashboard import __version__, cli
+from cbrn_dashboard.clock import SystemClock
+from cbrn_dashboard.demo import open_demo_database
 from cbrn_dashboard.i18n import DEFAULT_LANGUAGE
 from cbrn_dashboard.paths import DataLocation, resolve_data_location
+from cbrn_dashboard.storage import app_meta
+from cbrn_dashboard.storage.db import DatabaseConnection, DatabaseError
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from cbrn_dashboard.ui.shell.main_window import MainWindow
 
@@ -32,6 +38,21 @@ class AppHandle:
     app: QApplication
     translator_manager: TranslatorManager
     window: MainWindow
+    database: DatabaseConnection | None = None
+
+    @property
+    def is_demo(self) -> bool:
+        """Whether the open database is a demo database, read from ``app_meta`` (D25).
+
+        Never derived from the command line; ``False`` while no database is open.
+        """
+        return self.database is not None and app_meta.read_is_demo(self.database)
+
+    def close_database(self) -> None:
+        """Close the database connection, if any."""
+        if self.database is not None:
+            self.database.close()
+            self.database = None
 
 
 def ensure_application() -> QApplication:
@@ -50,15 +71,23 @@ def build_application(
     """Create (or reuse) the application, install the language and build the main window.
 
     The window is not shown and the event loop is not entered. ``qm_dir=None`` means the package's
-    own ``i18n`` folder.
+    own ``i18n`` folder. With ``options.demo`` the demo database is opened (and seeded on first
+    use) before the window is built and kept on the handle; without it no database is opened.
     """
-    app = ensure_application()
-    app.setApplicationName(APPLICATION_NAME)
-    app.setApplicationVersion(__version__)
-    manager = TranslatorManager(app, qm_dir)
-    manager.set_language(DEFAULT_LANGUAGE if options.lang is None else options.lang)
-    window = MainWindow(manager, location)
-    return AppHandle(app=app, translator_manager=manager, window=window)
+    # Opening the real database belongs to the start-up sequence of T1.9.
+    database = open_demo_database(location.path, SystemClock()) if options.demo else None
+    try:
+        app = ensure_application()
+        app.setApplicationName(APPLICATION_NAME)
+        app.setApplicationVersion(__version__)
+        manager = TranslatorManager(app, qm_dir)
+        manager.set_language(DEFAULT_LANGUAGE if options.lang is None else options.lang)
+        window = MainWindow(manager, location)
+    except BaseException:
+        if database is not None:
+            database.close()
+        raise
+    return AppHandle(app=app, translator_manager=manager, window=window, database=database)
 
 
 def main(argv: Sequence[str] | None = None, *, qm_dir: Path | None = None) -> int:
@@ -69,6 +98,16 @@ def main(argv: Sequence[str] | None = None, *, qm_dir: Path | None = None) -> in
         from cbrn_dashboard import selftest
 
         return selftest.run(location, qm_dir=qm_dir)
-    handle = build_application(options, location, qm_dir)
-    handle.window.show()
-    return handle.app.exec()
+    if options.demo and not location.writable:
+        return 1  # a translated message arrives with T1.9 / T7.5
+    try:
+        handle = build_application(options, location, qm_dir)
+    except (OSError, sqlite3.Error, DatabaseError):
+        if options.demo:
+            return 1  # a translated message arrives with T1.9 / T7.5
+        raise
+    try:
+        handle.window.show()
+        return handle.app.exec()
+    finally:
+        handle.close_database()

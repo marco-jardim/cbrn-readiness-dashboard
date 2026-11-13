@@ -8,7 +8,7 @@ from cbrn_dashboard.cli import LANG_CHOICES, CliOptions, parse_args
 
 
 def test_defaults() -> None:
-    assert parse_args([]) == CliOptions(data_dir=None, lang=None, self_test=False)
+    assert parse_args([]) == CliOptions(data_dir=None, lang=None, self_test=False, demo=False)
 
 
 def test_data_dir_is_kept_verbatim() -> None:
@@ -53,10 +53,30 @@ def test_invalid_command_lines_exit_with_code_two(
     assert capsys.readouterr().err
 
 
-def test_demo_is_not_available_yet(capsys: pytest.CaptureFixture[str]) -> None:
+def test_demo_defaults_to_false() -> None:
+    assert parse_args([]).demo is False
+    assert CliOptions().demo is False
+
+
+def test_demo_flag() -> None:
+    assert parse_args(["--demo"]).demo is True
+
+
+def test_demo_with_data_dir() -> None:
+    options = parse_args(["--demo", "--data-dir", "x"])
+    assert options == CliOptions(data_dir="x", demo=True)
+
+
+def test_demo_with_every_other_option() -> None:
+    options = parse_args(["--demo", "--self-test", "--lang", "en-US", "--data-dir", "x"])
+    assert options == CliOptions(data_dir="x", lang="en-US", self_test=True, demo=True)
+
+
+def test_demo_takes_no_value(capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as excinfo:
-        parse_args(["--demo"])
+        parse_args(["--demo=yes"])
     assert excinfo.value.code == 2
+    assert capsys.readouterr().err
 
 
 def test_version_prints_and_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:

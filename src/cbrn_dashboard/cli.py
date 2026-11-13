@@ -25,10 +25,11 @@ class CliOptions:
     data_dir: str | None = None
     lang: str | None = None
     self_test: bool = False
+    demo: bool = False
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Return the argument parser (``--demo`` is added by T1.7)."""
+    """Return the argument parser."""
     parser = argparse.ArgumentParser(
         prog=PROG,
         description="CBRN readiness dashboard (offline desktop application).",
@@ -51,6 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="run the built-in checks, write selftest.json to the data folder and exit",
     )
     parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="open the separate demo database with fictitious data (never the real database)",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"{PROG} {__version__}",
@@ -68,4 +74,5 @@ def parse_args(argv: Sequence[str] | None = None) -> CliOptions:
     data_dir: str | None = namespace.data_dir
     lang: str | None = namespace.lang
     self_test: bool = namespace.self_test
-    return CliOptions(data_dir=data_dir, lang=lang, self_test=self_test)
+    demo: bool = namespace.demo
+    return CliOptions(data_dir=data_dir, lang=lang, self_test=self_test, demo=demo)
