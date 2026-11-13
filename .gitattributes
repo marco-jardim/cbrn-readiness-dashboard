@@ -1,0 +1,4 @@
+# Text files are checked out with LF on every machine, Windows CI runners included (their Git
+# default, core.autocrlf=true, would turn them into CRLF and change the bytes that are shipped
+# and tested). Binary files are detected and left alone.
+* text=auto eol=lf
