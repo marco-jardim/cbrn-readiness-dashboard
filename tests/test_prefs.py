@@ -333,6 +333,111 @@ def test_fsync_failure_leaves_no_partial_file(
     assert list(tmp_path.iterdir()) == []
 
 
+def test_a_transient_sharing_violation_is_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_replace = Path.replace
+    calls: list[int] = []
+
+    def flaky(self: Path, target: Path) -> Path:
+        calls.append(1)
+        if len(calls) <= 2:
+            raise PermissionError("sharing violation")
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", flaky)
+    store = PreferencesStore(tmp_path)
+    assert store.update(language="en_US").language == "en_US"
+
+    assert len(calls) == 3
+    assert store.persisted
+    assert store.warnings == ()
+    assert PreferencesStore(tmp_path).load().language == "en_US"
+    assert _temp_files(tmp_path) == []
+
+
+def test_a_permanent_sharing_violation_gives_not_saved_and_keeps_the_old_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = PreferencesStore(tmp_path)
+    store.update(language="es_ES")
+    before = _file(tmp_path).read_bytes()
+    calls: list[int] = []
+
+    def always(_self: Path, _target: object) -> Path:
+        calls.append(1)
+        raise PermissionError("sharing violation")
+
+    monkeypatch.setattr(Path, "replace", always)
+    assert store.update(language="en_US").language == "en_US"
+
+    assert len(calls) == 4  # the first attempt and three immediate retries
+    assert not store.persisted
+    assert store.warnings == (PreferencesWarning.NOT_SAVED,)
+    assert _file(tmp_path).read_bytes() == before
+    assert _temp_files(tmp_path) == []
+
+
+def test_other_os_errors_are_not_retried(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[int] = []
+
+    def disk_full(_self: Path, _target: object) -> Path:
+        calls.append(1)
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "replace", disk_full)
+    store = PreferencesStore(tmp_path)
+    store.update(language="en_US")
+    assert len(calls) == 1
+    assert store.warnings == (PreferencesWarning.NOT_SAVED,)
+
+
+def test_stale_temporary_files_are_removed_on_load_when_writable(tmp_path: Path) -> None:
+    _write(tmp_path, '{"language": "es_ES"}')
+    stale = [tmp_path / f"{PREFS_FILE_NAME}.tmp-abc123", tmp_path / f"{PREFS_FILE_NAME}.tmp-"]
+    for path in stale:
+        path.write_text("{partial", encoding="utf-8")
+    other = tmp_path / "notes.txt"
+    other.write_text("keep me", encoding="utf-8")
+
+    store = PreferencesStore(tmp_path)
+    assert store.load().language == "es_ES"
+
+    assert _temp_files(tmp_path) == []
+    assert other.read_text(encoding="utf-8") == "keep me"
+    assert _file(tmp_path).exists()
+
+
+def test_stale_temporary_files_are_removed_even_without_a_prefs_file(tmp_path: Path) -> None:
+    leftover = tmp_path / f"{PREFS_FILE_NAME}.tmp-xyz"
+    leftover.write_text("x", encoding="utf-8")
+    assert PreferencesStore(tmp_path).load() == Preferences()
+    assert not leftover.exists()
+
+
+def test_stale_temporary_files_are_left_alone_when_read_only(tmp_path: Path) -> None:
+    leftover = tmp_path / f"{PREFS_FILE_NAME}.tmp-abc123"
+    leftover.write_text("x", encoding="utf-8")
+    store = PreferencesStore(tmp_path, writable=False)
+    store.load()
+    store.update(language="en_US")
+    assert leftover.exists()
+
+
+def test_a_file_with_a_byte_order_mark_is_loaded(tmp_path: Path) -> None:
+    content = json.dumps({"language": "en_US", "startup_summary": False, "future": [1]})
+    _file(tmp_path).write_bytes(b"\xef\xbb\xbf" + content.encode("utf-8"))
+    store = PreferencesStore(tmp_path)
+    assert store.load() == Preferences(language="en_US", startup_summary=False)
+    assert store.warnings == ()
+
+    store.update(first_run_notice_shown=True)  # unknown keys survive the rewrite
+    data = json.loads(_file(tmp_path).read_text(encoding="utf-8"))
+    assert data["future"] == [1]
+    assert data["language"] == "en_US"
+    assert data["first_run_notice_shown"] is True
+
+
 def test_missing_folder_is_not_saved_and_not_an_error(tmp_path: Path) -> None:
     store = PreferencesStore(tmp_path / "does-not-exist")
     assert store.update(language="en_US").language == "en_US"

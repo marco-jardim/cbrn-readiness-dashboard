@@ -7,7 +7,8 @@ Everything lives in the ``setting`` table (``key`` -> ``value_json``):
   equal to the default and not stored yet is not written;
 * ``confirmed.<ID>``: ``true`` when the operator confirmed placeholder ``<ID>`` on this
   installation. This only hides the badge here; the code-level flag of
-  :data:`~cbrn_dashboard.domain.config.PLACEHOLDERS` is never touched;
+  :data:`~cbrn_dashboard.domain.config.PLACEHOLDERS` is never touched. Confirming also pins the
+  current values of the placeholder's config fields in this database, default or not;
 * any other key through :func:`get_value` / :func:`set_value` (for example the time of the last
   encrypted backup, T7.2).
 
@@ -148,9 +149,22 @@ def _known_placeholder(placeholder_id: str) -> str:
 
 
 def confirm_placeholder(ctx: WriteContext, placeholder_id: str) -> None:
-    """Record that the operator confirmed ``placeholder_id`` on this installation (idempotent)."""
+    """Record that the operator confirmed ``placeholder_id`` on this installation (idempotent).
+
+    In the same transaction the current values of the placeholder's config fields are stored too,
+    even when they equal the default, so a later release that changes a generic default cannot
+    silently change a confirmed value on this database. A placeholder without config fields
+    (``fields == ()``) writes only the ``confirmed.<ID>`` key.
+    """
     known = _known_placeholder(placeholder_id)
-    _put(ctx, CONFIRMED_PREFIX + known, True)
+    fields = placeholder(known).fields
+    with transaction(ctx.conn):
+        if fields:
+            current = to_settings(load_config(ctx.conn))
+            for name in fields:
+                key = SETTING_PREFIX + name
+                _put(ctx, key, current[key])
+        _put(ctx, CONFIRMED_PREFIX + known, True)
 
 
 def unconfirm_placeholder(ctx: WriteContext, placeholder_id: str) -> None:

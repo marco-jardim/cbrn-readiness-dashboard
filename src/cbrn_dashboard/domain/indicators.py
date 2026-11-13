@@ -144,7 +144,11 @@ def encode_dimension(parts: Mapping[str, str]) -> str:
 
 
 def decode_dimension(text: str) -> dict[str, str]:
-    """Exact inverse of :func:`encode_dimension`; rejects malformed text."""
+    """Exact inverse of :func:`encode_dimension`; rejects malformed or non-canonical text.
+
+    Text whose keys are not sorted (``source=X;currency=BRL``) is rejected: targets are looked up
+    by the exact text, so each dimension has exactly one accepted spelling.
+    """
     if not isinstance(text, str):
         msg = f"dimension text must be a string: {text!r}"
         raise InvalidDimensionError(msg)
@@ -162,6 +166,9 @@ def decode_dimension(text: str) -> dict[str, str]:
             msg = f"duplicate dimension key: {key!r}"
             raise InvalidDimensionError(msg)
         result[key] = value
+    if encode_dimension(result) != text:
+        msg = f"dimension text is not in canonical (sorted) form: {text!r}"
+        raise InvalidDimensionError(msg)
     return result
 
 
@@ -390,12 +397,17 @@ def evaluate_all(
     values: Iterable[IndicatorValue],
     targets: Mapping[TargetKey, Target],
 ) -> list[IndicatorReading]:
-    """Evaluate every value, ordered by registry order and then by dimension (stable)."""
+    """Evaluate every value, ordered by registry order and then by dimension (stable).
+
+    Raises :class:`UnknownIndicatorError` for an unregistered code and
+    :class:`InvalidDimensionError` when a value's dimension does not match its definition.
+    """
     order = {code: index for index, code in enumerate(registry.codes())}
     pending = list(values)
     for item in pending:
         if item.code not in order:
             msg = f"unknown indicator: {item.code!r}"
             raise UnknownIndicatorError(msg)
+        registry.get(item.code).validate_dimension(item.dimension)
     pending.sort(key=lambda item: (order[item.code], item.dimension))
     return [evaluate(registry.get(item.code), item, targets) for item in pending]

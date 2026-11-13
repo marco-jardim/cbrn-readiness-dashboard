@@ -168,6 +168,18 @@ def test_decode_rejects_bad_text(text: str) -> None:
 
 
 @pytest.mark.parametrize(
+    "text",
+    ["source=DIRSA;currency=BRL", "z=1;a=2", "status=completed;level=A", "b=1;a=1;c=1"],
+)
+def test_decode_rejects_non_canonical_key_order(text: str) -> None:
+    with pytest.raises(InvalidDimensionError) as info:
+        decode_dimension(text)
+    assert info.value.code == "INVALID_DIMENSION"
+    with pytest.raises(InvalidDimensionError):
+        make_definition(dimension_keys=("currency", "source")).validate_dimension(text)
+
+
+@pytest.mark.parametrize(
     ("keys", "dimension", "valid"),
     [
         (("level",), "level=A", True),
@@ -175,7 +187,7 @@ def test_decode_rejects_bad_text(text: str) -> None:
         (("level",), "type=A", False),
         (("level",), "level=A;status=x", False),
         (("currency", "source"), "currency=BRL;source=DIRSA", True),
-        (("currency", "source"), "source=DIRSA;currency=BRL", True),
+        (("currency", "source"), "source=DIRSA;currency=BRL", False),  # not the canonical order
         (("currency", "source"), "currency=BRL", False),
         ((), "", True),
         ((), "level=A", False),
@@ -335,10 +347,15 @@ def test_scaled_keeps_none() -> None:
     assert Target(warning_value=4, critical_value=None).scaled(0.5) == Target(2.0, None)
 
 
-def test_scaled_returns_a_new_target() -> None:
-    original = Target(warning_value=10, critical_value=4)
-    original.scaled(2.0)
-    assert original == Target(warning_value=10, critical_value=4)
+def test_scaled_returns_a_new_target_with_exactly_the_scaled_values() -> None:
+    original = Target(warning_value=10, critical_value=4, enabled=False)
+    scaled = original.scaled(2.5)
+    assert scaled is not original
+    assert (scaled.warning_value, scaled.critical_value) == (25.0, 10.0)
+    assert scaled.enabled is False  # preserved
+    assert scaled.scaled(0.4) == Target(warning_value=10.0, critical_value=4.0, enabled=False)
+    assert original.scaled(1.0) is not original  # even the identity factor gives a new object
+    assert (original.warning_value, original.critical_value) == (10, 4)  # the original is intact
 
 
 @pytest.mark.parametrize(
@@ -611,6 +628,38 @@ def test_evaluate_all_rejects_unknown_code() -> None:
     with pytest.raises(UnknownIndicatorError) as info:
         evaluate_all(registry, [IndicatorValue("ALPHA", 1.0), IndicatorValue("NOPE", 1.0)], {})
     assert info.value.code == "UNKNOWN_INDICATOR"
+
+
+@pytest.mark.parametrize(
+    ("code", "dimension"),
+    [
+        ("ZED", "type=X"),  # wrong key
+        ("ZED", ""),  # missing key
+        ("ZED", "level=A;type=X"),  # extra key
+        ("ALPHA", "level=A"),  # a dimension for an indicator without keys
+        ("ZED", "level"),  # malformed
+    ],
+)
+def test_evaluate_all_rejects_a_dimension_that_does_not_match_the_definition(
+    code: str, dimension: str
+) -> None:
+    registry = _registry_zed_alpha()
+    values = [IndicatorValue("ALPHA", 1.0), IndicatorValue(code, 1, dimension)]
+    with pytest.raises(InvalidDimensionError) as info:
+        evaluate_all(registry, values, {})
+    assert info.value.code == "INVALID_DIMENSION"
+
+
+def test_evaluate_all_rejects_a_non_canonical_dimension() -> None:
+    registry = IndicatorRegistry()
+    registry.register(make_definition("BOTH", dimension_keys=("currency", "source")))
+    swapped = [IndicatorValue("BOTH", 1.0, "source=DIRSA;currency=BRL")]
+    with pytest.raises(InvalidDimensionError):
+        evaluate_all(registry, swapped, {})
+    canonical = [IndicatorValue("BOTH", 1.0, "currency=BRL;source=DIRSA")]
+    assert [r.dimension for r in evaluate_all(registry, canonical, {})] == [
+        "currency=BRL;source=DIRSA"
+    ]
 
 
 def test_evaluate_all_empty() -> None:

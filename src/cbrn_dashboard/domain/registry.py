@@ -14,9 +14,9 @@ from cbrn_dashboard.domain.indicators import IndicatorDefinition, IndicatorRegis
 
 IndicatorProvider = Callable[[], Sequence[IndicatorDefinition]]
 
-# One provider per line, in display order. T2.2, T3.2, T4.3 and T5.2 each add exactly one line
-# here importing their module's ``indicator_definitions`` function (import at the top of the file,
-# entry below). Empty until those tasks land.
+# One provider per line, in display order: the personnel, infrastructure, exercises and budget
+# modules each contribute their ``indicator_definitions`` function. A new module adds exactly one
+# line here (import at the top of the file, entry below).
 PROVIDERS: tuple[IndicatorProvider, ...] = (
     personnel.indicator_definitions,
     infrastructure.indicator_definitions,

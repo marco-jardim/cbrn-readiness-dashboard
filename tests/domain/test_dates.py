@@ -42,11 +42,15 @@ def test_both_implementations_satisfy_the_clock_interface(clock: Clock) -> None:
     assert type(clock.local_date_of(now)) is date
 
 
-def test_system_clock_local_date_of_is_consistent() -> None:
+def test_system_clock_local_date_of_agrees_with_local_date() -> None:
     clock = SystemClock()
-    instant = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
-    # Local offsets are within +-14 h, so noon UTC is the same date or an adjacent one.
-    assert abs((clock.local_date_of(instant) - date(2026, 6, 15)).days) <= 1
+    before = clock.local_date()
+    instant = clock.utc_now()
+    after = clock.local_date()
+    # The instant lies between the two readings, so its local date is one of them (they differ
+    # only when local midnight passes during the test).
+    assert before <= clock.local_date_of(instant) <= after
+    assert clock.local_date_of(instant) in {before, after}
 
 
 @pytest.mark.parametrize(
@@ -160,6 +164,29 @@ def test_fixed_clock_is_immutable() -> None:
 )
 def test_add_months(start: date, months: int, expected: date) -> None:
     assert add_months(start, months) == expected
+
+
+@pytest.mark.parametrize(
+    ("start", "months"),
+    [
+        (date(9999, 12, 31), 1),
+        (date(9999, 1, 15), 12),
+        (date(1, 1, 1), -1),
+        (date(1, 6, 15), -6),
+        (date(2026, 1, 1), 10**9),
+        (date(2026, 1, 1), -(10**9)),
+    ],
+)
+def test_add_months_out_of_range_raises_invalid_date(start: date, months: int) -> None:
+    with pytest.raises(InvalidDateError) as info:
+        add_months(start, months)
+    assert info.value.code == "INVALID_DATE"
+
+
+def test_add_months_accepts_the_range_limits() -> None:
+    assert add_months(date(9999, 11, 30), 1) == date(9999, 12, 30)
+    assert add_months(date(1, 2, 28), -1) == date(1, 1, 28)
+    assert add_months(date(9999, 12, 31), 0) == date(9999, 12, 31)
 
 
 def test_add_months_does_not_drift_when_called_repeatedly_from_original() -> None:
@@ -292,14 +319,22 @@ def test_format_utc_timestamp(instant: datetime, expected: str) -> None:
     ("timespec", "expected"),
     [
         ("seconds", "2026-03-05T02:30:07Z"),
-        ("minutes", "2026-03-05T02:30Z"),
         ("milliseconds", "2026-03-05T02:30:07.654Z"),
         ("microseconds", "2026-03-05T02:30:07.654321Z"),
     ],
 )
-def test_format_utc_timestamp_timespec(timespec: str, expected: str) -> None:
+def test_format_utc_timestamp_timespec_round_trips(timespec: str, expected: str) -> None:
     instant = datetime(2026, 3, 5, 2, 30, 7, 654321, tzinfo=UTC)
-    assert format_utc_timestamp(instant, timespec=timespec) == expected
+    text = format_utc_timestamp(instant, timespec=timespec)
+    assert text == expected
+    parsed = parse_utc_timestamp(text)  # every allowed format is read back
+    assert format_utc_timestamp(parsed, timespec=timespec) == text
+
+
+@pytest.mark.parametrize("timespec", ["minutes", "hours", "auto", "", "Seconds"])
+def test_format_utc_timestamp_rejects_timespecs_that_cannot_be_parsed(timespec: str) -> None:
+    with pytest.raises(ValueError, match="timespec"):
+        format_utc_timestamp(datetime(2026, 3, 5, 2, 30, 7, tzinfo=UTC), timespec=timespec)
 
 
 def test_format_utc_timestamp_rejects_naive() -> None:

@@ -15,10 +15,12 @@ _ISO_DATE = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})")
 _UTC_TIMESTAMP = re.compile(
     r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,6}))?Z"
 )
+#: The ``timespec`` values of :func:`format_utc_timestamp` that can be parsed back.
+_TIMESPECS = ("seconds", "milliseconds", "microseconds")
 
 
 class InvalidDateError(ValueError):
-    """Text is not a strict, real-calendar ``YYYY-MM-DD`` date."""
+    """Text is not a strict, real-calendar ``YYYY-MM-DD`` date, or a date is out of range."""
 
     code = "INVALID_DATE"
 
@@ -53,9 +55,12 @@ def add_months(value: date, months: int) -> date:
 
     The result is always computed from the original day, so repeated calls do not drift:
     ``add_months(date(2025, 1, 31), 1)`` is 28 February, and ``add_months(date(2025, 1, 31), 2)``
-    is 31 March (not 28 March).
+    is 31 March (not 28 March). A result outside years 1 to 9999 raises :class:`InvalidDateError`.
     """
     year, month_index = divmod(value.year * 12 + (value.month - 1) + months, 12)
+    if not date.min.year <= year <= date.max.year:
+        msg = f"adding {months} months to {format_iso_date(value)} leaves the supported years"
+        raise InvalidDateError(msg)
     month = month_index + 1
     day = min(value.day, calendar.monthrange(year, month)[1])
     return date(year, month, day)
@@ -90,8 +95,13 @@ def format_utc_timestamp(instant: datetime, timespec: str = "seconds") -> str:
     """Format an aware ``instant`` as UTC ISO 8601 with a trailing ``Z``.
 
     ``timespec`` is passed to :meth:`datetime.isoformat` (default: second precision, giving
-    ``2026-03-05T02:30:00Z``). A naive ``instant`` raises ``ValueError``.
+    ``2026-03-05T02:30:00Z``). Only the values that :func:`parse_utc_timestamp` reads back are
+    accepted (``"seconds"``, ``"milliseconds"``, ``"microseconds"``); any other ``timespec`` and
+    a naive ``instant`` raise ``ValueError``.
     """
+    if timespec not in _TIMESPECS:
+        msg = f"timespec must be one of {', '.join(_TIMESPECS)}"
+        raise ValueError(msg)
     if instant.tzinfo is None or instant.utcoffset() is None:
         msg = "a timezone-aware datetime is required"
         raise ValueError(msg)

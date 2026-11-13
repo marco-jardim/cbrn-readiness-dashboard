@@ -7,7 +7,10 @@ and never raises for a missing or damaged file: a field that is absent or invali
 default and a ``CORRUPT_FILE`` warning code is recorded for the UI to translate later.
 
 Writes are atomic: the JSON goes to a temporary file in the same folder, is flushed and synced,
-and is then moved over ``prefs.json``. When the data folder is read-only (or the write fails) the
+and is then moved over ``prefs.json`` (retried up to three times, immediately, when the system
+reports a transient ``PermissionError``). Leftover ``prefs.json.tmp-*`` files of a crash are
+removed on load when the folder is writable. The file is read with ``utf-8-sig``, so a byte-order
+mark is tolerated. When the data folder is read-only (or the write fails) the
 change is kept for the session only and ``NOT_SAVED`` is recorded; nothing is raised.
 """
 
@@ -25,6 +28,11 @@ from cbrn_dashboard.i18n import DEFAULT_LANGUAGE, to_catalogue_code
 
 PREFS_FILE_NAME = "prefs.json"
 TEMP_PREFIX = f"{PREFS_FILE_NAME}.tmp-"
+
+#: How often the atomic replace is retried after a transient ``PermissionError`` (on Windows, a
+#: sharing violation caused by a virus scanner). The retries are immediate: no sleeping and no
+#: clock, so the behaviour is deterministic.
+_REPLACE_RETRIES = 3
 
 KEY_LANGUAGE = "language"
 KEY_FIRST_RUN_NOTICE_SHOWN = "first_run_notice_shown"
@@ -175,8 +183,11 @@ class PreferencesStore:
         self._warnings = []
         self._extra = {}
         self._persisted = True
+        if self._writable:
+            self._remove_stale_temp_files()
         try:
-            text = self._path.read_text(encoding="utf-8")
+            # utf-8-sig: a file saved with a byte-order mark (for example by Notepad) is valid
+            text = self._path.read_text(encoding="utf-8-sig")
         except FileNotFoundError:
             self._current = Preferences()
             return self._current
@@ -230,6 +241,13 @@ class PreferencesStore:
         if code not in self._warnings:
             self._warnings.append(code)
 
+    def _remove_stale_temp_files(self) -> None:
+        """Delete ``prefs.json.tmp-*`` files left behind by a crash; failures are ignored."""
+        with contextlib.suppress(OSError):
+            for stale in self._data_dir.glob(f"{TEMP_PREFIX}*"):
+                with contextlib.suppress(OSError):
+                    stale.unlink(missing_ok=True)
+
     def _mark_not_saved(self) -> None:
         self._persisted = False
         self._warn(PreferencesWarning.NOT_SAVED)
@@ -245,7 +263,14 @@ class PreferencesStore:
                 handle.write(payload)
                 handle.flush()
                 os.fsync(handle.fileno())
-            temp_path.replace(self._path)
+            for attempt in range(_REPLACE_RETRIES + 1):
+                try:
+                    temp_path.replace(self._path)
+                except PermissionError:
+                    if attempt >= _REPLACE_RETRIES:
+                        raise
+                else:
+                    break
         except BaseException:
             with contextlib.suppress(OSError):
                 temp_path.unlink(missing_ok=True)

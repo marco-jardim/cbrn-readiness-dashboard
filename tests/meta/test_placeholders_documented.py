@@ -11,7 +11,7 @@ from cbrn_dashboard.domain.config import PLACEHOLDERS, flagged_placeholder_ids
 ROOT = Path(__file__).resolve().parents[2]
 PLAN = ROOT / "PLAN.md"
 
-TABLE_ROW = re.compile(r"^\| (P\d\d) \|", re.MULTILINE)
+TABLE_ROW = re.compile(r"^\| ([AP]\d\d) \|")
 
 
 def _section_3_5() -> str:
@@ -40,16 +40,35 @@ def test_every_flagged_placeholder_is_documented_in_the_plan() -> None:
         assert re.search(rf"\b{re.escape(placeholder_id)}\b", section), placeholder_id
 
 
-def test_every_p_row_of_the_plan_is_declared_in_the_code() -> None:
+def _table_rows() -> dict[str, str]:
+    """Row id -> text of its "Configurable in" column (the 4th cell) for the A and P rows."""
+    rows: dict[str, str] = {}
+    for line in _section_3_5().splitlines():
+        if TABLE_ROW.match(line) is None:
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        assert len(cells) == 5, line  # ID, assumption, default, configurable in, question
+        rows[cells[0]] = cells[3]
+    return rows
+
+
+def test_every_configurable_row_of_the_plan_is_declared_in_the_code() -> None:
     declared = {item.id for item in PLACEHOLDERS}
-    documented = TABLE_ROW.findall(_section_3_5())
-    assert documented  # the pattern must match the table
-    for placeholder_id in documented:
-        assert placeholder_id in declared, placeholder_id
+    rows = _table_rows()
+    assert any(key.startswith("A") for key in rows)  # the pattern must match both kinds
+    assert any(key.startswith("P") for key in rows)
+    for row_id, configurable_in in rows.items():
+        if configurable_in != "\u2014":  # an em dash: an assumption without a setting
+            assert row_id in declared, row_id
 
 
-def test_every_p_placeholder_in_the_code_has_a_row_in_the_plan() -> None:
-    documented = set(TABLE_ROW.findall(_section_3_5()))
+def test_every_placeholder_in_the_code_has_a_row_in_the_plan() -> None:
+    rows = _table_rows()
+    # D18 is declared in the code but documented in section 3.4 (decisions register), not in the
+    # section 3.5 table: it is the one documented exception.
+    exceptions = {"D18"}
     for item in PLACEHOLDERS:
-        if item.id.startswith("P"):
-            assert item.id in documented, item.id
+        if item.id in exceptions:
+            continue
+        assert item.id in rows, item.id
+    assert {item.id for item in PLACEHOLDERS if item.id[0] not in "AP"} == exceptions

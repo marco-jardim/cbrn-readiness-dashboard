@@ -29,6 +29,11 @@ from cbrn_dashboard.domain.budget import DEFAULT_CURRENCY, is_valid_currency
 
 __all__ = [
     "DAILY_BACKUPS_FLOOR",
+    "MAX_DAILY_BACKUPS",
+    "MAX_PASSPHRASE_LENGTH",
+    "MAX_SMALL_COUNT_THRESHOLD",
+    "MAX_VALIDITY_MONTHS",
+    "MAX_WARNING_DAYS",
     "PASSPHRASE_LENGTH_FLOOR",
     "PLACEHOLDERS",
     "SETTING_PREFIX",
@@ -50,6 +55,16 @@ __all__ = [
 PASSPHRASE_LENGTH_FLOOR = 12
 #: Hard floor of the number of daily local backups kept (P06).
 DAILY_BACKUPS_FLOOR = 2
+#: Largest accepted warning or reminder window in days (about ten years); keeps dates in range.
+MAX_WARNING_DAYS = 3650
+#: Largest accepted number of daily local backups kept.
+MAX_DAILY_BACKUPS = 365
+#: Largest accepted minimum backup passphrase length.
+MAX_PASSPHRASE_LENGTH = 128
+#: Largest accepted small-count suppression threshold.
+MAX_SMALL_COUNT_THRESHOLD = 1000
+#: Largest accepted certificate validity period in months (50 years).
+MAX_VALIDITY_MONTHS = 600
 #: Longest accepted free-text setting.
 MAX_TEXT_LENGTH = 200
 #: Prefix of the ``setting`` keys that hold the configuration.
@@ -130,7 +145,9 @@ class ReadinessConfig:
     """Every configurable value of the readiness rules; the defaults are those of PLAN.md 3.5.
 
     The mapping fields are normalised to read-only mappings on construction. Construction does not
-    validate: call :func:`validate` (the repository does it before every save).
+    validate: call :func:`validate` (the repository does it before every save). Consumers must
+    only use configurations that passed :func:`validate`, as those returned by ``load_config`` and
+    accepted by ``save_config`` do; an unvalidated instance may hold out-of-range values.
     """
 
     cert_warning_days: int = 90  # P01
@@ -253,27 +270,36 @@ def _validate_validity(value: object) -> None:
             raise ConfigError("INVALID_TYPE", name)
         if months < 1:
             raise ConfigError("INVALID_VALIDITY_MONTHS", name)
+        if months > MAX_VALIDITY_MONTHS:
+            raise ConfigError("VALUE_TOO_LARGE", name)
 
 
 def validate(config: ReadinessConfig) -> None:
     """Raise :class:`ConfigError` when a value is invalid; return ``None`` otherwise."""
     for name in _DAY_FIELDS:
-        days: object = getattr(config, name)
-        if isinstance(days, bool):
-            raise ConfigError("INVALID_TYPE", name)
-        if not isinstance(days, int) or days < 0:
+        days = _require_int(name, getattr(config, name))
+        if days < 0:
             raise ConfigError("NEGATIVE_DAYS", name)
+        if days > MAX_WARNING_DAYS:
+            raise ConfigError("VALUE_TOO_LARGE", name)
     for name in _BOOL_FIELDS:
         if not isinstance(getattr(config, name), bool):
             raise ConfigError("INVALID_TYPE", name)
     passphrase = _require_int("min_passphrase_length", config.min_passphrase_length)
     if passphrase < PASSPHRASE_LENGTH_FLOOR:
         raise ConfigError("PASSPHRASE_FLOOR", "min_passphrase_length")
+    if passphrase > MAX_PASSPHRASE_LENGTH:
+        raise ConfigError("VALUE_TOO_LARGE", "min_passphrase_length")
     backups = _require_int("daily_backups_kept", config.daily_backups_kept)
     if backups < DAILY_BACKUPS_FLOOR:
         raise ConfigError("BACKUP_FLOOR", "daily_backups_kept")
-    if _require_int("small_count_threshold", config.small_count_threshold) < 1:
+    if backups > MAX_DAILY_BACKUPS:
+        raise ConfigError("VALUE_TOO_LARGE", "daily_backups_kept")
+    threshold = _require_int("small_count_threshold", config.small_count_threshold)
+    if threshold < 1:
         raise ConfigError("THRESHOLD_TOO_LOW", "small_count_threshold")
+    if threshold > MAX_SMALL_COUNT_THRESHOLD:
+        raise ConfigError("VALUE_TOO_LARGE", "small_count_threshold")
     currency: object = config.default_currency
     if not isinstance(currency, str) or not is_valid_currency(currency):
         raise ConfigError("INVALID_CURRENCY", "default_currency")
@@ -330,7 +356,13 @@ PLACEHOLDERS: tuple[Placeholder, ...] = (
     Placeholder("A02", _GENERIC, ("ppe_hierarchy_enabled", "ppe_hierarchy"), "Q2"),
     Placeholder("A04", _GENERIC, ("ppe_validity_months",), "Q2"),
     Placeholder("A05", _GENERIC, ("degraded_counts_as_available",), "Q5"),
+    # A06, A07, A09 and A10 keep their values in their own tables (maintenance intervals,
+    # evaluation metrics, the course list, the degree status), so no config field.
+    Placeholder("A06", _GENERIC, (), "Q6"),
+    Placeholder("A07", _GENERIC, (), "Q7"),
     Placeholder("A08", _GENERIC, ("default_currency",), "Q8"),
+    Placeholder("A09", _GENERIC, (), "Q3"),
+    Placeholder("A10", _GENERIC, (), "Q3"),
     Placeholder("A11", _GENERIC, ("small_count_threshold",), "Q10"),
     Placeholder("D18", _LOCAL, ("institution_name", "unit_name"), "Q17"),
 )
@@ -433,18 +465,14 @@ def to_settings(config: ReadinessConfig) -> dict[str, object]:
     }
 
 
-def _read_int(
-    values: Mapping[str, object], name: str, default: int, *, other_code: str = "INVALID_TYPE"
-) -> int:
-    """The stored int ``config.<name>`` or ``default``; a bool is always ``INVALID_TYPE``."""
+def _read_int(values: Mapping[str, object], name: str, default: int) -> int:
+    """The stored int ``config.<name>`` or ``default``; any other type is ``INVALID_TYPE``."""
     key = SETTING_PREFIX + name
     if key not in values:
         return default
     value = values[key]
-    if isinstance(value, bool):
+    if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigError("INVALID_TYPE", name)
-    if not isinstance(value, int):
-        raise ConfigError(other_code, name)
     return value
 
 
@@ -517,23 +545,16 @@ def from_settings(values: Mapping[str, object]) -> ReadinessConfig:
     """
     d = ReadinessConfig()
     config = ReadinessConfig(
-        cert_warning_days=_read_int(
-            values, "cert_warning_days", d.cert_warning_days, other_code="NEGATIVE_DAYS"
-        ),
+        cert_warning_days=_read_int(values, "cert_warning_days", d.cert_warning_days),
         maintenance_warning_days=_read_int(
-            values,
-            "maintenance_warning_days",
-            d.maintenance_warning_days,
-            other_code="NEGATIVE_DAYS",
+            values, "maintenance_warning_days", d.maintenance_warning_days
         ),
         snapshot_monthly=_read_bool(values, "snapshot_monthly", d.snapshot_monthly),
         snapshot_on_report=_read_bool(values, "snapshot_on_report", d.snapshot_on_report),
         min_passphrase_length=_read_int(values, "min_passphrase_length", d.min_passphrase_length),
         daily_backups_kept=_read_int(values, "daily_backups_kept", d.daily_backups_kept),
         budget_prorate_target=_read_bool(values, "budget_prorate_target", d.budget_prorate_target),
-        backup_reminder_days=_read_int(
-            values, "backup_reminder_days", d.backup_reminder_days, other_code="NEGATIVE_DAYS"
-        ),
+        backup_reminder_days=_read_int(values, "backup_reminder_days", d.backup_reminder_days),
         ppe_hierarchy_enabled=_read_bool(values, "ppe_hierarchy_enabled", d.ppe_hierarchy_enabled),
         ppe_hierarchy=_read_hierarchy(values, "ppe_hierarchy", d.ppe_hierarchy),
         ppe_validity_months=_read_validity(values, "ppe_validity_months", d.ppe_validity_months),

@@ -70,7 +70,11 @@ EXPECTED_REGISTRY: list[tuple[str, PlaceholderKind, tuple[str, ...], str | None,
     ("A02", G, ("ppe_hierarchy_enabled", "ppe_hierarchy"), "Q2", True),
     ("A04", G, ("ppe_validity_months",), "Q2", True),
     ("A05", G, ("degraded_counts_as_available",), "Q5", True),
+    ("A06", G, (), "Q6", True),
+    ("A07", G, (), "Q7", True),
     ("A08", G, ("default_currency",), "Q8", True),
+    ("A09", G, (), "Q3", True),
+    ("A10", G, (), "Q3", True),
     ("A11", G, ("small_count_threshold",), "Q10", True),
     ("D18", L, ("institution_name", "unit_name"), "Q17", True),
 ]
@@ -171,7 +175,7 @@ def test_flagged_placeholder_ids_in_registry_order() -> None:
     assert flagged_placeholder_ids() == tuple(row[0] for row in EXPECTED_REGISTRY if row[4])
     assert flagged_placeholder_ids() == (
         "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10",
-        "A02", "A04", "A05", "A08", "A11", "D18",
+        "A02", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "D18",
     )  # fmt: skip
     assert isinstance(flagged_placeholder_ids(), tuple)
 
@@ -235,8 +239,17 @@ def test_registry_check_detects_broken_invariants(monkeypatch: pytest.MonkeyPatc
         ({"cert_warning_days": -1}, "NEGATIVE_DAYS", "cert_warning_days"),
         ({"maintenance_warning_days": -5}, "NEGATIVE_DAYS", "maintenance_warning_days"),
         ({"backup_reminder_days": -1}, "NEGATIVE_DAYS", "backup_reminder_days"),
-        ({"cert_warning_days": 1.5}, "NEGATIVE_DAYS", "cert_warning_days"),
-        ({"cert_warning_days": "90"}, "NEGATIVE_DAYS", "cert_warning_days"),
+        ({"cert_warning_days": 1.5}, "INVALID_TYPE", "cert_warning_days"),
+        ({"cert_warning_days": "90"}, "INVALID_TYPE", "cert_warning_days"),
+        ({"maintenance_warning_days": None}, "INVALID_TYPE", "maintenance_warning_days"),
+        ({"cert_warning_days": 3651}, "VALUE_TOO_LARGE", "cert_warning_days"),
+        ({"cert_warning_days": 10**9}, "VALUE_TOO_LARGE", "cert_warning_days"),
+        ({"maintenance_warning_days": 3651}, "VALUE_TOO_LARGE", "maintenance_warning_days"),
+        ({"backup_reminder_days": 3651}, "VALUE_TOO_LARGE", "backup_reminder_days"),
+        ({"min_passphrase_length": 129}, "VALUE_TOO_LARGE", "min_passphrase_length"),
+        ({"daily_backups_kept": 366}, "VALUE_TOO_LARGE", "daily_backups_kept"),
+        ({"small_count_threshold": 1001}, "VALUE_TOO_LARGE", "small_count_threshold"),
+        ({"ppe_validity_months": {"A": 601}}, "VALUE_TOO_LARGE", "ppe_validity_months"),
         ({"cert_warning_days": True}, "INVALID_TYPE", "cert_warning_days"),
         ({"backup_reminder_days": False}, "INVALID_TYPE", "backup_reminder_days"),
         ({"small_count_threshold": 0}, "THRESHOLD_TOO_LOW", "small_count_threshold"),
@@ -301,6 +314,27 @@ def test_boundary_values_are_accepted() -> None:
             unit_name="",
             report_handling_notice="n" * 200,
             operator_label="o" * 200,
+        )
+    )
+
+
+def test_maximum_values_are_accepted() -> None:
+    assert (
+        cfg.MAX_WARNING_DAYS,
+        cfg.MAX_DAILY_BACKUPS,
+        cfg.MAX_PASSPHRASE_LENGTH,
+        cfg.MAX_SMALL_COUNT_THRESHOLD,
+        cfg.MAX_VALIDITY_MONTHS,
+    ) == (3650, 365, 128, 1000, 600)
+    validate(
+        ReadinessConfig(
+            cert_warning_days=3650,
+            maintenance_warning_days=3650,
+            backup_reminder_days=3650,
+            min_passphrase_length=128,
+            daily_backups_kept=365,
+            small_count_threshold=1000,
+            ppe_validity_months={"A": 600, "B": None, "C": 1},
         )
     )
 
@@ -378,7 +412,13 @@ def test_missing_keys_take_the_defaults_and_unknown_keys_are_ignored() -> None:
 @pytest.mark.parametrize(
     ("key", "value", "code"),
     [
-        ("config.cert_warning_days", "90", "NEGATIVE_DAYS"),
+        ("config.cert_warning_days", "90", "INVALID_TYPE"),
+        ("config.cert_warning_days", 1.5, "INVALID_TYPE"),
+        ("config.maintenance_warning_days", "30", "INVALID_TYPE"),
+        ("config.backup_reminder_days", 2.0, "INVALID_TYPE"),
+        ("config.cert_warning_days", -1, "NEGATIVE_DAYS"),
+        ("config.cert_warning_days", 10**9, "VALUE_TOO_LARGE"),
+        ("config.daily_backups_kept", 10**9, "VALUE_TOO_LARGE"),
         ("config.cert_warning_days", True, "INVALID_TYPE"),
         ("config.snapshot_monthly", 1, "INVALID_TYPE"),
         ("config.small_count_threshold", None, "INVALID_TYPE"),
