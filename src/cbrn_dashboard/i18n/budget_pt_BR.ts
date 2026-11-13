@@ -53,6 +53,10 @@
         <translation type="unfinished">Uma linha de execução tem data fora do exercício fiscal da sua entrada.</translation>
     </message>
     <message>
+        <source>The currency cannot change while the entry has execution rows.</source>
+        <translation type="unfinished">A moeda não pode mudar enquanto a entrada tiver linhas de execução.</translation>
+    </message>
+    <message>
         <source>An execution row refers to an entry that does not exist.</source>
         <translation type="unfinished">Uma linha de execução se refere a uma entrada que não existe.</translation>
     </message>
@@ -290,12 +294,16 @@
         <translation type="unfinished">Linhas de execução da entrada selecionada</translation>
     </message>
     <message>
-        <source>Delete entry %1 together with its execution rows?</source>
-        <translation type="unfinished">Excluir a entrada %1 junto com as suas linhas de execução?</translation>
+        <source>Delete the entry of %1 in %2 (%3) together with its execution rows?</source>
+        <translation type="unfinished">Excluir a entrada de %1 em %2 (%3) junto com as suas linhas de execução?</translation>
     </message>
     <message>
-        <source>Delete the execution row %1?</source>
-        <translation type="unfinished">Excluir a linha de execução %1?</translation>
+        <source>Delete the entry of %1 in %2 together with its execution rows?</source>
+        <translation type="unfinished">Excluir a entrada de %1 em %2 junto com as suas linhas de execução?</translation>
+    </message>
+    <message>
+        <source>Delete the execution row of %1 for %2?</source>
+        <translation type="unfinished">Excluir a linha de execução de %1 no valor de %2?</translation>
     </message>
     <message>
         <source>Deactivate funding source</source>

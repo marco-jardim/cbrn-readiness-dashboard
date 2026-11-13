@@ -13,7 +13,7 @@ of the offending field; the UI maps codes to texts. Every mutating method
   ``change_log`` row per affected row, stamped with the injected clock and the current operator).
 
 Money (D15, D27): the service works in MINOR UNITS ONLY. Amounts are whole ``int`` numbers (``bool``
-and ``float`` are refused), never negative, and may be as large as the database integer allows;
+and ``float`` are refused), never negative, and at most ``MAX_MINOR`` (2**53 - 1);
 parsing what users type into minor units is the UI's job. Currencies are never converted or added.
 The currency must be in the allow-list of ``domain/budget.py``; a new entry created without one gets
 the configured default currency (A08). Corrections are made by editing a row (every edit is in
@@ -39,8 +39,10 @@ from cbrn_dashboard.domain.budget import (
     BudgetTotal,
     is_valid_currency,
 )
+from cbrn_dashboard.domain.config import ConfigError, ReadinessConfig
 from cbrn_dashboard.domain.dates import InvalidDateError, format_iso_date, parse_iso_date
 from cbrn_dashboard.domain.indicators import IndicatorValue
+from cbrn_dashboard.services.config import CORRUPT_SETTING
 from cbrn_dashboard.services.errors import (
     CODE_IMMUTABLE,
     INVALID_CODE,
@@ -62,6 +64,7 @@ from cbrn_dashboard.storage.settings_repo import load_config
 
 __all__ = [
     "BUILT_IN_SOURCE",
+    "CURRENCY_IN_USE",
     "DUPLICATE_CODE",
     "DUPLICATE_ENTRY",
     "DUPLICATE_EXECUTION",
@@ -100,15 +103,23 @@ SOURCE_IN_USE = "SOURCE_IN_USE"
 BUILT_IN_SOURCE = "BUILT_IN_SOURCE"
 #: An inactive source cannot receive new entries.
 SOURCE_INACTIVE = "SOURCE_INACTIVE"
+#: The currency of an entry cannot change while it has execution rows (D15: no conversion).
+CURRENCY_IN_USE = "CURRENCY_IN_USE"
+
+#: An execution row dated outside the fiscal year of its entry. It is a refusal when a row is
+#: added or changed (``executed_on``) or when the fiscal year of an entry with rows changes
+#: (``fiscal_year``), and a data-quality finding (:meth:`BudgetService.data_quality`) for rows that
+#: are already stored that way.
+EXECUTION_OUTSIDE_FISCAL_YEAR = "EXECUTION_OUTSIDE_FISCAL_YEAR"
 
 # Data-quality codes (non-blocking findings).
-#: An execution row is dated outside the fiscal year of its entry.
-EXECUTION_OUTSIDE_FISCAL_YEAR = "EXECUTION_OUTSIDE_FISCAL_YEAR"
 #: An execution row whose entry does not exist.
 ORPHAN_EXECUTION = "ORPHAN_EXECUTION"
 
-#: The largest amount the database can hold (SQLite signed 64-bit integer), in minor units.
-MAX_MINOR = 2**63 - 1
+#: The largest amount the service stores, in minor units: 2**53 - 1, the largest integer that a
+#: ``float`` holds exactly (the indicator context carries amounts as floats; the database itself
+#: could hold up to 2**63 - 1).
+MAX_MINOR = 2**53 - 1
 
 _MIN_YEAR = 1900
 _MAX_YEAR = 2200
@@ -290,6 +301,15 @@ def _parse_date(value: str | date, field: str) -> date:
         raise ServiceError(INVALID_DATE, field) from None
 
 
+def _require_in_year(entry: EntryRow, day: date) -> None:
+    """The date of an execution row lies in the fiscal year of its entry (A08)."""
+    require(
+        rules.fiscal_year_of(day) == entry.fiscal_year,
+        EXECUTION_OUTSIDE_FISCAL_YEAR,
+        "executed_on",
+    )
+
+
 @contextmanager
 def _translated() -> Iterator[None]:
     """Turn the storage errors with a service meaning into service errors; re-raise the rest."""
@@ -362,6 +382,13 @@ class BudgetService:
         if row is None:
             raise ServiceError(NOT_FOUND, "execution_id")
         return row
+
+    def _config(self) -> ReadinessConfig:
+        """The stored configuration; ``CORRUPT_SETTING`` when a stored value is unusable."""
+        try:
+            return load_config(self._conn)
+        except ConfigError as exc:
+            raise ServiceError(CORRUPT_SETTING, exc.field or None) from exc
 
     # ----- funding sources
 
@@ -488,10 +515,26 @@ class BudgetService:
         elif current is not None:
             currency = current.currency
         else:
-            currency = load_config(self._conn).default_currency  # A08
+            currency = self._config().default_currency  # A08
         valid = isinstance(currency, str) and is_valid_currency(currency)
         require(valid, INVALID_CURRENCY, "currency")
         return currency
+
+    def _check_rows_still_fit(self, current: EntryRow, fiscal_year: int, currency: str) -> None:
+        """Refuse a currency or fiscal-year change that its execution rows cannot follow.
+
+        D15 (no conversion): another currency would reinterpret the stored minor units, so it is
+        ``CURRENCY_IN_USE``. A new fiscal year must contain the date of every row.
+        """
+        rows = repo.list_executions(self._conn, current.id)
+        if not rows:
+            return
+        require(currency == current.currency, CURRENCY_IN_USE, "currency")
+        if fiscal_year != current.fiscal_year:
+            inside = all(
+                rules.fiscal_year_of(parse_iso_date(row.executed_on)) == fiscal_year for row in rows
+            )
+            require(inside, EXECUTION_OUTSIDE_FISCAL_YEAR, "fiscal_year")
 
     def _validate_entry(self, data: EntryInput, entry_id: int | None) -> _EntryFields:
         fiscal_year = _year(data.fiscal_year)
@@ -501,6 +544,8 @@ class BudgetService:
         current = None if entry_id is None else self._entry_row(entry_id)
         currency = self._currency(data.currency, current)
         allocated_minor = _allocated(data.allocated_minor)
+        if current is not None:
+            self._check_rows_still_fit(current, fiscal_year, currency)
         if current is None or current.source_id != source.id:
             require(source.active, SOURCE_INACTIVE, "source_id")
         description = "" if data.description is None else data.description.strip()
@@ -536,7 +581,11 @@ class BudgetService:
         return entry_id
 
     def update_entry(self, entry_id: int, data: EntryInput) -> None:
-        """Change an entry (only differences are logged); its execution rows stay with it."""
+        """Change an entry (only differences are logged); its execution rows stay with it.
+
+        With execution rows the currency cannot change (``CURRENCY_IN_USE``) and the fiscal year
+        can only change to one that contains every row (``EXECUTION_OUTSIDE_FISCAL_YEAR``).
+        """
         self._require_writable()
         with _translated(), transaction(self._conn):
             self._entry_row(entry_id)
@@ -600,12 +649,14 @@ class BudgetService:
     ) -> int:
         """Add a dated execution row to an entry; returns its id.
 
-        The date need not fall in the entry's fiscal year (see :meth:`data_quality`).
+        The date must fall in the entry's fiscal year (A08: the calendar year), else
+        ``EXECUTION_OUTSIDE_FISCAL_YEAR`` on ``executed_on``.
         """
         self._require_writable()
         with _translated(), transaction(self._conn):
-            self._entry_row(entry_id)
+            entry = self._entry_row(entry_id)
             day = _parse_date(executed_on, "executed_on")
+            _require_in_year(entry, day)
             amount = _executed(amount_minor)
             text = format_iso_date(day)
             existing = repo.get_execution_by_key(self._conn, entry_id, text, amount)
@@ -626,11 +677,15 @@ class BudgetService:
         amount_minor: int,
         note: str | None = None,
     ) -> None:
-        """Correct an execution row (the way to fix a mistake; the edit is in ``change_log``)."""
+        """Correct an execution row (the way to fix a mistake; the edit is in ``change_log``).
+
+        The date must fall in the fiscal year of the row's entry, like when adding a row.
+        """
         self._require_writable()
         with _translated(), transaction(self._conn):
             current = self._execution_row(execution_id)
             day = _parse_date(executed_on, "executed_on")
+            _require_in_year(self._entry_row(current.entry_id), day)
             amount = _executed(amount_minor)
             text = format_iso_date(day)
             existing = repo.get_execution_by_key(self._conn, current.entry_id, text, amount)
@@ -679,14 +734,15 @@ class BudgetService:
 
     def target_scale(self, as_of: date) -> float:
         """The factor for the ``BUD_EXEC_RATE`` target: elapsed year fraction, or 1.0 (P08)."""
-        prorate = load_config(self._conn).budget_prorate_target
+        prorate = self._config().budget_prorate_target
         return rules.target_scale(as_of, prorate=prorate)
 
     def data_quality(self, as_of: date) -> list[DataQualityIssue]:
         """Non-blocking findings: execution rows outside their entry's fiscal year and orphans.
 
-        The findings do not depend on the date; ``as_of`` keeps the signature uniform with the
-        other as-of views.
+        The service itself no longer writes such rows (they are refused when added or changed);
+        the findings are for data that got into the database another way. They do not depend on
+        the date; ``as_of`` keeps the signature uniform with the other as-of views.
         """
         del as_of
         entries = self._domain_entries()

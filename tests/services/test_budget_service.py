@@ -17,6 +17,7 @@ from cbrn_dashboard.domain import budget as rules
 from cbrn_dashboard.domain.budget import BudgetEntry, BudgetExecution
 from cbrn_dashboard.services.budget import (
     BUILT_IN_SOURCE,
+    CURRENCY_IN_USE,
     DUPLICATE_CODE,
     DUPLICATE_ENTRY,
     DUPLICATE_EXECUTION,
@@ -34,6 +35,7 @@ from cbrn_dashboard.services.budget import (
     SourceView,
     source_label,
 )
+from cbrn_dashboard.services.config import CORRUPT_SETTING
 from cbrn_dashboard.services.errors import (
     CODE_IMMUTABLE,
     INVALID_CODE,
@@ -44,6 +46,7 @@ from cbrn_dashboard.services.errors import (
     REQUIRED,
     ServiceError,
 )
+from cbrn_dashboard.storage import budget_repo
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.storage.repository import WriteContext
 from cbrn_dashboard.storage.settings_repo import load_config, save_config
@@ -677,15 +680,41 @@ def test_duplicate_execution_is_refused(
     assert service.get_entry(entry_id).executions[0].note == "so a nota"
 
 
-def test_execution_outside_the_fiscal_year_is_stored_and_flagged(service: BudgetService) -> None:
+def test_execution_outside_the_fiscal_year_is_refused(
+    service: BudgetService, db: DatabaseConnection, change_log_rows: ChangeLogRows
+) -> None:
+    entry_id = _new_entry(service, _sid(service, "DIRSA"), fiscal_year=2026)
+    inside = service.add_execution(entry_id, "2026-01-01", 1)
+    service.add_execution(entry_id, "2026-12-31", 2)
+    state = _state(db, change_log_rows)
+
+    for day in ("2025-12-31", "2027-01-01", date(2025, 6, 1)):
+        error = _error(lambda day=day: service.add_execution(entry_id, day, 10))
+        assert (error.code, error.field) == (EXECUTION_OUTSIDE_FISCAL_YEAR, "executed_on")
+    # a row cannot be moved out of the year either
+    error = _error(lambda: service.update_execution(inside, "2027-01-01", 1))
+    assert (error.code, error.field) == (EXECUTION_OUTSIDE_FISCAL_YEAR, "executed_on")
+    assert _state(db, change_log_rows) == state
+
+    # the first and last day of the year, and a move inside the year, are fine
+    service.update_execution(inside, "2026-06-01", 1)
+    assert service.data_quality(AS_OF) == []
+
+
+def test_data_quality_flags_stored_rows_outside_the_fiscal_year(
+    service: BudgetService, db: DatabaseConnection, clock: FixedClock
+) -> None:
+    """Rows that got into the database another way are still found (and can be corrected)."""
     entry_id = _new_entry(service, _sid(service, "DIRSA"), fiscal_year=2026)
     assert service.data_quality(AS_OF) == []
     service.add_execution(entry_id, "2026-01-01", 1)
-    service.add_execution(entry_id, "2026-12-31", 2)
-    assert service.data_quality(AS_OF) == []
-
-    service.add_execution(entry_id, "2025-12-31", 10)
-    late = service.add_execution(entry_id, "2027-01-01", 20)
+    ctx = WriteContext(db, clock, OPERATOR)
+    budget_repo.insert_execution(
+        ctx, entry_id=entry_id, executed_on="2025-12-31", amount_minor=10, note=None
+    )
+    late = budget_repo.insert_execution(
+        ctx, entry_id=entry_id, executed_on="2027-01-01", amount_minor=20, note=None
+    )
     issues = service.data_quality(AS_OF)
     assert [(i.code, i.entry_id, i.executed_on, i.amount_minor) for i in issues] == [
         (EXECUTION_OUTSIDE_FISCAL_YEAR, entry_id, date(2025, 12, 31), 10),
@@ -693,7 +722,7 @@ def test_execution_outside_the_fiscal_year_is_stored_and_flagged(service: Budget
     ]
     # the row is attributed to its entry's year regardless of its own date
     total = service.totals_for_year(2026, date(2027, 6, 1))
-    assert [(t.fiscal_year, t.executed_minor) for t in total] == [(2026, 33)]
+    assert [(t.fiscal_year, t.executed_minor) for t in total] == [(2026, 31)]
     assert service.totals_for_year(2025, date(2027, 6, 1)) == []
 
     # correcting the date clears the finding
@@ -701,25 +730,148 @@ def test_execution_outside_the_fiscal_year_is_stored_and_flagged(service: Budget
     assert [i.amount_minor for i in service.data_quality(AS_OF)] == [10]
 
 
+# --------------------------------------------------------------------------- entry with rows
+
+
+def test_currency_of_an_entry_with_execution_rows_cannot_change(
+    service: BudgetService, db: DatabaseConnection, change_log_rows: ChangeLogRows
+) -> None:
+    source_id = _sid(service, "DIRSA")
+    entry_id = _new_entry(service, source_id, currency="BRL", description="Custeio")
+    # without rows the currency may still change
+    service.update_entry(entry_id, EntryInput(2026, source_id, 5, "USD", "Custeio"))
+    assert service.get_entry(entry_id).currency == "USD"
+    service.update_entry(entry_id, EntryInput(2026, source_id, 5, "BRL", "Custeio"))
+
+    row_id = service.add_execution(entry_id, "2026-02-03", 150_000)
+    state = _state(db, change_log_rows)
+    error = _error(
+        lambda: service.update_entry(entry_id, EntryInput(2026, source_id, 5, "USD", "Custeio"))
+    )
+    assert (error.code, error.field) == (CURRENCY_IN_USE, "currency")
+    assert _state(db, change_log_rows) == state
+    view = service.get_entry(entry_id)
+    assert view.currency == "BRL"
+    assert [x.amount_minor for x in view.executions] == [150_000]
+
+    # the same currency, or none (keep it), and every other field stay editable
+    service.update_entry(entry_id, EntryInput(2026, source_id, 7, "BRL", "Custeio", "Nota"))
+    service.update_entry(entry_id, EntryInput(2026, source_id, 8, None, "Custeio"))
+    assert service.get_entry(entry_id).allocated_minor == 8
+
+    # deleting the rows frees the currency again
+    service.delete_execution(row_id)
+    service.update_entry(entry_id, EntryInput(2026, source_id, 8, "EUR", "Custeio"))
+    assert service.get_entry(entry_id).currency == "EUR"
+
+
+def test_fiscal_year_of_an_entry_cannot_leave_its_execution_rows_outside(
+    service: BudgetService, db: DatabaseConnection, change_log_rows: ChangeLogRows
+) -> None:
+    source_id = _sid(service, "DIRSA")
+    entry_id = _new_entry(service, source_id, description="Custeio")
+    # without rows the year may change
+    service.update_entry(entry_id, EntryInput(2027, source_id, 5, "BRL", "Custeio"))
+    service.update_entry(entry_id, EntryInput(2026, source_id, 5, "BRL", "Custeio"))
+
+    service.add_execution(entry_id, "2026-02-03", 100)
+    state = _state(db, change_log_rows)
+    for year in (2025, 2027):
+        data = EntryInput(year, source_id, 5, "BRL", "Custeio")
+        error = _error(lambda data=data: service.update_entry(entry_id, data))
+        assert (error.code, error.field) == (EXECUTION_OUTSIDE_FISCAL_YEAR, "fiscal_year")
+    assert _state(db, change_log_rows) == state
+    assert service.get_entry(entry_id).fiscal_year == 2026
+    assert service.data_quality(AS_OF) == []
+
+
+def test_a_stored_row_outside_the_year_does_not_block_other_edits(
+    service: BudgetService, db: DatabaseConnection, clock: FixedClock
+) -> None:
+    source_id = _sid(service, "DIRSA")
+    entry_id = _new_entry(service, source_id, description="Custeio")
+    budget_repo.insert_execution(
+        WriteContext(db, clock, OPERATOR),
+        entry_id=entry_id,
+        executed_on="2025-12-31",
+        amount_minor=10,
+        note=None,
+    )
+    # the year does not change, so the legacy row is not a reason to refuse an unrelated edit
+    service.update_entry(entry_id, EntryInput(2026, source_id, 9, "BRL", "Custeio"))
+    assert service.get_entry(entry_id).allocated_minor == 9
+    # the year cannot move to one that does not contain it
+    error = _error(
+        lambda: service.update_entry(entry_id, EntryInput(2027, source_id, 9, "BRL", "Custeio"))
+    )
+    assert error.code == EXECUTION_OUTSIDE_FISCAL_YEAR
+    service.update_entry(entry_id, EntryInput(2025, source_id, 9, "BRL", "Custeio"))
+    assert service.data_quality(AS_OF) == []
+
+
+# --------------------------------------------------------------------------- corrupt settings
+
+
+def _corrupt(db: DatabaseConnection, key: str, text: str) -> None:
+    db.execute("INSERT INTO setting (key, value_json) VALUES (?, ?)", (key, text))
+
+
+@pytest.mark.parametrize(
+    ("key", "text"),
+    [
+        ("config.default_currency", "not json"),
+        ("config.default_currency", "42"),
+        ("config.budget_prorate_target", "{"),
+        ("config.cert_warning_days", '"ninety"'),
+    ],
+)
+def test_a_corrupt_setting_is_a_coded_service_error(
+    service: BudgetService,
+    db: DatabaseConnection,
+    change_log_rows: ChangeLogRows,
+    key: str,
+    text: str,
+) -> None:
+    _corrupt(db, key, text)
+    source_id = _sid(service, "DIRSA")
+    state = _state(db, change_log_rows)
+
+    # the default currency is read only when the entry has none
+    error = _error(lambda: service.create_entry(EntryInput(2026, source_id, 5)))
+    assert error.code == CORRUPT_SETTING
+    assert _state(db, change_log_rows) == state
+    assert _error(lambda: service.target_scale(AS_OF)).code == CORRUPT_SETTING
+    # an explicit currency needs no configuration
+    assert _new_entry(service, source_id, currency="USD") > 0
+
+
 # --------------------------------------------------------------------------- exact amounts
 
 
-def test_amounts_above_2_pow_53_stay_exact(service: BudgetService) -> None:
-    entry_id = _new_entry(service, _sid(service, "DIRSA"), allocated=2**60 + 1)
-    service.add_execution(entry_id, "2026-01-10", 2**59 + 3)
-    service.add_execution(entry_id, "2026-02-10", 2**59 + 5)
-
-    view = service.get_entry(entry_id)
-    assert view.allocated_minor == 2**60 + 1
-    assert [x.amount_minor for x in view.executions] == [2**59 + 3, 2**59 + 5]
-    (total,) = service.totals(AS_OF)
-    assert total.allocated_minor == 2**60 + 1
-    assert total.executed_minor == 2**60 + 8
-
-    top = _new_entry(service, _sid(service, "DIRSA"), allocated=MAX_MINOR, description="Maximo")
-    assert service.get_entry(top).allocated_minor == MAX_MINOR
-    service.update_execution(view.executions[0].id, "2026-01-10", MAX_MINOR)
+def test_amounts_are_limited_to_what_a_float_holds_exactly(service: BudgetService) -> None:
+    """The indicator context carries amounts as floats: nothing above 2**53 - 1 is stored."""
+    assert MAX_MINOR == 2**53 - 1
+    assert float(MAX_MINOR) == MAX_MINOR
+    assert float(MAX_MINOR + 1) == MAX_MINOR + 1  # 2**53 itself is exact ...
+    assert float(MAX_MINOR + 2) == float(MAX_MINOR + 1)  # ... but 2**53 + 1 is not
+    dirsa = _sid(service, "DIRSA")
+    entry_id = _new_entry(service, dirsa, allocated=MAX_MINOR)
+    assert service.get_entry(entry_id).allocated_minor == MAX_MINOR
+    row_id = service.add_execution(entry_id, "2026-01-10", MAX_MINOR)
     assert service.get_entry(entry_id).executions[0].amount_minor == MAX_MINOR
+    (value,) = service.indicator_values(AS_OF)
+    assert value.context == {
+        "allocated_minor": float(MAX_MINOR),
+        "executed_minor": float(MAX_MINOR),
+    }
+
+    for too_large in (2**53, 2**53 + 1, 2**60 + 1):
+        error = _error(lambda big=too_large: _new_entry(service, dirsa, allocated=big))
+        assert (error.code, error.field) == (INVALID_AMOUNT, "allocated_minor")
+        error = _error(lambda big=too_large: service.add_execution(entry_id, "2026-01-11", big))
+        assert (error.code, error.field) == (INVALID_AMOUNT, "amount_minor")
+        error = _error(lambda big=too_large: service.update_execution(row_id, "2026-01-10", big))
+        assert error.code == INVALID_AMOUNT
 
 
 # --------------------------------------------------------------------------- as-of views
@@ -754,14 +906,14 @@ def _build_fixture(service: BudgetService) -> _Fixture:
             EntryInput(year, source_id, allocated, currency, description)
         )
         entries.append(BudgetEntry(entry_id, year, code, currency, allocated))
-    # (index of the entry, date, amount): before, on and after AS_OF; one outside the year
+    # (index of the entry, date, amount): before, on and after AS_OF, all in the entry's year
     rows: list[tuple[int, date, int]] = [
         (0, date(2025, 6, 1), 400_000),
         (1, date(2026, 3, 4), 1_000_000),
         (1, date(2026, 3, 5), 500_000),
         (1, date(2026, 3, 6), 700_000),
         (2, date(2026, 1, 15), 250_000),
-        (2, date(2025, 12, 31), 100_000),
+        (2, date(2026, 1, 1), 100_000),
         (3, date(2026, 2, 1), 12_345),
         (4, date(2026, 3, 5), 200_000),
         (4, date(2026, 12, 1), 50_000),
@@ -800,7 +952,7 @@ def test_fixture_results_are_not_trivial(service: BudgetService) -> None:
     assert len(groups) == 6
     dirsa_2026 = groups[(2026, "DIRSA", "BRL")]
     assert dirsa_2026.allocated_minor == 7_500_000  # two entries of the same group
-    assert dirsa_2026.executed_minor == 1_850_000  # 3/4 + 3/5 + 1/15 + 12/31 of 2025; not 3/6
+    assert dirsa_2026.executed_minor == 1_850_000  # 3/4 + 3/5 + 1/15 + 1/1; not 3/6
     assert dirsa_2026.rate == 1_850_000 / 7_500_000
     missing = groups[(2026, SRC_A, "USD")]
     assert (missing.allocated_minor, missing.executed_minor, missing.rate) == (None, 12_345, None)

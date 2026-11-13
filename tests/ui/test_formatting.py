@@ -8,12 +8,14 @@ explicitly.
 
 from datetime import date
 from decimal import Decimal
+from types import MappingProxyType
 
 import pytest
 from PySide6.QtCore import QLocale
 from PySide6.QtWidgets import QDateEdit, QDoubleSpinBox
 from pytestqt.qtbot import QtBot
 
+from cbrn_dashboard.domain import budget as budget_domain
 from cbrn_dashboard.domain.budget import CURRENCY_DECIMALS
 from cbrn_dashboard.i18n import LANGUAGES, UnknownLanguageError
 from cbrn_dashboard.ui.shell import formatting as fmt
@@ -276,6 +278,120 @@ def test_every_allow_listed_currency_is_formattable() -> None:
         assert text == "0." + "0" * (decimals - 1) + "1"
         assert fmt.parse_amount(text, currency, "en_US") == 1
     assert not hasattr(fmt, "CURRENCY_DECIMALS")
+
+
+# ------------------------------------------------------- currencies with 0 and 3 decimals
+
+
+@pytest.fixture
+def widened_allow_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """JPY (0 decimals) and KWD (3 decimals) join the allow-list, with test symbols.
+
+    The real allow-list has only 2-decimal currencies, so the other paths of the formatting code
+    are reachable only through this patch. The symbols are plain ASCII stand-ins.
+    """
+    widened = MappingProxyType({**CURRENCY_DECIMALS, "JPY": 0, "KWD": 3})
+    monkeypatch.setattr(budget_domain, "CURRENCY_DECIMALS", widened)
+    monkeypatch.setitem(fmt._CURRENCY_SYMBOLS, "JPY", "YEN")
+    monkeypatch.setitem(fmt._CURRENCY_SYMBOLS, "KWD", "KD")
+
+
+@pytest.mark.usefixtures("widened_allow_list")
+@pytest.mark.parametrize(
+    ("minor", "currency", "pt", "en", "es"),
+    [
+        (0, "JPY", "0", "0", "0"),
+        (1234, "JPY", "1.234", "1,234", "1234"),
+        (1234567, "JPY", "1.234.567", "1,234,567", "1.234.567"),
+        (5, "KWD", "0,005", "0.005", "0,005"),
+        (1234567, "KWD", "1.234,567", "1,234.567", "1234,567"),
+        (12345678, "KWD", "12.345,678", "12,345.678", "12.345,678"),
+    ],
+)
+def test_format_amount_with_zero_and_three_decimals(
+    minor: int, currency: str, pt: str, en: str, es: str
+) -> None:
+    assert fmt.format_amount(minor, currency, "pt_BR") == pt
+    assert fmt.format_amount(minor, currency, "en_US") == en
+    assert fmt.format_amount(minor, currency, "es_ES") == es
+    # what is shown can be typed back
+    assert fmt.parse_amount(pt, currency, "pt_BR") == minor
+    assert fmt.parse_amount(en, currency, "en_US") == minor
+    assert fmt.parse_amount(es, currency, "es_ES") == minor
+
+
+@pytest.mark.usefixtures("widened_allow_list")
+def test_format_amount_of_a_negative_amount_with_zero_and_three_decimals() -> None:
+    assert fmt.format_amount(-5, "JPY", "en_US") == "-5"
+    assert fmt.format_amount(-1500, "KWD", "en_US") == "-1.500"
+    assert fmt.format_amount(-1500, "KWD", "pt_BR") == "-1,500"
+
+
+@pytest.mark.usefixtures("widened_allow_list")
+@pytest.mark.parametrize(
+    ("minor", "currency", "pt", "en", "es"),
+    [
+        (1234567, "JPY", "YEN\xa01.234.567", "YEN1,234,567", "1.234.567\xa0YEN"),
+        (12345678, "KWD", "KD\xa012.345,678", "KD12,345.678", "12.345,678\xa0KD"),
+        (-5, "KWD", "-KD\xa00,005", "-KD0.005", "-0,005\xa0KD"),
+    ],
+)
+def test_format_money_with_zero_and_three_decimals(
+    minor: int, currency: str, pt: str, en: str, es: str
+) -> None:
+    assert fmt.format_money(minor, currency, "pt_BR") == pt
+    assert fmt.format_money(minor, currency, "en_US") == en
+    assert fmt.format_money(minor, currency, "es_ES") == es
+
+
+@pytest.mark.usefixtures("widened_allow_list")
+@pytest.mark.parametrize(
+    ("text", "currency", "lang", "minor"),
+    [
+        ("1,234,567", "JPY", "en_US", 1234567),
+        ("1.234.567", "JPY", "pt_BR", 1234567),
+        ("1.234", "JPY", "pt_BR", 1234),
+        ("YEN 1,234", "JPY", "en_US", 1234),
+        ("1234", "JPY", "es_ES", 1234),
+        ("12,345.678", "KWD", "en_US", 12345678),
+        ("12,345.6", "KWD", "en_US", 12345600),
+        ("5", "KWD", "en_US", 5000),
+        ("12.345,678", "KWD", "pt_BR", 12345678),
+        ("0,005", "KWD", "pt_BR", 5),
+        ("12.345,678", "KWD", "es_ES", 12345678),
+        ("KD 0,5", "KWD", "es_ES", 500),
+    ],
+)
+def test_parse_amount_with_zero_and_three_decimals(
+    text: str, currency: str, lang: str, minor: int
+) -> None:
+    assert fmt.parse_amount(text, currency, lang) == minor
+
+
+@pytest.mark.usefixtures("widened_allow_list")
+@pytest.mark.parametrize(
+    ("text", "currency", "lang"),
+    [
+        ("1,234.5", "JPY", "en_US"),
+        ("0.5", "JPY", "en_US"),
+        ("1.234,5", "JPY", "pt_BR"),
+        ("1,234", "JPY", "pt_BR"),
+        ("1.2345", "KWD", "en_US"),
+        ("1,2345", "KWD", "pt_BR"),
+    ],
+)
+def test_parse_amount_refuses_more_decimals_than_the_currency_has(
+    text: str, currency: str, lang: str
+) -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.parse_amount(text, currency, lang)
+    assert info.value.code == "TOO_MANY_DECIMALS"
+
+
+def test_the_patch_of_the_allow_list_is_undone_after_the_tests() -> None:
+    with pytest.raises(FormatError) as info:
+        fmt.format_amount(1, "KWD", "en_US")
+    assert info.value.code == "INVALID_CURRENCY"
 
 
 # ---------------------------------------------------------------------------- 64-bit limits

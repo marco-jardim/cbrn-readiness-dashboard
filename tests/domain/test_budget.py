@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from types import MappingProxyType
 
 import pytest
 
@@ -361,6 +362,71 @@ def test_currency_decimals() -> None:
     with pytest.raises(InvalidCurrencyError) as info:
         budget.currency_decimals("GBP")
     assert info.value.code == "INVALID_CURRENCY"
+
+
+@pytest.fixture
+def other_decimals(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The allow-list with a currency of 0 decimals (JPY) and one of 3 decimals (KWD) added."""
+    widened = MappingProxyType({**CURRENCY_DECIMALS, "JPY": 0, "KWD": 3})
+    monkeypatch.setattr(budget, "CURRENCY_DECIMALS", widened)
+
+
+@pytest.mark.usefixtures("other_decimals")
+@pytest.mark.parametrize(
+    ("minor", "currency", "text"),
+    [
+        (0, "JPY", "0"),
+        (1234567, "JPY", "1234567"),
+        (-5, "JPY", "-5"),
+        (0, "KWD", "0.000"),
+        (5, "KWD", "0.005"),
+        (1234567, "KWD", "1234.567"),
+        (-1500, "KWD", "-1.500"),
+        (12345, "BRL", "123.45"),
+    ],
+)
+def test_minor_to_decimal_with_zero_and_three_decimal_currencies(
+    minor: int, currency: str, text: str
+) -> None:
+    assert budget.currency_decimals(currency) == {"JPY": 0, "KWD": 3, "BRL": 2}[currency]
+    assert str(budget.minor_to_decimal(minor, currency)) == text
+    assert budget.minor_to_decimal(minor, currency) == Decimal(text)
+    assert budget.decimal_to_minor(Decimal(text), currency) == minor
+
+
+@pytest.mark.usefixtures("other_decimals")
+@pytest.mark.parametrize(
+    ("text", "currency", "minor"),
+    [
+        ("1234", "JPY", 1234),
+        ("1234.0", "JPY", 1234),
+        ("1E+3", "JPY", 1000),
+        ("1.5", "KWD", 1500),
+        ("1.234", "KWD", 1234),
+        ("0.0050", "KWD", 5),
+        ("2", "KWD", 2000),
+    ],
+)
+def test_decimal_to_minor_with_zero_and_three_decimal_currencies(
+    text: str, currency: str, minor: int
+) -> None:
+    assert budget.decimal_to_minor(Decimal(text), currency) == minor
+
+
+@pytest.mark.usefixtures("other_decimals")
+@pytest.mark.parametrize(
+    ("text", "currency"), [("1234.5", "JPY"), ("0.1", "JPY"), ("1.2345", "KWD")]
+)
+def test_decimal_to_minor_refuses_more_decimals_than_the_currency_has(
+    text: str, currency: str
+) -> None:
+    with pytest.raises(TooManyDecimalsError):
+        budget.decimal_to_minor(Decimal(text), currency)
+
+
+def test_the_extra_currencies_are_not_in_the_real_allow_list() -> None:
+    assert not budget.is_valid_currency("JPY")
+    assert not budget.is_valid_currency("KWD")
 
 
 @pytest.mark.parametrize(

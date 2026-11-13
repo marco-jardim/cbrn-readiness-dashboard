@@ -22,7 +22,7 @@ CREATE TABLE funding_source (
 -- column: execution is stored as dated budget_execution rows (A08).
 CREATE TABLE budget_entry (
     id              INTEGER PRIMARY KEY,
-    fiscal_year     INTEGER NOT NULL,                                  -- A08
+    fiscal_year     INTEGER NOT NULL CHECK (fiscal_year BETWEEN 1900 AND 2200),  -- A08
     source_id       INTEGER NOT NULL REFERENCES funding_source (id) ON DELETE RESTRICT,
     -- ISO 4217 code shape (D15): three upper-case letters.
     currency        TEXT NOT NULL CHECK (length(currency) = 3 AND currency GLOB '[A-Z][A-Z][A-Z]'),
@@ -37,7 +37,9 @@ CREATE TABLE budget_entry (
 CREATE TABLE budget_execution (
     id           INTEGER PRIMARY KEY,
     entry_id     INTEGER NOT NULL REFERENCES budget_entry (id) ON DELETE CASCADE,
-    executed_on  TEXT NOT NULL,
+    -- ISO date shape YYYY-MM-DD; that the date exists is a service rule.
+    executed_on  TEXT NOT NULL
+        CHECK (executed_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     amount_minor INTEGER NOT NULL CHECK (amount_minor >= 0),           -- D27
     note         TEXT,
     UNIQUE (entry_id, executed_on, amount_minor)                       -- import natural key (T8.4)

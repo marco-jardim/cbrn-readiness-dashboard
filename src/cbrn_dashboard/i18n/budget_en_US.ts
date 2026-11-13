@@ -53,6 +53,10 @@
         <translation>An execution row is dated outside the fiscal year of its entry.</translation>
     </message>
     <message>
+        <source>The currency cannot change while the entry has execution rows.</source>
+        <translation>The currency cannot change while the entry has execution rows.</translation>
+    </message>
+    <message>
         <source>An execution row refers to an entry that does not exist.</source>
         <translation>An execution row refers to an entry that does not exist.</translation>
     </message>
@@ -290,12 +294,16 @@
         <translation>Execution rows of the selected entry</translation>
     </message>
     <message>
-        <source>Delete entry %1 together with its execution rows?</source>
-        <translation>Delete entry %1 together with its execution rows?</translation>
+        <source>Delete the entry of %1 in %2 (%3) together with its execution rows?</source>
+        <translation>Delete the entry of %1 in %2 (%3) together with its execution rows?</translation>
     </message>
     <message>
-        <source>Delete the execution row %1?</source>
-        <translation>Delete the execution row %1?</translation>
+        <source>Delete the entry of %1 in %2 together with its execution rows?</source>
+        <translation>Delete the entry of %1 in %2 together with its execution rows?</translation>
+    </message>
+    <message>
+        <source>Delete the execution row of %1 for %2?</source>
+        <translation>Delete the execution row of %1 for %2?</translation>
     </message>
     <message>
         <source>Deactivate funding source</source>

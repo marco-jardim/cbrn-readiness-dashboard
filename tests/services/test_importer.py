@@ -495,6 +495,58 @@ def test_an_execution_of_an_entry_that_does_not_exist_is_an_unknown_reference(
     assert budget_repo.list_executions(db) == []
 
 
+def test_a_blank_execution_amount_is_required_and_writes_nothing(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path, change_log_rows: ChangeLogRows
+) -> None:
+    for name in ("funding_source", "budget_entry"):
+        assert importer.import_file(name, _fixture(name)).ok
+    header = ";".join(_spec("budget_execution").column_codes)
+    path = _write(
+        tmp_path,
+        "blank-amount.csv",
+        f"{header}\n2024;DIRSA;USD;;2024-04-01;;\n2024;DIRSA;USD;;2024-05-01;0.07;\n",
+    )
+    log_before = change_log_rows(db)
+    report = importer.import_file("budget_execution", path)
+    assert report.errors == (_issue(2, "amount", "REQUIRED"),)
+    assert report.imported == 0
+    assert report.total_rows == 2
+    assert budget_repo.list_executions(db) == []  # not even the valid row: all or nothing
+    assert change_log_rows(db) == log_before
+
+
+def test_a_blank_result_value_is_required_and_writes_nothing(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path, change_log_rows: ChangeLogRows
+) -> None:
+    for name in ("evaluation_metric", "exercise_edition"):
+        assert importer.import_file(name, _fixture(name)).ok
+    header = ";".join(_spec("evaluation_result").column_codes)
+    path = _write(
+        tmp_path,
+        "blank-value.csv",
+        f"{header}\nDEMO-ED-1;DEMO-M1;;;\nDEMO-ED-1;DEMO-M2;5.0;;\n",
+    )
+    log_before = change_log_rows(db)
+    report = importer.import_file("evaluation_result", path)
+    assert report.errors == (_issue(2, "value", "REQUIRED"),)
+    assert report.imported == 0
+    assert report.total_rows == 2
+    assert _count(db, "evaluation_result") == 0
+    assert change_log_rows(db) == log_before
+
+
+def test_an_execution_dated_outside_the_year_of_its_entry_is_refused_on_its_date(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    for name in ("funding_source", "budget_entry"):
+        assert importer.import_file(name, _fixture(name)).ok
+    header = ";".join(_spec("budget_execution").column_codes)
+    path = _write(tmp_path, "outside.csv", f"{header}\n2024;DIRSA;USD;;2025-01-01;1.00;\n")
+    report = importer.import_file("budget_execution", path)
+    assert report.errors == (_issue(2, "executed_on", "EXECUTION_OUTSIDE_FISCAL_YEAR"),)
+    assert budget_repo.list_executions(db) == []
+
+
 # --------------------------------------------------------------------------- change_log
 
 
@@ -665,6 +717,9 @@ def test_a_broken_quote_ends_the_reading_and_keeps_the_rows_before_it(tmp_path: 
         ("budget_entry", "2024;DIRSA;BRL;;abc;", "allocated", "INVALID_AMOUNT"),
         ("budget_entry", "20x4;DIRSA;BRL;;1.00;", "fiscal_year", "INVALID_NUMBER"),
         ("budget_execution", "2024;DIRSA;BRL;;2024-02-01;;", "amount", "REQUIRED"),
+        ("budget_execution", "2024;DIRSA;BRL;;2024-02-01; ;", "amount", "REQUIRED"),
+        ("evaluation_result", "DEMO-ED-1;DEMO-M1;;;", "value", "REQUIRED"),
+        ("evaluation_result", "DEMO-ED-1;DEMO-M1; ;;", "value", "REQUIRED"),
     ],
 )
 def test_each_cell_error_code(

@@ -40,18 +40,27 @@ NOT_RECORDED = "-"
 
 
 def money_text(minor: int | None, currency: str, lang: str) -> str:
-    """``minor`` units of ``currency`` as money in ``lang``; ``-`` when there is no amount."""
+    """``minor`` units of ``currency`` as money in ``lang``.
+
+    ``-`` when there is no amount or it cannot be shown (a currency outside the allow-list, or an
+    amount too large): raw minor units would read as 100 times the amount.
+    """
     if minor is None:
         return NOT_RECORDED
     try:
         return format_money(minor, currency, lang)
     except FormatError:
-        return f"{minor} {currency}"
+        return NOT_RECORDED
 
 
 def rate_text(rate: float | None, lang: str) -> str:
-    """The execution rate as a percentage; ``-`` when there is no rate (no data)."""
-    return NOT_RECORDED if rate is None else format_percent(rate, lang)
+    """The execution rate as a percentage; ``-`` when there is no rate or it cannot be shown."""
+    if rate is None:
+        return NOT_RECORDED
+    try:
+        return format_percent(rate, lang)
+    except FormatError:
+        return NOT_RECORDED
 
 
 # --------------------------------------------------------------------------- summary

@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from cbrn_dashboard.domain.budget import CURRENCY_DECIMALS, DEFAULT_CURRENCY, fiscal_year_of
 from cbrn_dashboard.services.budget import (
+    CURRENCY_IN_USE,
     EntryInput,
     EntryView,
     ExecutionView,
@@ -81,14 +82,19 @@ def show_format_error(
 
 
 def _reformat_amount(edit: QLineEdit, currency: str, old_lang: str, new_lang: str) -> None:
-    """Show the amount typed in ``old_lang`` again in the format of ``new_lang`` (if it parses)."""
+    """Show the amount typed in ``old_lang`` again in the format of ``new_lang``.
+
+    Text that did not parse in ``old_lang`` is cleared: left as typed it would be read in
+    ``new_lang`` and could silently become another amount (``1.234`` refused in en-US is 1234 in
+    pt-BR).
+    """
     text = edit.text().strip()
     if not text:
         return
     try:
         edit.setText(format_amount(parse_amount(text, currency, old_lang), currency, new_lang))
     except FormatError:
-        return
+        edit.clear()
 
 
 def _date_edit(parent: QWidget, value: QDate) -> QDateEdit:
@@ -136,6 +142,9 @@ class EntryDialog(FormDialog):
             self.currency_combo.addItem(code, code)
         currency = configured_currency(context) if entry is None else entry.currency
         self.currency_combo.setCurrentIndex(max(0, self.currency_combo.findData(currency)))
+        # D15: the stored minor units of the rows would be read in another currency.
+        self._currency_locked = entry is not None and bool(entry.executions)
+        self.currency_combo.setEnabled(not self._currency_locked)
         self.allocated_edit = QLineEdit(self)
         self.description_edit = QLineEdit(self)
         self.notes_edit = QPlainTextEdit(self)
@@ -175,6 +184,8 @@ class EntryDialog(FormDialog):
         else:
             self.setWindowTitle(QCoreApplication.translate("Budget", "Edit entry"))
         lang = self.language
+        locked_reason = error_label(CURRENCY_IN_USE) if self._currency_locked else ""
+        self.currency_combo.setToolTip(locked_reason)
         for index in range(self.source_combo.count()):
             source = self._sources.get(int(self.source_combo.itemData(index)))
             if source is not None:
@@ -244,6 +255,10 @@ class ExecutionDialog(FormDialog):
         else:
             start = date(entry.fiscal_year, 1, 1)
         self.date_edit = _date_edit(self, to_qdate(start))
+        # A08: the fiscal year is the calendar year; the service refuses a date outside it.
+        self.date_edit.setDateRange(
+            to_qdate(date(entry.fiscal_year, 1, 1)), to_qdate(date(entry.fiscal_year, 12, 31))
+        )
         self.amount_edit = QLineEdit(self)
         self.note_edit = QLineEdit(self)
         self.add_field(

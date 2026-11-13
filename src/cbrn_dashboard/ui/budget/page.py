@@ -34,7 +34,7 @@ from cbrn_dashboard.ui.budget.dialogs import (
     SourceDialog,
     configured_currency,
 )
-from cbrn_dashboard.ui.budget.labels import error_label, source_name
+from cbrn_dashboard.ui.budget.labels import error_label, fill_placeholders, source_name
 from cbrn_dashboard.ui.budget.models import (
     EntriesModel,
     ExecutionsModel,
@@ -316,15 +316,25 @@ class BudgetPage(QWidget):
             return
         lang = current_language(self.context)
         sources = {s.code: s for s in service.list_sources(include_inactive=True)}
-        name = " ".join(
-            part for part in (source_name(entry.source_code, lang, sources), entry.currency) if part
-        )
-        if entry.description:
-            name = f"{name} ({entry.description})"
+        source = source_name(entry.source_code, lang, sources)
         title = QCoreApplication.translate("Budget", "Delete entry")
-        question = QCoreApplication.translate(
-            "Budget", "Delete entry %1 together with its execution rows?"
-        ).replace("%1", name)
+        if entry.description:
+            question = fill_placeholders(
+                QCoreApplication.translate(
+                    "Budget", "Delete the entry of %1 in %2 (%3) together with its execution rows?"
+                ),
+                source,
+                entry.currency,
+                entry.description,
+            )
+        else:
+            question = fill_placeholders(
+                QCoreApplication.translate(
+                    "Budget", "Delete the entry of %1 in %2 together with its execution rows?"
+                ),
+                source,
+                entry.currency,
+            )
         if self.context.prompts.confirm(self, title, question):
             apply_change(self.context, self, error_label, lambda: service.delete_entry(entry.id))
 
@@ -348,13 +358,11 @@ class BudgetPage(QWidget):
         if entry is None or execution is None or service is None:
             return
         lang = current_language(self.context)
-        what = (
-            f"{format_date(execution.executed_on, lang)} "
-            f"{money_text(execution.amount_minor, entry.currency, lang)}"
-        )
         title = QCoreApplication.translate("Budget", "Delete execution")
-        question = QCoreApplication.translate("Budget", "Delete the execution row %1?").replace(
-            "%1", what
+        question = fill_placeholders(
+            QCoreApplication.translate("Budget", "Delete the execution row of %1 for %2?"),
+            format_date(execution.executed_on, lang),
+            money_text(execution.amount_minor, entry.currency, lang),
         )
         if self.context.prompts.confirm(self, title, question):
             apply_change(
@@ -380,6 +388,7 @@ class BudgetSettingsSection(QWidget):
         self._syncing = False
         self._currency_placeholder: str | None = None
         self._prorate_placeholder: str | None = None
+        self._config_error: str | None = None
         self.model = SourcesModel(self)
         self.view = make_table_view(self.model, self)
         self.view.setObjectName("sources_view")
@@ -415,6 +424,10 @@ class BudgetSettingsSection(QWidget):
             self.delete_action,
         )
 
+        self.config_error_label = QLabel(self)
+        self.config_error_label.setObjectName("config_error_label")
+        self.config_error_label.setWordWrap(True)
+        self.config_error_label.setVisible(False)
         self.currency_caption = QLabel(self)
         self.currency_combo = QComboBox(self)
         self.currency_combo.setObjectName("default_currency_combo")
@@ -462,6 +475,7 @@ class BudgetSettingsSection(QWidget):
         layout.addWidget(self.sources_caption)
         layout.addWidget(self.view, 1)
         layout.addLayout(action_row(self._actions, self))
+        layout.addWidget(self.config_error_label)
         layout.addLayout(currency_row)
         layout.addLayout(prorate_row)
 
@@ -495,7 +509,14 @@ class BudgetSettingsSection(QWidget):
         self.prorate_confirm.setText(confirm)
         for action in self._actions:
             action.retranslate()
+        self._show_config_error()
         self.model.set_language(current_language(self.context))
+
+    def _show_config_error(self) -> None:
+        """Show why the settings controls are off (a configuration that cannot be read)."""
+        code = self._config_error
+        self.config_error_label.setVisible(code is not None)
+        self.config_error_label.setText("" if code is None else error_label(code))
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
@@ -527,13 +548,16 @@ class BudgetSettingsSection(QWidget):
         prorate = True
         self._currency_placeholder = None
         self._prorate_placeholder = None
+        self._config_error = None
         if config is not None:
             try:
                 prorate = bool(config.load().budget_prorate_target)
                 self._currency_placeholder = config.badge_for_field("default_currency")
                 self._prorate_placeholder = config.badge_for_field("budget_prorate_target")
-            except ServiceError:
+            except ServiceError as error:
+                self._config_error = error.code
                 config = None
+        self._show_config_error()
         self._syncing = True
         try:
             self.currency_combo.setCurrentIndex(max(0, self.currency_combo.findData(currency)))
@@ -621,8 +645,8 @@ class BudgetSettingsSection(QWidget):
             return
         name = source_name(source.code, current_language(self.context), {source.code: source})
         title = QCoreApplication.translate("Budget", "Delete funding source")
-        question = QCoreApplication.translate("Budget", "Delete funding source %1?").replace(
-            "%1", name
+        question = fill_placeholders(
+            QCoreApplication.translate("Budget", "Delete funding source %1?"), name
         )
         if self.context.prompts.confirm(self, title, question):
             apply_change(self.context, self, error_label, lambda: service.delete_source(source.id))

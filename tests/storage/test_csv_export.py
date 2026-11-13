@@ -60,6 +60,7 @@ from cbrn_dashboard.storage.csv_io import (
 )
 from cbrn_dashboard.storage.db import DatabaseConnection, open_database
 from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
+from cbrn_dashboard.storage.repository import WriteContext
 
 CLOCK = FixedClock.at("2026-03-05T12:00:00Z")
 
@@ -284,14 +285,15 @@ def _seed_budget(conn: DatabaseConnection) -> None:
     en3 = budget.create_entry(
         EntryInput(fiscal_year=2025, source_id=opcw, currency="EUR", allocated_minor=None)
     )
-    budget.create_entry(
-        EntryInput(
-            fiscal_year=2024,
-            source_id=custom,
-            currency="BRL",
-            allocated_minor=BIG_MINOR,
-            description="big",
-        )
+    # The service refuses amounts above 2**53 - 1; the exporter must still keep them exact.
+    budget_repo.insert_entry(
+        WriteContext(conn, CLOCK, ""),
+        fiscal_year=2024,
+        source_id=custom,
+        currency="BRL",
+        allocated_minor=BIG_MINOR,
+        description="big",
+        notes=None,
     )
     budget.create_entry(
         EntryInput(

@@ -251,6 +251,23 @@ def test_negative_allocated_minor_is_rejected(migrated_db: DatabaseConnection) -
     assert _count(migrated_db, "budget_entry") == 0
 
 
+@pytest.mark.parametrize("year", [1900, 2026, 2200])
+def test_fiscal_year_inside_1900_to_2200_is_accepted(
+    migrated_db: DatabaseConnection, year: int
+) -> None:
+    _add_entry(migrated_db, fiscal_year=year)
+    assert _count(migrated_db, "budget_entry") == 1
+
+
+@pytest.mark.parametrize("year", [-1, 0, 26, 1899, 2201, 20260])
+def test_fiscal_year_outside_1900_to_2200_is_rejected(
+    migrated_db: DatabaseConnection, year: int
+) -> None:
+    with pytest.raises(sqlite3.IntegrityError):
+        _add_entry(migrated_db, fiscal_year=year)
+    assert _count(migrated_db, "budget_entry") == 0
+
+
 def test_entry_with_unknown_source_is_rejected(migrated_db: DatabaseConnection) -> None:
     with pytest.raises(sqlite3.IntegrityError):
         _add_entry(migrated_db, source_id=999_999)
@@ -284,6 +301,38 @@ def test_execution_with_negative_amount_is_rejected(migrated_db: DatabaseConnect
     entry_id = _add_entry(migrated_db)
     with pytest.raises(sqlite3.IntegrityError):
         _add_execution(migrated_db, entry_id, amount_minor=-1)
+    assert _count(migrated_db, "budget_execution") == 0
+
+
+@pytest.mark.parametrize("day", ["2030-03-31", "1900-01-01", "2200-12-31"])
+def test_execution_date_of_iso_shape_is_accepted(migrated_db: DatabaseConnection, day: str) -> None:
+    entry_id = _add_entry(migrated_db)
+    _add_execution(migrated_db, entry_id, executed_on=day)
+    assert _count(migrated_db, "budget_execution") == 1
+
+
+@pytest.mark.parametrize(
+    "day",
+    [
+        "",
+        "2030-3-31",
+        "30-03-2030",
+        "2030/03/31",
+        "20300331",
+        "2030-03-31 ",
+        " 2030-03-31",
+        "2030-03-311",
+        "2030-03-31T00:00:00",
+        "abcd-ef-gh",
+        "2030-0a-31",
+    ],
+)
+def test_execution_date_of_another_shape_is_rejected(
+    migrated_db: DatabaseConnection, day: str
+) -> None:
+    entry_id = _add_entry(migrated_db)
+    with pytest.raises(sqlite3.IntegrityError):
+        _add_execution(migrated_db, entry_id, executed_on=day)
     assert _count(migrated_db, "budget_execution") == 0
 
 

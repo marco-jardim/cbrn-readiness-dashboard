@@ -8,12 +8,14 @@ service errors, of the configuration service and every ``FormatError`` code has 
 entry; an unknown code is shown as itself, never as an exception.
 """
 
+import re
 from collections.abc import Callable, Mapping
 
 from PySide6.QtCore import QCoreApplication
 
 from cbrn_dashboard.services.budget import (
     BUILT_IN_SOURCE,
+    CURRENCY_IN_USE,
     DUPLICATE_CODE,
     DUPLICATE_ENTRY,
     DUPLICATE_EXECUTION,
@@ -51,9 +53,26 @@ __all__ = [
     "ALL_ERROR_CODES",
     "BUILT_IN_SOURCE_CODES",
     "error_label",
+    "fill_placeholders",
     "source_display",
     "source_name",
 ]
+
+_PLACEHOLDER = re.compile(r"%([1-9])")
+
+
+def fill_placeholders(text: str, *values: str) -> str:
+    """Replace ``%1``..``%9`` by ``values`` in ONE pass (a translation may reorder them).
+
+    A value that itself contains ``%2`` is inserted as it is, never replaced again.
+    """
+
+    def substitute(match: re.Match[str]) -> str:
+        position = int(match.group(1)) - 1
+        return values[position] if position < len(values) else match.group(0)
+
+    return _PLACEHOLDER.sub(substitute, text)
+
 
 _SOURCE_LABELS: dict[str, Callable[[], str]] = {
     "DIRSA": lambda: "DIRSA",
@@ -87,6 +106,9 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     ),
     EXECUTION_OUTSIDE_FISCAL_YEAR: lambda: QCoreApplication.translate(
         "Budget", "An execution row is dated outside the fiscal year of its entry."
+    ),
+    CURRENCY_IN_USE: lambda: QCoreApplication.translate(
+        "Budget", "The currency cannot change while the entry has execution rows."
     ),
     ORPHAN_EXECUTION: lambda: QCoreApplication.translate(
         "Budget", "An execution row refers to an entry that does not exist."

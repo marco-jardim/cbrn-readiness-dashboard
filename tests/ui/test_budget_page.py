@@ -11,6 +11,7 @@ from PySide6.QtCore import QAbstractItemModel, QCoreApplication, QDate, Qt
 from PySide6.QtWidgets import QDialog, QWidget
 from pytestqt.qtbot import QtBot
 
+from cbrn_dashboard.domain.budget import BudgetTotal
 from cbrn_dashboard.domain.config import ReadinessConfig
 from cbrn_dashboard.services import budget as budget_module
 from cbrn_dashboard.services import errors as errors_module
@@ -29,6 +30,7 @@ from cbrn_dashboard.ui.budget.labels import (
     error_label,
     source_display,
 )
+from cbrn_dashboard.ui.budget.models import SummaryModel, money_text, rate_text
 from cbrn_dashboard.ui.budget.page import (
     BudgetPage,
     BudgetSettingsSection,
@@ -51,6 +53,7 @@ pytestmark = pytest.mark.ui
 
 LANGUAGES = ("pt_BR", "en_US", "es_ES")
 NBSP = "\xa0"
+CURRENCY_IN_USE_EN = "The currency cannot change while the entry has execution rows."
 
 
 # --------------------------------------------------------------------------- helpers
@@ -264,7 +267,35 @@ def test_a_typed_amount_is_reformatted_when_the_language_changes(
     assert dialog.allocated_edit.text() == "1.234,56"
     dialog.allocated_edit.setText("not a number")
     app_context.translator_manager.set_language("es_ES")
-    assert dialog.allocated_edit.text() == "not a number"
+    # text that did not parse is not carried over: it would be read again in the new language
+    assert dialog.allocated_edit.text() == ""
+
+
+def test_a_text_refused_in_the_old_language_is_not_read_again_in_the_new_one(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    app_context.translator_manager.set_language("en_US")
+    with pytest.raises(formatting_module.FormatError):
+        parse_amount("1.234", "BRL", "en_US")  # three decimals: refused in en-US ...
+    assert parse_amount("1.234", "BRL", "pt_BR") == 123400  # ... but 1234 reais in pt-BR
+
+    entry_id = _add_entry(app_context)
+    entry_dialog = EntryDialog(app_context)
+    qtbot.addWidget(entry_dialog)
+    entry_dialog.allocated_edit.setText("1.234")
+    entry = _service(app_context).get_entry(entry_id)
+    execution_dialog = ExecutionDialog(app_context, None, entry)
+    qtbot.addWidget(execution_dialog)
+    execution_dialog.amount_edit.setText("1.234")
+    app_context.translator_manager.set_language("pt_BR")
+    assert entry_dialog.allocated_edit.text() == ""
+    assert execution_dialog.amount_edit.text() == ""
+
+    # an amount that did parse is still converted
+    app_context.translator_manager.set_language("en_US")
+    entry_dialog.allocated_edit.setText("1,234.00")
+    app_context.translator_manager.set_language("pt_BR")
+    assert entry_dialog.allocated_edit.text() == "1.234,00"
 
 
 def test_an_empty_allocated_amount_means_not_set(app_context: AppContext, qtbot: QtBot) -> None:
@@ -848,6 +879,238 @@ def test_the_actions_follow_the_selection(app_context: AppContext, qtbot: QtBot)
     assert page.selected_execution() is not None
 
 
+# --------------------------------------------------------------------------- entry with rows
+
+
+def test_the_currency_of_an_entry_with_execution_rows_cannot_be_changed(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    entry_id = _add_entry(app_context, description="Courses")
+    free = EntryDialog(app_context, None, service.get_entry(entry_id))
+    qtbot.addWidget(free)
+    assert free.currency_combo.isEnabled()
+    assert free.currency_combo.toolTip() == ""
+    assert EntryDialog(app_context).currency_combo.isEnabled()
+
+    service.add_execution(entry_id, date(2026, 2, 10), 100)
+    dialog = EntryDialog(app_context, None, service.get_entry(entry_id))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert not dialog.currency_combo.isEnabled()
+    assert dialog.currency_combo.currentData() == "BRL"
+    assert dialog.currency_combo.toolTip() == CURRENCY_IN_USE_EN
+    app_context.translator_manager.set_language("pt_BR")
+    assert dialog.currency_combo.toolTip() == error_label("CURRENCY_IN_USE")
+    assert dialog.currency_combo.toolTip() != CURRENCY_IN_USE_EN
+
+    # the other fields are still saved, with the currency of the entry
+    dialog.allocated_edit.setText("5,00")
+    dialog.accept()
+    stored = service.get_entry(entry_id)
+    assert (stored.currency, stored.allocated_minor) == ("BRL", 500)
+
+
+def test_the_service_still_refuses_a_currency_change_that_the_dialog_let_through(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    entry_id = _add_entry(app_context, description="Courses")
+    service.add_execution(entry_id, date(2026, 2, 10), 100)
+    dialog = EntryDialog(app_context, None, service.get_entry(entry_id))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.currency_combo.setEnabled(True)
+    dialog.currency_combo.setCurrentIndex(dialog.currency_combo.findData("USD"))
+    dialog.accept()
+    assert _warnings(fake_prompts) == [CURRENCY_IN_USE_EN]
+    assert dialog.isVisible()
+    stored = service.get_entry(entry_id)
+    assert stored.currency == "BRL"
+    assert [x.amount_minor for x in stored.executions] == [100]
+
+
+def test_the_execution_date_is_limited_to_the_fiscal_year_of_the_entry(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    entry_id = _add_entry(app_context, year=2025)
+    entry = _service(app_context).get_entry(entry_id)
+    dialog = ExecutionDialog(app_context, None, entry)
+    qtbot.addWidget(dialog)
+    assert dialog.date_edit.minimumDate() == QDate(2025, 1, 1)
+    assert dialog.date_edit.maximumDate() == QDate(2025, 12, 31)
+    assert dialog.date_edit.date() == QDate(2025, 1, 1)  # the as-of year is 2026: start of 2025
+
+    dialog.date_edit.setDate(QDate(2026, 1, 1))  # outside the year: never accepted
+    assert QDate(2025, 1, 1) <= dialog.date_edit.date() <= QDate(2025, 12, 31)
+    dialog.date_edit.setDate(QDate(2025, 12, 31))
+    dialog.amount_edit.setText("1.00")
+    dialog.accept()
+    (execution,) = _service(app_context).get_entry(entry_id).executions
+    assert execution.executed_on == date(2025, 12, 31)
+
+    current = _add_entry(app_context, year=2026, description="Current")
+    in_year = ExecutionDialog(app_context, None, _service(app_context).get_entry(current))
+    qtbot.addWidget(in_year)
+    assert in_year.date_edit.date() == QDate(2026, 3, 5)  # the as-of date, inside the year
+    assert in_year.date_edit.maximumDate() == QDate(2026, 12, 31)
+
+
+# --------------------------------------------------------------------------- confirmations
+
+
+def test_the_entry_confirmation_is_a_translated_pattern_filled_in_one_pass(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    service = _service(app_context)
+    service.create_source(SourceInput("FUNDX", label_pt_br="Fonte %2", label_en_us="Source %2"))
+    _add_entry(app_context, code="FUNDX", description="%1 and %2")
+    page = BudgetPage(app_context)
+    qtbot.addWidget(page)
+    page.entries_view.selectRow(0)
+    fake_prompts.script("confirm", False)
+
+    page.delete_entry_action.trigger()
+    # values that look like placeholders are inserted as they are, never replaced again
+    assert fake_prompts.calls_of("confirm")[-1].text == (
+        "Delete the entry of Source %2 in BRL (%1 and %2) together with its execution rows?"
+    )
+    app_context.translator_manager.set_language("pt_BR")
+    page.delete_entry_action.trigger()
+    portuguese = fake_prompts.calls_of("confirm")[-1].text
+    assert portuguese.startswith("Excluir a entrada de Fonte %2 em BRL (%1 and %2) junto com ")
+    app_context.translator_manager.set_language("es_ES")
+    page.delete_entry_action.trigger()
+    spanish = fake_prompts.calls_of("confirm")[-1].text
+    assert "Fonte %2 en BRL (%1 and %2)" in spanish
+    assert spanish != portuguese
+
+    # without a description the pattern has no parentheses
+    _add_entry(app_context, code="DIRSA", description="")
+    page.refresh()
+    app_context.translator_manager.set_language("en_US")
+    for row, shown in enumerate(page.entries_model.rows()):
+        if shown.entry.description == "":
+            page.entries_view.selectRow(row)
+    page.delete_entry_action.trigger()
+    assert fake_prompts.calls_of("confirm")[-1].text == (
+        "Delete the entry of DIRSA in BRL together with its execution rows?"
+    )
+
+
+def test_the_execution_confirmation_puts_the_date_and_the_amount_where_the_language_wants(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    entry_id = _add_entry(app_context)
+    _service(app_context).add_execution(entry_id, date(2026, 2, 10), 100, "note %1")
+    page = BudgetPage(app_context)
+    qtbot.addWidget(page)
+    page.entries_view.selectRow(0)
+    page.executions_view.selectRow(0)
+    fake_prompts.script("confirm", False)
+
+    page.delete_execution_action.trigger()
+    assert fake_prompts.calls_of("confirm")[-1].text == (
+        "Delete the execution row of 02/10/2026 for R$1.00?"
+    )
+    app_context.translator_manager.set_language("pt_BR")
+    page.delete_execution_action.trigger()
+    text = fake_prompts.calls_of("confirm")[-1].text
+    assert text.startswith("Excluir a linha de execu")
+    assert text.index("10/02/2026") < text.index(f"R${NBSP}1,00")
+    assert text.endswith("?")
+    assert len(_service(app_context).get_entry(entry_id).executions) == 1
+
+
+# --------------------------------------------------------------------------- unshowable values
+
+
+def test_an_amount_that_cannot_be_shown_is_a_dash_not_raw_minor_units() -> None:
+    assert money_text(123456, "BRL", "en_US") == "R$1,234.56"
+    assert money_text(None, "BRL", "en_US") == "-"
+    # a currency outside the allow-list: "123456 GBP" would read as 100 times the amount
+    assert money_text(123456, "GBP", "en_US") == "-"
+    assert money_text(123456, "", "pt_BR") == "-"
+    assert money_text(2**63, "BRL", "en_US") == "-"
+
+
+def test_a_rate_that_cannot_be_shown_is_a_dash() -> None:
+    assert rate_text(0.1, "en_US") == "10.0%"
+    assert rate_text(None, "en_US") == "-"
+    for rate in (1e17, 1e30, float("inf"), float("nan")):
+        assert rate_text(rate, "en_US") == "-"
+        assert rate_text(rate, "pt_BR") == "-"
+
+
+def test_the_summary_survives_a_rate_and_a_currency_it_cannot_show(app_context: AppContext) -> None:
+    app_context.translator_manager.set_language("en_US")
+    model = SummaryModel(None)
+    model.set_language("en_US")
+    model.set_totals(
+        [
+            BudgetTotal(2026, "DIRSA", "BRL", 1, 1, 1e17),
+            BudgetTotal(2026, "DIRSA", "GBP", 123456, 123456, 1.0),
+        ],
+        {},
+    )
+    assert _cells(model, 0, 5) == ["DIRSA", "BRL", "R$0.01", "R$0.01", "-"]
+    assert _cells(model, 1, 5) == ["DIRSA", "GBP", "-", "-", "100.0%"]
+
+
+# --------------------------------------------------------------------------- unreadable settings
+
+
+def _corrupt_default_currency(context: AppContext) -> None:
+    assert context.conn is not None
+    context.conn.execute(
+        "INSERT INTO setting (key, value_json) VALUES (?, ?)",
+        ("config.default_currency", "not json"),
+    )
+
+
+def test_a_configuration_that_cannot_be_read_is_explained_in_the_settings_section(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    _with_config(app_context)
+    section = BudgetSettingsSection(app_context)
+    qtbot.addWidget(section)
+    assert section.config_error_label.isHidden()
+    assert section.currency_combo.isEnabled()
+
+    _corrupt_default_currency(app_context)
+    app_context.notify_data_changed()
+    assert not section.config_error_label.isHidden()
+    assert section.config_error_label.text() == "A stored setting cannot be read."
+    assert not section.currency_combo.isEnabled()
+    assert not section.prorate_check.isEnabled()
+    assert fake_prompts.calls_of("warning") == []  # a label, not a prompt
+    # the dialogs fall back to the built-in currency
+    fallback = EntryDialog(app_context)
+    qtbot.addWidget(fallback)
+    assert fallback.currency_combo.currentData() == "BRL"
+
+    app_context.translator_manager.set_language("pt_BR")
+    assert section.config_error_label.text() == error_label("CORRUPT_SETTING")
+    assert section.config_error_label.text() != "A stored setting cannot be read."
+
+    assert app_context.conn is not None
+    app_context.conn.execute("DELETE FROM setting WHERE key = 'config.default_currency'")
+    app_context.notify_data_changed()
+    assert section.config_error_label.isHidden()
+    assert section.currency_combo.isEnabled()
+
+
+def test_the_unreadable_configuration_message_is_translated_in_the_pseudo_locale(
+    pseudo_context: AppContext, qtbot: QtBot
+) -> None:
+    _with_config(pseudo_context)
+    _corrupt_default_currency(pseudo_context)
+    section = BudgetSettingsSection(pseudo_context)
+    qtbot.addWidget(section)
+    assert not section.config_error_label.isHidden()
+    assert_fully_translated(section)
+
+
 # --------------------------------------------------------------------------- pseudo-locale walk
 
 FACTORIES: dict[str, Callable[[AppContext], QWidget]] = {
@@ -900,9 +1163,12 @@ def test_the_dialogs_with_data_are_translated_in_the_pseudo_locale(
 ) -> None:
     entry_id = _add_entry(pseudo_context)
     entry = _service(pseudo_context).get_entry(entry_id)
+    _service(pseudo_context).add_execution(entry_id, date(2026, 2, 10), 100)
+    locked = _service(pseudo_context).get_entry(entry_id)  # its currency cannot change
     for dialog in (
         EntryDialog(pseudo_context),
         EntryDialog(pseudo_context, None, entry),
+        EntryDialog(pseudo_context, None, locked),
         ExecutionDialog(pseudo_context, None, entry),
         SourceDialog(pseudo_context),
     ):
