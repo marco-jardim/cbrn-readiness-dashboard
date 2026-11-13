@@ -16,6 +16,9 @@ from cbrn_dashboard import i18n
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from tests.i18n._ts import catalogue_files, load_script, write_pseudo_ts
 
+#: The text right after the opening mark of the pseudo catalogue, per language.
+PSEUDO_PREFIX: dict[str, str] = {"pt_BR": "", "en_US": "en:", "es_ES": "es:"}
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _isolated_data_dir(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
@@ -36,16 +39,23 @@ def qm_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.fixture(scope="session")
 def pseudo_qm_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Pseudo-locale catalogues: every translation is ``⟦<source text>⟧``.
+    """Pseudo-locale catalogues: every translation is ``⟦<prefix><source text>⟧``.
 
     The files keep the regular ``<area>_<lang>.qm`` names, so a ``TranslatorManager`` created
-    with this folder loads them for any language (the pseudo-locale walk arrives with T1.9).
+    with this folder loads them for any language. The markers are LANGUAGE-SPECIFIC
+    (:data:`PSEUDO_PREFIX`): pt_BR ``⟦…⟧``, en_US ``⟦en:…⟧``, es_ES ``⟦es:…⟧``, so a text that was
+    not re-applied after a language switch still carries the OLD language's marker.
     """
     script = load_script()
     ts_folder = tmp_path_factory.mktemp("pseudo_ts")
     out_folder = tmp_path_factory.mktemp("pseudo_qm")
     for area, lang, path in catalogue_files():
-        write_pseudo_ts(path, ts_folder / f"{area}_{lang}.ts")
+        target = ts_folder / f"{area}_{lang}.ts"
+        write_pseudo_ts(path, target)
+        prefix = PSEUDO_PREFIX[lang]
+        if prefix:
+            text = target.read_text(encoding="utf-8")
+            target.write_text(text.replace("\u27e6", "\u27e6" + prefix), encoding="utf-8")
     script.compile_catalogues(out_folder, ts_dir=ts_folder)
     for area, lang, _ in catalogue_files():
         assert (out_folder / i18n.qm_name(area, lang)).is_file()

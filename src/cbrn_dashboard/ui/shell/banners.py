@@ -2,7 +2,8 @@
 """The banner area above the pages (PLAN.md T1.9, D02, D23, D25, I06, P07).
 
 Each banner has a code and is drawn as an ICON plus TEXT, never colour alone (D23). The
-``PRELIMINARY`` notice is permanent: ``hide_banner`` leaves it alone. Texts go through
+``PRELIMINARY`` notice is permanent, and so is ``DEMO`` once shown: ``hide_banner`` leaves them
+alone. Texts go through
 ``QCoreApplication.translate("Shell", ...)`` and are re-applied by :meth:`BannerArea.retranslate`.
 """
 
@@ -26,11 +27,12 @@ class BannerCode(StrEnum):
     POINTER_INVALID = "POINTER_INVALID"
     NO_PROFILE_DIR = "NO_PROFILE_DIR"
     CLOCK_SUSPECT = "CLOCK_SUSPECT"
+    PREFERENCES_RESET = "PREFERENCES_RESET"
     TRANSLATIONS_MISSING = "TRANSLATIONS_MISSING"
     PRELIMINARY = "PRELIMINARY"
 
 
-#: Banners that carry an informational icon; every other banner carries a warning icon.
+# Banners that carry an informational icon; every other banner carries a warning icon.
 _INFORMATION = frozenset({BannerCode.DEMO, BannerCode.PRELIMINARY})
 
 _STYLE_INFORMATION = (
@@ -51,7 +53,7 @@ def banner_text(code: BannerCode) -> str:
         case BannerCode.READ_ONLY:
             return QCoreApplication.translate(
                 "Shell",
-                "Read-only mode: the data folder cannot be written, so editing is disabled.",
+                "Read-only mode: the database cannot be written, so nothing can be changed.",
             )
         case BannerCode.NETWORK_PATH:
             return QCoreApplication.translate(
@@ -76,6 +78,11 @@ def banner_text(code: BannerCode) -> str:
                 "Shell",
                 "The computer clock looks wrong: snapshots and backup rotation are skipped.",
             )
+        case BannerCode.PREFERENCES_RESET:
+            return QCoreApplication.translate(
+                "Shell",
+                "The saved preferences could not be read and were reset to their defaults.",
+            )
         case BannerCode.TRANSLATIONS_MISSING:
             return QCoreApplication.translate(
                 "Shell", "Translations are not compiled: the English source text is shown."
@@ -98,6 +105,7 @@ class BannerArea(QWidget):
         self._frames: dict[BannerCode, QFrame] = {}
         self._labels: dict[BannerCode, QLabel] = {}
         self._shown: set[BannerCode] = set()
+        self._permanent: set[BannerCode] = {BannerCode.PRELIMINARY}
         style = self.style()
         for code in BannerCode:
             frame = QFrame(self)
@@ -130,15 +138,26 @@ class BannerArea(QWidget):
     # ------------------------------------------------------------------ API
 
     def show_banner(self, code: str) -> None:
-        """Show the banner ``code`` (raises ``ValueError`` for an unknown code)."""
+        """Show the banner ``code`` (raises ``ValueError`` for an unknown code).
+
+        Showing ``DEMO`` makes it permanent (D25): the session stays marked as fictitious.
+        """
         banner = BannerCode(code)
+        if banner is BannerCode.DEMO:
+            self._permanent.add(banner)
         self._shown.add(banner)
         self._frames[banner].setVisible(True)
 
-    def hide_banner(self, code: str) -> None:
-        """Hide the banner ``code``; the permanent ``PRELIMINARY`` notice cannot be hidden."""
+    def set_permanent(self, code: str) -> None:
+        """Show the banner ``code`` and make it impossible to hide."""
         banner = BannerCode(code)
-        if banner is BannerCode.PRELIMINARY:
+        self._permanent.add(banner)
+        self.show_banner(banner)
+
+    def hide_banner(self, code: str) -> None:
+        """Hide the banner ``code``; permanent banners (``PRELIMINARY``, a shown ``DEMO``) stay."""
+        banner = BannerCode(code)
+        if banner in self._permanent:
             return
         self._shown.discard(banner)
         self._frames[banner].setVisible(False)

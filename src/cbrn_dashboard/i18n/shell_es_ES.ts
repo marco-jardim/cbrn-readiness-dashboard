@@ -43,6 +43,10 @@
         <translation type="unfinished">Navegación</translation>
     </message>
     <message>
+        <source>This page could not be opened.</source>
+        <translation type="unfinished">No se pudo abrir esta página.</translation>
+    </message>
+    <message>
         <source>Data folder: %1</source>
         <translation type="unfinished">Carpeta de datos: %1</translation>
     </message>
@@ -52,12 +56,11 @@
     </message>
     <message>
         <source>DEMO — fictitious data</source>
-        <extracomment>Banners that carry an informational icon; every other banner carries a warning icon.</extracomment>
         <translation type="unfinished">DEMO — datos ficticios</translation>
     </message>
     <message>
-        <source>Read-only mode: the data folder cannot be written, so editing is disabled.</source>
-        <translation type="unfinished">Modo de solo lectura: no se puede escribir en la carpeta de datos, por lo que la edición está desactivada.</translation>
+        <source>Read-only mode: the database cannot be written, so nothing can be changed.</source>
+        <translation type="unfinished">Modo de solo lectura: no se puede escribir en la base de datos, por lo que no se puede cambiar nada.</translation>
     </message>
     <message>
         <source>The data folder is on a network share, where database locking is unreliable.</source>
@@ -78,6 +81,10 @@
     <message>
         <source>The computer clock looks wrong: snapshots and backup rotation are skipped.</source>
         <translation type="unfinished">El reloj del equipo parece incorrecto: se omiten las instantáneas y la rotación de copias de seguridad.</translation>
+    </message>
+    <message>
+        <source>The saved preferences could not be read and were reset to their defaults.</source>
+        <translation type="unfinished">No se pudieron leer las preferencias guardadas y se restablecieron a sus valores predeterminados.</translation>
     </message>
     <message>
         <source>Preliminary version — indicators not institutionally validated.</source>
@@ -109,7 +116,6 @@
     </message>
     <message>
         <source>Cannot start</source>
-        <extracomment>The registered start-up hooks, ONE LINE each, run in this order: T7.1 (daily backup), T7.3 (tmp clean-up) and T8.1 (monthly snapshot) each add one line.</extracomment>
         <translation type="unfinished">No se puede iniciar</translation>
     </message>
     <message>
@@ -117,8 +123,28 @@
         <translation type="unfinished">La carpeta de datos no es escribible y no tiene base de datos, así que no se puede abrir nada.</translation>
     </message>
     <message>
+        <source>The data folder is not writable, so the demo database cannot be created.</source>
+        <translation type="unfinished">La carpeta de datos no se puede escribir, por lo que no se puede crear la base de datos de demostración.</translation>
+    </message>
+    <message>
         <source>Another instance is already using this data folder. Close it and start again.</source>
         <translation type="unfinished">Otra instancia ya está usando esta carpeta de datos. Ciérrela e inicie de nuevo.</translation>
+    </message>
+    <message>
+        <source>The data folder cannot be locked, so the application cannot make sure it is the only one using it.</source>
+        <translation type="unfinished">La carpeta de datos no se puede bloquear, por lo que la aplicación no puede asegurarse de ser la única que la usa.</translation>
+    </message>
+    <message>
+        <source>This database was written by an older version and cannot be upgraded while it is read-only.</source>
+        <translation type="unfinished">Esta base de datos fue escrita por una versión anterior y no se puede actualizar mientras sea de solo lectura.</translation>
+    </message>
+    <message>
+        <source>This file is not a database of this application.</source>
+        <translation type="unfinished">Este archivo no es una base de datos de esta aplicación.</translation>
+    </message>
+    <message>
+        <source>The file in the demo folder is not a demo database. It was left unchanged.</source>
+        <translation type="unfinished">El archivo de la carpeta de demostración no es una base de datos de demostración. No se ha modificado.</translation>
     </message>
     <message>
         <source>The database has an unfinished write and cannot be opened read-only.</source>
@@ -131,6 +157,26 @@
     <message>
         <source>The database could not be opened. Code: %1</source>
         <translation type="unfinished">No se pudo abrir la base de datos. Código: %1</translation>
+    </message>
+    <message>
+        <source>The SQLite library of this installation is too old for this database.</source>
+        <translation type="unfinished">La biblioteca SQLite de esta instalación es demasiado antigua para esta base de datos.</translation>
+    </message>
+    <message>
+        <source>The database file was moved or replaced while it was being opened.</source>
+        <translation type="unfinished">El archivo de la base de datos se movió o se reemplazó mientras se abría.</translation>
+    </message>
+    <message>
+        <source>The database could not be upgraded. The failed step was rolled back.</source>
+        <translation type="unfinished">No se pudo actualizar la base de datos. El paso que falló se revirtió.</translation>
+    </message>
+    <message>
+        <source>The upgrade steps of this installation are incomplete or damaged.</source>
+        <translation type="unfinished">Los pasos de actualización de esta instalación están incompletos o dañados.</translation>
+    </message>
+    <message>
+        <source>The safety copy could not be verified, so the database was not upgraded.</source>
+        <translation type="unfinished">No se pudo verificar la copia de seguridad, por lo que la base de datos no se actualizó.</translation>
     </message>
     <message>
         <source>Unexpected error</source>
@@ -147,6 +193,7 @@
     </message>
     <message>
         <source>Cannot save</source>
+        <extracomment>Dynamic property that exempts a widget&apos;s own texts from the pseudo-locale walk (user data).</extracomment>
         <translation type="unfinished">No se puede guardar</translation>
     </message>
 </context>

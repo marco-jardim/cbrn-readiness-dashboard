@@ -43,6 +43,10 @@
         <translation>Navigation</translation>
     </message>
     <message>
+        <source>This page could not be opened.</source>
+        <translation>This page could not be opened.</translation>
+    </message>
+    <message>
         <source>Data folder: %1</source>
         <translation>Data folder: %1</translation>
     </message>
@@ -52,12 +56,11 @@
     </message>
     <message>
         <source>DEMO — fictitious data</source>
-        <extracomment>Banners that carry an informational icon; every other banner carries a warning icon.</extracomment>
         <translation>DEMO — fictitious data</translation>
     </message>
     <message>
-        <source>Read-only mode: the data folder cannot be written, so editing is disabled.</source>
-        <translation>Read-only mode: the data folder cannot be written, so editing is disabled.</translation>
+        <source>Read-only mode: the database cannot be written, so nothing can be changed.</source>
+        <translation>Read-only mode: the database cannot be written, so nothing can be changed.</translation>
     </message>
     <message>
         <source>The data folder is on a network share, where database locking is unreliable.</source>
@@ -78,6 +81,10 @@
     <message>
         <source>The computer clock looks wrong: snapshots and backup rotation are skipped.</source>
         <translation>The computer clock looks wrong: snapshots and backup rotation are skipped.</translation>
+    </message>
+    <message>
+        <source>The saved preferences could not be read and were reset to their defaults.</source>
+        <translation>The saved preferences could not be read and were reset to their defaults.</translation>
     </message>
     <message>
         <source>Preliminary version — indicators not institutionally validated.</source>
@@ -109,7 +116,6 @@
     </message>
     <message>
         <source>Cannot start</source>
-        <extracomment>The registered start-up hooks, ONE LINE each, run in this order: T7.1 (daily backup), T7.3 (tmp clean-up) and T8.1 (monthly snapshot) each add one line.</extracomment>
         <translation>Cannot start</translation>
     </message>
     <message>
@@ -117,8 +123,28 @@
         <translation>The data folder is not writable and has no database, so nothing can be opened.</translation>
     </message>
     <message>
+        <source>The data folder is not writable, so the demo database cannot be created.</source>
+        <translation>The data folder is not writable, so the demo database cannot be created.</translation>
+    </message>
+    <message>
         <source>Another instance is already using this data folder. Close it and start again.</source>
         <translation>Another instance is already using this data folder. Close it and start again.</translation>
+    </message>
+    <message>
+        <source>The data folder cannot be locked, so the application cannot make sure it is the only one using it.</source>
+        <translation>The data folder cannot be locked, so the application cannot make sure it is the only one using it.</translation>
+    </message>
+    <message>
+        <source>This database was written by an older version and cannot be upgraded while it is read-only.</source>
+        <translation>This database was written by an older version and cannot be upgraded while it is read-only.</translation>
+    </message>
+    <message>
+        <source>This file is not a database of this application.</source>
+        <translation>This file is not a database of this application.</translation>
+    </message>
+    <message>
+        <source>The file in the demo folder is not a demo database. It was left unchanged.</source>
+        <translation>The file in the demo folder is not a demo database. It was left unchanged.</translation>
     </message>
     <message>
         <source>The database has an unfinished write and cannot be opened read-only.</source>
@@ -131,6 +157,26 @@
     <message>
         <source>The database could not be opened. Code: %1</source>
         <translation>The database could not be opened. Code: %1</translation>
+    </message>
+    <message>
+        <source>The SQLite library of this installation is too old for this database.</source>
+        <translation>The SQLite library of this installation is too old for this database.</translation>
+    </message>
+    <message>
+        <source>The database file was moved or replaced while it was being opened.</source>
+        <translation>The database file was moved or replaced while it was being opened.</translation>
+    </message>
+    <message>
+        <source>The database could not be upgraded. The failed step was rolled back.</source>
+        <translation>The database could not be upgraded. The failed step was rolled back.</translation>
+    </message>
+    <message>
+        <source>The upgrade steps of this installation are incomplete or damaged.</source>
+        <translation>The upgrade steps of this installation are incomplete or damaged.</translation>
+    </message>
+    <message>
+        <source>The safety copy could not be verified, so the database was not upgraded.</source>
+        <translation>The safety copy could not be verified, so the database was not upgraded.</translation>
     </message>
     <message>
         <source>Unexpected error</source>
@@ -147,6 +193,7 @@
     </message>
     <message>
         <source>Cannot save</source>
+        <extracomment>Dynamic property that exempts a widget&apos;s own texts from the pseudo-locale walk (user data).</extracomment>
         <translation>Cannot save</translation>
     </message>
 </context>

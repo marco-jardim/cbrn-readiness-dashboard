@@ -26,6 +26,7 @@ from functools import partial
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtWidgets import QWidget
 
 from cbrn_dashboard import __version__
 from cbrn_dashboard.app import ensure_application
@@ -37,7 +38,6 @@ from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager, app_display_name
 from cbrn_dashboard.ui.shell.main_window import MainWindow
-from cbrn_dashboard.ui.shell.prompts import QtPrompts
 
 RESULT_FILE_NAME = "selftest.json"
 TMP_DIR_NAME = "tmp"
@@ -140,6 +140,38 @@ for _language in LANGUAGES:
     CHECKS.append((f"i18n.{to_bcp47(_language)}", partial(_check_i18n, _language)))
 
 
+class _NoPrompts:
+    """A ``Prompts`` that never shows anything (a console-less frozen run must not block)."""
+
+    def info(self, parent: QWidget | None, title: str, text: str) -> None:
+        return None
+
+    def warning(self, parent: QWidget | None, title: str, text: str) -> None:
+        return None
+
+    def error(self, parent: QWidget | None, title: str, text: str) -> None:
+        return None
+
+    def confirm(self, parent: QWidget | None, title: str, text: str) -> bool:
+        return False
+
+    def open_file(self, parent: QWidget | None, title: str, file_filter: str) -> Path | None:
+        return None
+
+    def save_file(
+        self, parent: QWidget | None, title: str, suggested_name: str, file_filter: str
+    ) -> Path | None:
+        return None
+
+    def choose_folder(self, parent: QWidget | None, title: str) -> Path | None:
+        return None
+
+    def text_input(
+        self, parent: QWidget | None, title: str, label: str, *, password: bool = False
+    ) -> str | None:
+        return None
+
+
 @register("main_window")
 def _check_main_window(context: SelfTestContext) -> None:
     app = ensure_application()
@@ -151,7 +183,7 @@ def _check_main_window(context: SelfTestContext) -> None:
             conn=None,
             clock=SystemClock(),
             location=context.location,
-            prompts=QtPrompts(),
+            prompts=_NoPrompts(),
             preferences=PreferencesStore(context.workdir, writable=False),
             translator_manager=manager,
         )

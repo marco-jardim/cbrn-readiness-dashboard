@@ -15,13 +15,16 @@ from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtGui import QAction, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QComboBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QGroupBox,
     QLabel,
     QMenu,
     QPushButton,
+    QStatusBar,
     QTableView,
+    QToolBox,
     QVBoxLayout,
     QWidget,
 )
@@ -32,6 +35,7 @@ from cbrn_dashboard.ui.shell import registry
 from cbrn_dashboard.ui.shell.banners import BannerCode
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.registry import DialogSpec, PageSpec, SettingsSectionSpec
+from tests.conftest import PSEUDO_PREFIX
 from tests.ui._fakes import expect_handle
 from tests.ui._walk import (
     CLOSE_MARK,
@@ -62,12 +66,29 @@ def _set_header(model: QStandardItemModel, section: int, text: str) -> None:
     model.setHeaderData(section, Qt.Orientation.Horizontal, text, Qt.ItemDataRole.DisplayRole)
 
 
+def _title_misses(owner: str, kind: str, text: str) -> list[TextItem]:
+    """``[item]`` when a title or navigation text lacks the markers, else ``[]``."""
+    item = TextItem(owner, kind, text)
+    return [] if item.translated else [item]
+
+
 def _walk_everything(handle: AppHandle, qtbot: QtBot) -> list[TextItem]:
-    """Walk the window, every page, every settings section and every dialog; return the misses."""
+    """Walk the window, every page, every settings section and every dialog; return the misses.
+
+    The navigation labels (list items, otherwise exempt as data cells) and the titles of every
+    registered page and settings section are checked explicitly.
+    """
     missing = list(find_untranslated(handle.window))
+    navigation = handle.window.navigation
+    for row in range(navigation.count()):
+        item = navigation.item(row)
+        text = "" if item is None else item.text()
+        missing += _title_misses(f"navigation row {row}", "navigation item", text)
     for page_spec in registry.pages():
+        missing += _title_misses(page_spec.key, "page title", page_spec.title())
         missing += find_untranslated(handle.window.page_widget(page_spec.key))
     for section_spec in registry.settings_sections():
+        missing += _title_misses(section_spec.key, "section title", section_spec.title())
         section = section_spec.factory(handle.context)
         qtbot.addWidget(section)
         missing += find_untranslated(section)
@@ -207,9 +228,19 @@ def test_registered_pages_settings_sections_and_dialogs_are_walked(
 def test_the_shell_stays_translated_after_a_language_switch(
     pseudo_app: AppHandle, qtbot: QtBot
 ) -> None:
-    for code in ("en_US", "es_ES", "pt_BR"):
-        pseudo_app.window.language_actions[code].trigger()
-        assert_fully_translated(pseudo_app.window)
+    # Each language has its own pseudo marker (PSEUDO_PREFIX): a text that is not re-applied by
+    # retranslate() still carries the marker of the language the app started in, and fails.
+    window = pseudo_app.window
+    for banner in BannerCode:
+        window.banners.show_banner(banner)
+    assert_fully_translated(window, "pt_BR")
+    for lang in ("es_ES", "en_US", "pt_BR"):
+        window.language_actions[lang].trigger()
+        assert_fully_translated(window, lang)
+        for row in range(window.navigation.count()):
+            item = window.navigation.item(row)
+            assert item is not None
+            assert TextItem("navigation", "navigation item", item.text()).translated_in(lang)
 
 
 # --------------------------------------------------------------------------- negative self-tests
@@ -328,3 +359,144 @@ def test_the_walker_strips_mnemonics_and_shortcuts() -> None:
     assert clean("&Save\tCtrl+S") == "Save"
     assert clean("Fish && Chips") == "Fish & Chips"
     assert clean("<b>Bold</b>") == "Bold"
+
+
+# --------------------------------------------------------------------------- titles and switches
+
+
+def test_a_hardcoded_page_or_section_title_is_reported(
+    started_app: StartApp, pseudo_qm_dir: Path, qtbot: QtBot
+) -> None:
+    bad_page = PageSpec("bad_title_page", 10, lambda: "Hard-coded", _translated_page)
+    bad_section = SettingsSectionSpec(
+        "bad_title_section", "general", lambda: "Hard-coded section", _translated_section
+    )
+    with registry.registered(bad_page, bad_section):
+        handle = expect_handle(started_app(qm=pseudo_qm_dir, lang="pt-BR"))
+        missing = _walk_everything(handle, qtbot)
+    found = {(item.kind, item.text) for item in missing}
+    assert found == {
+        ("navigation item", "Hard-coded"),
+        ("page title", "Hard-coded"),
+        ("section title", "Hard-coded section"),
+    }
+
+
+def _set_once_page(context: AppContext) -> QWidget:
+    # The label text is set in __init__ only and never re-applied on a language change.
+    page = QWidget()
+    layout = QVBoxLayout(page)
+    layout.addWidget(QLabel(_translate("Navigation")))
+    return page
+
+
+def test_a_text_not_reapplied_after_a_switch_is_reported(
+    started_app: StartApp, pseudo_qm_dir: Path
+) -> None:
+    with registry.registered(PageSpec("set_once", 10, _title, _set_once_page)):
+        handle = expect_handle(started_app(qm=pseudo_qm_dir, lang="pt-BR"))
+    page = handle.window.page_widget("set_once")
+    assert_fully_translated(page, "pt_BR")
+    handle.window.language_actions["es_ES"].trigger()
+    label = page.findChild(QLabel)
+    assert label is not None
+    assert label.text() == _t("Navigation")  # still the pt_BR form
+    assert_fully_translated(page)  # the markers alone would not notice ...
+    with pytest.raises(AssertionError, match="Navigation"):
+        assert_fully_translated(page, "es_ES")  # ... the es_ES marker does
+    [item] = find_untranslated(page, "es_ES")
+    assert item.kind == "label"
+
+
+# --------------------------------------------------------------------------- mixed and data texts
+
+
+def test_a_mixed_text_is_reported(bare: QWidget) -> None:
+    _add(bare, QLabel(_t("Navigation") + " hard-coded"))
+    _add(bare, QLabel("Hard-coded " + _t("Today")))
+    _add(bare, QLabel(OPEN_MARK + "unclosed"))
+    _add(bare, QLabel(_t("Data folder: " + _t("Today")) + " 12"))  # nested and digits: fine
+    _add(bare, QLabel(_t("&Save") + "\tCtrl+S"))  # the shortcut suffix is stripped: fine
+    found = {item.text for item in find_untranslated(bare)}
+    assert found == {
+        _t("Navigation") + " hard-coded",
+        "Hard-coded " + _t("Today"),
+        OPEN_MARK + "unclosed",
+    }
+
+
+def test_the_wrong_language_marker_is_reported(bare: QWidget) -> None:
+    _add(bare, QLabel(f"{OPEN_MARK}{PSEUDO_PREFIX['es_ES']}Today{CLOSE_MARK}"))
+    assert find_untranslated(bare) == []
+    assert find_untranslated(bare, "es_ES") == []
+    assert [item.kind for item in find_untranslated(bare, "pt_BR")] == ["label"]
+    assert [item.kind for item in find_untranslated(bare, "en_US")] == ["label"]
+
+
+def test_a_data_widget_still_has_its_tooltips_headers_and_actions_checked(
+    bare: QWidget,
+) -> None:
+    label = QLabel("DEMO-P001 Fictitious Person")
+    label.setProperty(DATA_PROPERTY, True)
+    label.setToolTip("Hard tooltip")
+    label.setStatusTip("Hard status tip")
+    label.setAccessibleName("Hard name")
+    label.addAction(QAction("Hard action", label))
+    _add(bare, label)
+    table = QTableView()
+    table.setProperty(DATA_PROPERTY, True)
+    model = QStandardItemModel(1, 1, table)
+    model.setItem(0, 0, QStandardItem("Cell content is data"))
+    _set_header(model, 0, "Hard header")
+    table.setModel(model)
+    _add(bare, table)
+    combo = QComboBox()
+    combo.setProperty(DATA_PROPERTY, True)
+    combo.addItem("DEMO-C001")
+    combo.setToolTip("Hard combo tooltip")
+    _add(bare, combo)
+
+    found = {(item.kind, item.text) for item in find_untranslated(bare)}
+    assert found >= {
+        ("tooltip", "Hard tooltip"),
+        ("status tip", "Hard status tip"),
+        ("accessible name", "Hard name"),
+        ("action text", "Hard action"),
+        ("header horizontal 0", "Hard header"),
+        ("tooltip", "Hard combo tooltip"),
+    }
+    texts = {text for _kind, text in found}
+    assert "DEMO-P001 Fictitious Person" not in texts  # the data itself stays exempt
+    assert "DEMO-C001" not in texts
+    assert "Cell content is data" not in texts
+
+
+def test_the_walker_catches_the_newer_kinds(bare: QWidget) -> None:
+    label = QLabel(_t("fine"))
+    label.setWhatsThis("Hard whats this")
+    _add(bare, label)
+    toolbox = QToolBox()
+    toolbox.addItem(QWidget(), "Hard tool box item")
+    _add(bare, toolbox)
+    table = QTableView()
+    model = QStandardItemModel(1, 1, table)
+    _set_header(model, 0, _t("fine header"))
+    tip_role = Qt.ItemDataRole.ToolTipRole
+    model.setHeaderData(0, Qt.Orientation.Horizontal, "Hard header tip", tip_role)
+    table.setModel(model)
+    _add(bare, table)
+    edit = QDateEdit()
+    edit.setSpecialValueText("Hard special value")
+    _add(bare, edit)
+    status = QStatusBar()
+    status.showMessage("Hard message")
+    _add(bare, status)
+
+    found = {(item.kind, item.text) for item in find_untranslated(bare)}
+    assert found >= {
+        ("whats this", "Hard whats this"),
+        ("tool box item 0", "Hard tool box item"),
+        ("header tooltip horizontal 0", "Hard header tip"),
+        ("special value", "Hard special value"),
+        ("status bar message", "Hard message"),
+    }

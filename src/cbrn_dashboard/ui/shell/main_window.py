@@ -32,6 +32,8 @@ from PySide6.QtWidgets import (
 )
 
 from cbrn_dashboard import i18n
+from cbrn_dashboard.logging_setup import log_exception
+from cbrn_dashboard.prefs import PreferencesWarning
 from cbrn_dashboard.ui.shell import registry
 from cbrn_dashboard.ui.shell.banners import BannerArea, BannerCode
 from cbrn_dashboard.ui.shell.context import AppContext
@@ -102,6 +104,7 @@ class MainWindow(QMainWindow):
         self.as_of_edit = QDateEdit()
         self.as_of_edit.setObjectName("as_of_edit")
         self.as_of_edit.setCalendarPopup(True)
+        self.as_of_edit.setKeyboardTracking(False)  # one typed edit = one change, not one per key
         self.as_of_label.setBuddy(self.as_of_edit)
         self.today_action = QAction(self)
         self.today_action.setObjectName("action_today")
@@ -120,6 +123,7 @@ class MainWindow(QMainWindow):
 
         self._page_keys: list[str] = []
         self._page_specs: tuple[registry.PageSpec, ...] = ()
+        self._placeholders: list[QLabel] = []
         self._build_pages()
         self._sync_context_banners()
 
@@ -136,9 +140,17 @@ class MainWindow(QMainWindow):
 
     def _build_pages(self) -> None:
         """Create one page per registry entry and one navigation item per page."""
-        self._page_specs = registry.pages()
+        try:
+            self._page_specs = registry.pages()
+        except registry.DuplicateKeyError as exc:  # a repeated key in the fixed tuples
+            log_exception("UI.PAGE_FAILED", exc)
+            self._page_specs = ()
         for spec in self._page_specs:
-            widget = spec.factory(self._context)
+            try:
+                widget = spec.factory(self._context)
+            except Exception as exc:  # one broken page must not take the window down
+                log_exception("UI.PAGE_FAILED", exc)
+                widget = self._placeholder_page(spec.key)
             self.pages.addWidget(widget)
             item = QListWidgetItem(spec.title())
             item.setData(_PAGE_KEY_ROLE, spec.key)
@@ -147,6 +159,15 @@ class MainWindow(QMainWindow):
         self.navigation.currentRowChanged.connect(self._on_row_changed)
         if self._page_keys:
             self.navigation.setCurrentRow(0)
+
+    def _placeholder_page(self, key: str) -> QLabel:
+        """The page shown in place of one whose factory failed (its text is set by retranslate)."""
+        label = QLabel()
+        label.setObjectName(f"page_placeholder_{key}")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setTextFormat(Qt.TextFormat.PlainText)
+        self._placeholders.append(label)
+        return label
 
     def _on_row_changed(self, row: int) -> None:
         if 0 <= row < self.pages.count():
@@ -184,6 +205,8 @@ class MainWindow(QMainWindow):
             self.banners.show_banner(BannerCode[warning.name])
         if context.clock_suspect:
             self.banners.show_banner(BannerCode.CLOCK_SUSPECT)
+        if PreferencesWarning.CORRUPT_FILE in context.preferences.warnings:
+            self.banners.show_banner(BannerCode.PREFERENCES_RESET)
 
     # ------------------------------------------------------------------ as-of date
 
@@ -203,6 +226,8 @@ class MainWindow(QMainWindow):
 
     def _on_today(self, _checked: bool = False) -> None:
         self._context.reset_as_of()
+        # Even when the context emitted nothing, the selector must show what the context holds.
+        self._on_as_of_changed(self._context.as_of)
 
     # ------------------------------------------------------------------ language handling
 
@@ -232,6 +257,10 @@ class MainWindow(QMainWindow):
         for code, action in self.language_actions.items():
             action.setText(language_display_name(code))
         self.navigation.setAccessibleName(QCoreApplication.translate("Shell", "Navigation"))
+        for placeholder in self._placeholders:
+            placeholder.setText(
+                QCoreApplication.translate("Shell", "This page could not be opened.")
+            )
         for row, spec in enumerate(self._page_specs):
             item = self.navigation.item(row)
             if item is not None:
