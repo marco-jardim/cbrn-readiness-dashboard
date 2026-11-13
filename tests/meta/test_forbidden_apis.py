@@ -4,6 +4,11 @@
 ``test_source_tree_is_clean`` scans the real ``src/cbrn_dashboard`` tree. The other tests run the
 engine on small fictitious snippets: every rule has snippets it must catch and snippets it must
 leave alone, so a rule that silently stops matching is detected.
+
+Documented engine behaviours that the tests pin down: clock functions passed by reference are
+flagged when they are attributes of an *imported* clock object or a bare imported clock name;
+shadowing is not tracked (a parameter named like an imported clock name is still flagged);
+``os.system`` and friends are flagged only on the ``os`` module.
 """
 
 from __future__ import annotations
@@ -91,6 +96,8 @@ NET_MODULES = (
     "webbrowser",
     "subprocess",
     "ctypes",
+    "multiprocessing",
+    "socketserver",
 )
 
 NET_POSITIVE: list[Case] = [
@@ -111,6 +118,20 @@ NET_POSITIVE: list[Case] = [
             "import PySide6.QtNetwork\n",
             "import PySide6.QtNetwork as qn\n",
             "import PySide6.QtWebSockets\n",
+            "import PySide6.QtNetworkAuth\n",
+            "import PySide6.QtNetworkAuth as qna\n",
+            "import PySide6.QtHttpServer\n",
+            "import socketserver\n",
+            "import socketserver as ss\n",
+            "from socketserver import TCPServer\n",
+            "import multiprocessing.pool\n",
+            "from multiprocessing import Process\n",
+            "from PySide6 import QtNetworkAuth\n",
+            "from PySide6 import QtCore, QtNetworkAuth as auth\n",
+            "from PySide6 import QtHttpServer\n",
+            "from PySide6.QtNetworkAuth import QOAuth2AuthorizationCodeFlow\n",
+            "from PySide6.QtHttpServer import QHttpServer\n",
+            'import importlib\nimportlib.import_module("socketserver")\n',
             "import PySide6.QtWebEngineCore\n",
             "import PySide6.QtWebEngineWidgets as w\n",
             "from PySide6 import QtNetwork\n",
@@ -148,6 +169,9 @@ def test_net_rule_catches(source: str, path: str, rule: str) -> None:
 NET_NEGATIVE = [
     "import httpx_like\n",
     "import socketserver_like\n",
+    "import multiprocessing_like\n",
+    "from multiprocessing_like import Pool\n",
+    "import PySide6.QtHttpServer_like\n",
     "import mysocket\n",
     "from httpx_like import x\n",
     "from . import socket\n",
@@ -185,8 +209,68 @@ HANDOFF_POSITIVE: list[Case] = [
     *_catch(RULE_HANDOFF, ["import ctypes\n"]),
     *_catch(RULE_HANDOFF, ["import ctypes.wintypes\n"]),
     *_catch(RULE_HANDOFF, ["from ctypes import windll\n"]),
+    *_catch(RULE_HANDOFF, ["import multiprocessing\n"]),
+    *_catch(RULE_HANDOFF, ["import multiprocessing.pool as mp\n"]),
+    *_catch(RULE_HANDOFF, ["from multiprocessing import Process\n"]),
+    *_catch(RULE_HANDOFF, ["import multiprocessing\n"], HANDOFF_PATH),
+    *_catch(RULE_HANDOFF, ['import importlib\nimportlib.import_module("multiprocessing")\n']),
     *_catch(RULE_HANDOFF, ["import subprocess\n"], HANDOFF_PATH),
     *_catch(RULE_HANDOFF, ["import ctypes\n"], HANDOFF_PATH),
+    # QProcess: no exception anywhere, not even in folders.py
+    *_catch(
+        RULE_HANDOFF,
+        [
+            "from PySide6.QtCore import QProcess\n",
+            "from PySide6.QtCore import QProcess as P\n",
+            "from PySide6.QtCore import QProcess\nQProcess.startDetached('explorer', [p])\n",
+            "from PySide6.QtCore import QProcess as P\nP.startDetached('explorer', [p])\n",
+            "from PySide6 import QtCore\nQtCore.QProcess.startDetached('explorer', [p])\n",
+            "import PySide6.QtCore as qc\nproc = qc.QProcess()\n",
+            "QProcess.startDetached('explorer', [p])\n",
+            "factory = QProcess\n",
+        ],
+    ),
+    *_catch(RULE_HANDOFF, ["from PySide6.QtCore import QProcess\n"], HANDOFF_PATH),
+    *_catch(RULE_HANDOFF, ["QProcess.startDetached('explorer', [p])\n"], HANDOFF_PATH),
+    # os.system / popen / spawn* / exec*, resolved through the import table
+    *_catch(
+        RULE_HANDOFF,
+        [
+            'import os\nos.system("start " + p)\n',
+            "import os\nos.popen(cmd)\n",
+            "import os\nrunner = os.system\n",
+            "import os as o\no.system(cmd)\n",
+            "import os.path\nos.system(cmd)\n",
+            "from os import system\n",
+            "from os import system as run\nrun(cmd)\n",
+            "from os import popen\n",
+            "from os import path, spawnl\n",
+            *[
+                f"import os\nos.{name}(cmd)\n"
+                for name in (
+                    "spawnl",
+                    "spawnle",
+                    "spawnlp",
+                    "spawnlpe",
+                    "spawnv",
+                    "spawnve",
+                    "spawnvp",
+                    "spawnvpe",
+                    "execl",
+                    "execle",
+                    "execlp",
+                    "execlpe",
+                    "execv",
+                    "execve",
+                    "execvp",
+                    "execvpe",
+                )
+            ],
+        ],
+    ),
+    *_catch(RULE_HANDOFF, ['import os\nos.system("start " + p)\n'], HANDOFF_PATH),
+    *_catch(RULE_HANDOFF, ["from os import system\n"], HANDOFF_PATH),
+    *_catch(RULE_HANDOFF, ["import os\nos.popen(cmd)\n"], "domain/a.py"),
     *_catch(RULE_HANDOFF, ["from ctypes import windll\n"], "ui/main.py"),
     # startfile, alias-independent
     *_catch(
@@ -253,6 +337,19 @@ HANDOFF_NEGATIVE = [
     "ctypes_available = False\n",
     "import subprocess_like\n",
     "import ctypes_helper\n",
+    "import multiprocessing_like\n",
+    "from multiprocessing_like import Pool\n",
+    "class QProcessLike:\n    pass\n",
+    # ``system`` / ``popen`` / ``exec*`` are only forbidden on the ``os`` module
+    "class C:\n    def __init__(self) -> None:\n        self.system = 1\n",
+    "import platform\nname = platform.system()\n",
+    "from platform import system\nname = system()\n",
+    "x = obj.system\ny = obj.popen(cmd)\n",
+    "class Probes:\n    def system(self) -> None: ...\n\n\nProbes().system()\n",
+    "import os\nx = os.environ\ny = os.getcwd()\nz = os.path.join(a, b)\n",
+    "from os import path, getcwd\n",
+    "import os\nclass C:\n    system = 1\n\n\nv = C.system\n",
+    "import os\nx = app.exec()\n",
     "start_file = 1\nstartfiles = 2\n",
     "class QDesktopServicesLike:\n    pass\n",
     "def open_folder(path: str) -> None: ...\n",
@@ -303,7 +400,61 @@ CLOCK_POSITIVE_SOURCES = [
     "def f():\n    return str(foo.now())\n",
     "class C:\n    def f(self):\n        return [x.today() for x in xs]\n",
     "value = a if cond else b.now()\n",
+    # newly covered call names
+    "from PySide6.QtCore import QDateTime\nx = QDateTime.currentMSecsSinceEpoch()\n",
+    "from PySide6.QtCore import QDateTime\nx = QDateTime.currentSecsSinceEpoch()\n",
+    "import time\nx = time.ctime()\n",
+    "import time\nx = time.asctime()\n",
+    "from time import ctime\nx = ctime()\n",
+    "from time import asctime as a\nx = a()\n",
+    # time.strftime(fmt) with one argument reads the local clock
+    'import time\nx = time.strftime("%Y-%m-%d")\n',
+    "import time as t\nx = t.strftime(fmt)\n",
+    "import time\nx = time.strftime(format=fmt)\n",
+    "from time import strftime\nx = strftime(fmt)\n",
+    "from time import strftime as sf\nx = sf(fmt)\n",
 ]
+
+# Clock functions passed by reference (not called). Each source has exactly one violation.
+CLOCK_REFERENCE_SOURCES = [
+    # the four accidental patterns of the QA finding, verbatim
+    "from dataclasses import dataclass, field\nfrom datetime import date\n\n\n@dataclass\n"
+    "class X:\n    as_of: date = field(default_factory=date.today)\n",
+    "import functools\nfrom datetime import UTC, datetime\n\n"
+    "f = functools.partial(datetime.now, UTC)\n",
+    "from PySide6.QtCore import QDateTime\n\n"
+    "stamp = QDateTime.currentDateTimeUtc\nvalue = stamp()\n",
+    "from time import time\n\nordered = sorted(xs, key=time)\n",
+    # aliases and dotted forms
+    "from datetime import datetime as dt\nf = dt.now\n",
+    "from datetime import date as d\nf = d.today\n",
+    "from datetime import datetime\nf = datetime.utcnow\n",
+    "import datetime\nf = datetime.datetime.now\n",
+    "import datetime\nf = datetime.date.today\n",
+    "import datetime as dt\nf = dt.datetime.utcnow\n",
+    "import datetime as dt\nf = dt.date.today\n",
+    "import time\nf = time.time\n",
+    "import time as t\nf = t.time_ns\n",
+    "import time\nf = time.localtime\n",
+    "import time\nf = time.ctime\n",
+    "from time import time as clock_s\nordered = sorted(xs, key=clock_s)\n",
+    "from time import time_ns\nf = time_ns\n",
+    "from time import localtime\nf = localtime\n",
+    "from time import gmtime as g\nf = g\n",
+    "from time import ctime\nf = ctime\n",
+    "from datetime import today\nf = map(today, xs)\n",
+    "from PySide6.QtCore import QDate\nf = QDate.currentDate\n",
+    "from PySide6.QtCore import QDateTime as QDT\nf = QDT.currentDateTime\n",
+    "from PySide6.QtCore import QTime\nf = QTime.currentTime\n",
+    "from PySide6 import QtCore\nf = QtCore.QDateTime.currentDateTime\n",
+    "import PySide6.QtCore as qc\nf = qc.QDateTime.currentMSecsSinceEpoch\n",
+    "import PySide6.QtCore as qc\nf = qc.QDateTime.currentSecsSinceEpoch\n",
+    # nested positions
+    "from datetime import date\nitems = [date.today for _ in xs]\n",
+    "from datetime import date\n\n\ndef f(g=date.today):\n    return g\n",
+]
+
+CLOCK_POSITIVE_SOURCES += CLOCK_REFERENCE_SOURCES
 
 CLOCK_POSITIVE: list[Case] = _catch(RULE_CLOCK, CLOCK_POSITIVE_SOURCES)
 CLOCK_POSITIVE += _catch(RULE_CLOCK, ["x = datetime.now()\n"], "services/a.py")
@@ -323,6 +474,51 @@ def test_clock_module_may_read_the_wall_clock(source: str) -> None:
     assert _rules(source, "clock.py") == set()
 
 
+@pytest.mark.parametrize("source", CLOCK_REFERENCE_SOURCES)
+def test_clock_reference_is_reported_once(source: str) -> None:
+    found = check_source(source, PurePosixPath(NEUTRAL))
+    assert [v.rule for v in found] == [RULE_CLOCK], [str(v) for v in found]
+
+
+@pytest.mark.parametrize("source", CLOCK_REFERENCE_SOURCES[:4])
+def test_clock_references_are_caught_in_the_domain_layer(source: str) -> None:
+    assert RULE_CLOCK in _rules(source, "domain/x.py")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from datetime import datetime\nx = datetime.now()\n",
+        "import datetime\nx = datetime.datetime.now(tz)\n",
+        "from time import time\nx = time()\n",
+        "from PySide6.QtCore import QDateTime\nx = QDateTime.currentDateTimeUtc()\n",
+        "import time\nx = time.strftime(fmt)\n",
+        "from time import strftime\nx = strftime(fmt)\n",
+    ],
+)
+def test_clock_call_is_reported_once(source: str) -> None:
+    found = check_source(source, PurePosixPath(NEUTRAL))
+    assert [v.rule for v in found] == [RULE_CLOCK], [str(v) for v in found]
+
+
+SHADOWING_FLAGGED = [
+    # shadowing is not tracked: the file imports ``time``, so the parameter is the import
+    "from time import time\n\n\ndef f(time):\n    return time\n",
+    "import time\n\n\ndef f(time):\n    return time.now\n",
+    "from datetime import date\n\n\ndef f(date):\n    return date.today\n",
+]
+
+
+@pytest.mark.parametrize("source", SHADOWING_FLAGGED)
+def test_clock_rule_does_not_track_shadowing(source: str) -> None:
+    assert _rules(source, NEUTRAL) == {RULE_CLOCK}
+
+
+@pytest.mark.parametrize("source", SHADOWING_FLAGGED)
+def test_clock_rule_shadowing_in_the_clock_module_is_allowed(source: str) -> None:
+    assert _rules(source, "clock.py") == set()
+
+
 CLOCK_NEGATIVE = [
     "import time\ntime.sleep(1)\n",
     "import time\nx = time.monotonic()\ny = time.perf_counter()\n",
@@ -334,6 +530,31 @@ CLOCK_NEGATIVE = [
     "now = 5\ntoday = 'monday'\nx = now + 1\n",
     "def f(today):\n    return today\n",
     "x = obj.now\ny = obj.today\n",
+    # uncalled references on arbitrary (not imported) objects stay allowed
+    "x = obj.now\n",
+    "class C:\n    def f(self):\n        return self.clock.today\n",
+    "import platform\nx = platform.time\n",
+    "from datetime import datetime\nfactory = datetime(2026, 1, 1).now\n",
+    "date = make_date()\nf = date.today\n",
+    # not clock names, even on imported clock objects
+    "import time\nf = time.sleep\ng = time.monotonic\n",
+    "from datetime import date, datetime\nf = date.fromordinal\ng = datetime.fromisoformat\n",
+    "from PySide6.QtCore import QDate\nf = QDate.fromString\n",
+    "from time import sleep\nf = sleep\n",
+    "import datetime\nx: datetime.timedelta\n",
+    # strftime: only time.strftime(fmt) with a single argument reads the clock
+    "from datetime import datetime\nvalue = datetime(2026, 1, 1)\nx = value.strftime('%Y')\n",
+    "x = value.strftime('%Y')\n",
+    "import time\nx = time.strftime('%Y', t)\n",
+    "import time\nx = time.strftime(fmt, t)\n",
+    "from time import strftime\nx = strftime(fmt, t)\n",
+    "import time\nf = time.strftime\n",
+    "def f(strftime):\n    return strftime('%Y')\n",
+    # a name that merely looks like an imported clock name (no such import) is just a name
+    "def f(time):\n    return time\n",
+    "def f(time):\n    return time.now\n",
+    "def f(time_ns):\n    return time_ns\n",
+    "ctime = 3\nx = ctime + 1\n",
     "def now_label() -> str: ...\n",
     "from time import sleep\nsleep(1)\n",
     "class C:\n    time_zone = 1\n\n    def f(self):\n        return self.time_zone\n",

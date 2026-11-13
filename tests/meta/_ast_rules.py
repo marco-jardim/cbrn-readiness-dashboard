@@ -8,25 +8,56 @@ and written with forward slashes (``PurePosixPath("ui/shell/folders.py")``).
 Rules (ids are the ``Violation.rule`` values):
 
 ``NET``
-    Imports of network, event-loop, browser and process modules anywhere in ``src/``. Besides plain
-    ``import x`` and ``from x import y`` the engine sees ``from PySide6 import QtNetwork`` and the
-    dynamic forms ``importlib.import_module("socket")`` / ``__import__("socket")`` with a
-    string-literal argument.
+    Imports of network, event-loop, browser and process modules anywhere in ``src/``
+    (``socket``, ``socketserver``, ``urllib``, ``asyncio``, ``multiprocessing``, every
+    ``PySide6.QtNetwork*`` / ``QtWebEngine*`` component, ``QtWebSockets``, ``QtHttpServer`` ...).
+    Besides plain ``import x`` and ``from x import y`` the engine sees
+    ``from PySide6 import QtNetwork`` / ``QtNetworkAuth`` and the dynamic forms
+    ``importlib.import_module("socket")`` / ``__import__("socket")`` with a string-literal
+    argument.
 ``HANDOFF``
-    Hand-offs to the shell or to other programs. ``subprocess`` and ``ctypes`` may not be imported
-    anywhere in ``src/`` (the plan's exceptions are for ``tests/`` and ``scripts/``, which are not
-    scanned). Any use of the name ``startfile`` or ``QDesktopServices`` (import, name or attribute,
-    whatever the alias) is allowed only in ``ui/shell/folders.py``.
+    Hand-offs to the shell or to other programs. ``subprocess``, ``ctypes`` and ``multiprocessing``
+    may not be imported anywhere in ``src/`` (the plan's exceptions are for ``tests/`` and
+    ``scripts/``, which are not scanned). ``QProcess`` (import, name or attribute) is forbidden
+    everywhere too. ``os.system``, ``os.popen``, ``os.spawn*`` and ``os.exec*`` are forbidden
+    whenever they are accessed on the ``os`` module, resolved through the file's imports
+    (``import os as o`` -> ``o.system``; ``from os import system`` is flagged at the import); an
+    unrelated ``.system`` attribute (``platform.system()``, ``self.system``) is not touched. Any
+    use of the name ``startfile`` or ``QDesktopServices`` (import, name or attribute, whatever the
+    alias) is allowed only in ``ui/shell/folders.py``.
 ``CLOCK``
-    Wall-clock reads outside ``clock.py``: calls to ``.today()``, ``.now()``, ``.utcnow()``,
-    ``.time()``, ``.time_ns()``, ``.localtime()``, ``.gmtime()``, ``.currentDate()``,
-    ``.currentDateTime()``, ``.currentDateTimeUtc()`` and ``.currentTime()``, plus bare calls of
-    such names imported with ``from time import ...`` / ``from datetime import ...``.
+    Wall-clock reads outside ``clock.py``. The clock names are ``today``, ``now``, ``utcnow``,
+    ``time``, ``time_ns``, ``localtime``, ``gmtime``, ``ctime``, ``asctime``, ``currentDate``,
+    ``currentDateTime``, ``currentDateTimeUtc``, ``currentTime``, ``currentMSecsSinceEpoch`` and
+    ``currentSecsSinceEpoch``. Three matching modes:
 
-    Matching is by **attribute name**, whatever the import alias or the object it is called on:
-    ``foo.now()`` is flagged even when ``foo`` is not a datetime. This is intended. A false
-    positive (for example ``datetime.time(12, 0)`` or a method of your own called ``now``) is
-    resolved by renaming, never by adding an exception.
+    * **Calls** are matched by **attribute name**, whatever the import alias or the object it is
+      called on: ``foo.now()`` is flagged even when ``foo`` is not a datetime. This is intended.
+      Bare calls of such names imported with ``from time import ...`` / ``from datetime import
+      ...`` are flagged too.
+    * **References** (the function is not called, e.g. ``field(default_factory=date.today)``,
+      ``functools.partial(datetime.now, UTC)``, ``stamp = QDateTime.currentDateTimeUtc``) are
+      flagged when the clock name is an attribute of an *imported* clock-bearing object: the
+      ``time`` module, ``datetime`` / ``datetime.date`` / ``datetime.datetime`` / ``datetime.time``
+      (also the dotted forms and aliases such as ``from datetime import datetime as dt``), and
+      ``QDate`` / ``QDateTime`` / ``QTime`` from PySide6. A bare ``Name`` that was imported as a
+      clock name (``from time import time``) is flagged on every load, called or not. A reference
+      on any other object (``x = obj.now``, ``self.clock.today``) is **allowed** when not called.
+      A called reference is reported once.
+    * ``time.strftime(fmt)`` (also ``from time import strftime``) with exactly **one** argument
+      reads the local clock and is flagged; ``time.strftime(fmt, t)`` and
+      ``datetime_obj.strftime(fmt)`` are allowed.
+
+    Shadowing is *not* tracked: the engine works on the file's import table, not on scopes. If a
+    file imports ``time`` (module or function) a parameter or variable of the same name is still
+    treated as the import (``from time import time`` + ``def f(time): return time`` is flagged;
+    ``import time`` + ``def f(time): return time.now`` too). Without the import the name is just a
+    name and is ignored. False positives are resolved by renaming, never by adding an exception.
+    The same holds for ``datetime.time(12, 0)`` or an annotation ``x: datetime.time``.
+
+Deliberate-evasion bypasses that remain out of scope (nobody writes these by accident):
+``getattr(os, "startfile")`` / ``getattr(os, "system")``, ``import_module(variable)`` with a
+non-literal argument, and clock functions fetched from containers or ``vars()``.
 ``LAYER-QT``
     ``PySide6`` / ``shiboken6`` imports in ``domain/``, ``services/``, ``storage/``,
     ``reports/model.py`` and ``reports/anonymise.py``.
@@ -79,13 +110,19 @@ NET_FORBIDDEN_PREFIXES: tuple[str, ...] = (
     "webbrowser",
     "subprocess",
     "ctypes",
-    "PySide6.QtNetwork",
+    "multiprocessing",
+    "socketserver",
     "PySide6.QtWebSockets",
+    "PySide6.QtHttpServer",
 )
 
 # (parent module, prefix of the next component): ``PySide6`` + ``QtWebEngine`` matches
-# ``PySide6.QtWebEngineCore``, ``PySide6.QtWebEngineWidgets`` and so on.
-NET_FORBIDDEN_COMPONENT_PREFIXES: tuple[tuple[str, str], ...] = (("PySide6", "QtWebEngine"),)
+# ``PySide6.QtWebEngineCore``, ``PySide6.QtWebEngineWidgets`` and so on; ``PySide6`` + ``QtNetwork``
+# matches ``QtNetwork`` and ``QtNetworkAuth``.
+NET_FORBIDDEN_COMPONENT_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("PySide6", "QtWebEngine"),
+    ("PySide6", "QtNetwork"),
+)
 
 # Functions whose first string-literal argument names a module that is imported dynamically.
 DYNAMIC_IMPORT_FUNCTIONS: frozenset[str] = frozenset({"import_module", "__import__"})
@@ -93,7 +130,7 @@ DYNAMIC_IMPORT_FUNCTIONS: frozenset[str] = frozenset({"import_module", "__import
 # --- HANDOFF -----------------------------------------------------------------------------------
 
 # Modules that may not be imported anywhere in ``src/`` (no exceptions).
-HANDOFF_FORBIDDEN_PREFIXES: tuple[str, ...] = ("subprocess", "ctypes")
+HANDOFF_FORBIDDEN_PREFIXES: tuple[str, ...] = ("subprocess", "ctypes", "multiprocessing")
 
 # Names that may not be used (as name, attribute or part of an imported dotted name) ...
 HANDOFF_FORBIDDEN_NAMES: frozenset[str] = frozenset({"startfile", "QDesktopServices"})
@@ -101,9 +138,37 @@ HANDOFF_FORBIDDEN_NAMES: frozenset[str] = frozenset({"startfile", "QDesktopServi
 # ... except in these files.
 HANDOFF_ALLOWED_FILES: frozenset[PurePosixPath] = frozenset({PurePosixPath("ui/shell/folders.py")})
 
+# Names that may not be used anywhere in ``src/`` (same forms as above, no exception).
+HANDOFF_NEVER_NAMES: frozenset[str] = frozenset({"QProcess"})
+
+# Attributes of this module (resolved through the import table) that start another program.
+HANDOFF_OS_MODULE = "os"
+HANDOFF_OS_ATTRIBUTES: frozenset[str] = frozenset(
+    {
+        "system",
+        "popen",
+        "spawnl",
+        "spawnle",
+        "spawnlp",
+        "spawnlpe",
+        "spawnv",
+        "spawnve",
+        "spawnvp",
+        "spawnvpe",
+        "execl",
+        "execle",
+        "execlp",
+        "execlpe",
+        "execv",
+        "execve",
+        "execvp",
+        "execvpe",
+    }
+)
+
 # --- CLOCK -------------------------------------------------------------------------------------
 
-# Attribute (or bare) names that read the wall clock when called.
+# Attribute (or bare) names that read the wall clock when called (calls match by attribute name).
 CLOCK_CALL_NAMES: frozenset[str] = frozenset(
     {
         "today",
@@ -113,15 +178,33 @@ CLOCK_CALL_NAMES: frozenset[str] = frozenset(
         "time_ns",
         "localtime",
         "gmtime",
+        "ctime",
+        "asctime",
         "currentDate",
         "currentDateTime",
         "currentDateTimeUtc",
         "currentTime",
+        "currentMSecsSinceEpoch",
+        "currentSecsSinceEpoch",
     }
 )
 
-# ``from <module> import <clock name>``: the imported local name is then flagged when called bare.
+# ``from <module> import <clock name>``: the imported local name is then flagged on every load.
 CLOCK_BARE_IMPORT_MODULES: frozenset[str] = frozenset({"time", "datetime"})
+
+# Imported objects whose clock-named attributes are flagged even when only referenced. Dotted
+# origins as resolved through the import table (``from datetime import datetime as dt`` -> ``dt``
+# is ``datetime.datetime``) ...
+CLOCK_OBJECT_ORIGINS: frozenset[str] = frozenset(
+    {"time", "datetime", "datetime.date", "datetime.datetime", "datetime.time"}
+)
+
+# ... plus these classes from any PySide6 module (``PySide6.QtCore.QDateTime`` ...).
+CLOCK_QT_ROOT = "PySide6"
+CLOCK_QT_CLASSES: frozenset[str] = frozenset({"QDate", "QDateTime", "QTime"})
+
+# Functions that read the local clock only when called with exactly one argument.
+CLOCK_ONE_ARGUMENT_FUNCTIONS: frozenset[str] = frozenset({"time.strftime"})
 
 # The only files allowed to read the wall clock.
 CLOCK_ALLOWED_FILES: frozenset[PurePosixPath] = frozenset({PurePosixPath("clock.py")})
@@ -211,8 +294,13 @@ def _module_findings(name: str, rel_path: PurePosixPath) -> list[Finding]:
         found.append((RULE_NET, f"forbidden import of {name}"))
     if any(_has_prefix(name, prefix) for prefix in HANDOFF_FORBIDDEN_PREFIXES):
         found.append((RULE_HANDOFF, f"forbidden import of {name}"))
-    handoff_names = HANDOFF_FORBIDDEN_NAMES.intersection(name.split("."))
-    if handoff_names and rel_path not in HANDOFF_ALLOWED_FILES:
+    parts = name.split(".")
+    handoff_names = HANDOFF_FORBIDDEN_NAMES.intersection(parts)
+    if (
+        (handoff_names and rel_path not in HANDOFF_ALLOWED_FILES)
+        or HANDOFF_NEVER_NAMES.intersection(parts)
+        or (len(parts) == 2 and parts[0] == HANDOFF_OS_MODULE and parts[1] in HANDOFF_OS_ATTRIBUTES)
+    ):
         found.append((RULE_HANDOFF, f"hand-off API imported: {name}"))
     for layer in LAYER_RULES:
         if layer.applies_to(rel_path) and any(
@@ -257,40 +345,127 @@ def _import_findings(
 
 
 def _name_findings(name: str, rel_path: PurePosixPath) -> list[Finding]:
-    if name in HANDOFF_FORBIDDEN_NAMES and rel_path not in HANDOFF_ALLOWED_FILES:
+    if name in HANDOFF_NEVER_NAMES or (
+        name in HANDOFF_FORBIDDEN_NAMES and rel_path not in HANDOFF_ALLOWED_FILES
+    ):
         return [(RULE_HANDOFF, f"use of {name}")]
     return []
 
 
-def _bare_clock_names(tree: ast.AST) -> frozenset[str]:
+type ImportTable = dict[str, frozenset[str]]  # local name -> dotted origins it was imported from
+
+
+@dataclass(frozen=True)
+class _Scan:
+    """File-wide facts computed once per module (the engine does not track scopes)."""
+
+    imports: ImportTable
+    bare_clock_names: frozenset[str]
+    called_funcs: frozenset[int]  # ``id()`` of every node that is the ``func`` of a ``Call``
+
+
+def _import_table(tree: ast.AST) -> ImportTable:
+    """Map each imported local name to the dotted names it may stand for.
+
+    ``import a.b`` binds ``a``; ``import a.b as c`` binds ``c`` to ``a.b``;
+    ``from a import b as c`` binds ``c`` to ``a.b``. Relative imports are ignored (they are never
+    the stdlib or PySide6).
+    """
+    table: dict[str, set[str]] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                top = alias.name.split(".")[0]
+                table.setdefault(alias.asname or top, set()).add(
+                    alias.name if alias.asname else top
+                )
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            for alias in node.names:
+                if alias.name != "*":
+                    origin = f"{node.module}.{alias.name}"
+                    table.setdefault(alias.asname or alias.name, set()).add(origin)
+    return {name: frozenset(origins) for name, origins in table.items()}
+
+
+def _origins(expr: ast.expr, imports: ImportTable) -> frozenset[str]:
+    """Dotted names an expression stands for through the imports (empty if not an import)."""
+    if isinstance(expr, ast.Name):
+        return imports.get(expr.id, frozenset())
+    if isinstance(expr, ast.Attribute):
+        return frozenset(f"{origin}.{expr.attr}" for origin in _origins(expr.value, imports))
+    return frozenset()
+
+
+def _bare_clock_names(imports: ImportTable) -> frozenset[str]:
     """Local names bound by ``from time|datetime import <clock name> [as alias]``."""
     names: set[str] = set()
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.ImportFrom)
-            and node.level == 0
-            and node.module in CLOCK_BARE_IMPORT_MODULES
-        ):
-            names.update(
-                alias.asname or alias.name for alias in node.names if alias.name in CLOCK_CALL_NAMES
-            )
+    for local, origins in imports.items():
+        for origin in origins:
+            module, _, member = origin.rpartition(".")
+            if module in CLOCK_BARE_IMPORT_MODULES and member in CLOCK_CALL_NAMES:
+                names.add(local)
     return frozenset(names)
 
 
-def _call_findings(
-    node: ast.Call, rel_path: PurePosixPath, bare_clock_names: frozenset[str]
-) -> list[Finding]:
+def _is_clock_object(origin: str) -> bool:
+    if origin in CLOCK_OBJECT_ORIGINS:
+        return True
+    parts = origin.split(".")
+    return parts[0] == CLOCK_QT_ROOT and len(parts) > 1 and parts[-1] in CLOCK_QT_CLASSES
+
+
+def _has_single_argument(node: ast.Call) -> bool:
+    total = len(node.args) + len(node.keywords)
+    return total == 1 and not any(isinstance(arg, ast.Starred) for arg in node.args)
+
+
+def _attribute_findings(node: ast.Attribute, rel_path: PurePosixPath, scan: _Scan) -> list[Finding]:
+    found: list[Finding] = []
+    attr = node.attr
+    base = _origins(node.value, scan.imports)
+    if attr in HANDOFF_OS_ATTRIBUTES and HANDOFF_OS_MODULE in base:
+        found.append((RULE_HANDOFF, f"hand-off API {HANDOFF_OS_MODULE}.{attr}"))
+    if (
+        attr in CLOCK_CALL_NAMES
+        and isinstance(node.ctx, ast.Load)
+        and id(node) not in scan.called_funcs  # a call is reported once, by the call rule
+        and rel_path not in CLOCK_ALLOWED_FILES
+        and any(_is_clock_object(origin) for origin in base)
+    ):
+        found.append((RULE_CLOCK, f"wall-clock reference .{attr}"))
+    return found
+
+
+def _bare_name_findings(node: ast.Name, rel_path: PurePosixPath, scan: _Scan) -> list[Finding]:
+    if (
+        node.id in scan.bare_clock_names
+        and isinstance(node.ctx, ast.Load)
+        and id(node) not in scan.called_funcs  # a call is reported once, by the call rule
+        and rel_path not in CLOCK_ALLOWED_FILES
+    ):
+        return [(RULE_CLOCK, f"wall-clock reference {node.id}")]
+    return []
+
+
+def _call_findings(node: ast.Call, rel_path: PurePosixPath, scan: _Scan) -> list[Finding]:
     found: list[Finding] = []
     func = node.func
+    clock_checked = rel_path not in CLOCK_ALLOWED_FILES
     called: str | None = None
     if isinstance(func, ast.Attribute):
         called = func.attr
-        if called in CLOCK_CALL_NAMES and rel_path not in CLOCK_ALLOWED_FILES:
+        if clock_checked and called in CLOCK_CALL_NAMES:
             found.append((RULE_CLOCK, f"wall-clock call .{called}()"))
     elif isinstance(func, ast.Name):
         called = func.id
-        if called in bare_clock_names and rel_path not in CLOCK_ALLOWED_FILES:
+        if clock_checked and called in scan.bare_clock_names:
             found.append((RULE_CLOCK, f"wall-clock call {called}()"))
+    if (
+        clock_checked
+        and _origins(func, scan.imports) & CLOCK_ONE_ARGUMENT_FUNCTIONS
+        and _has_single_argument(node)
+    ):
+        found.append((RULE_CLOCK, "wall-clock call time.strftime(fmt) with one argument"))
     if called in DYNAMIC_IMPORT_FUNCTIONS and node.args:
         first = node.args[0]
         if (
@@ -312,18 +487,25 @@ def check_source(source: str, rel_path: PurePosixPath) -> list[Violation]:
     except SyntaxError as exc:
         return [Violation(RULE_SYNTAX, rel_path, exc.lineno or 0, f"cannot parse: {exc.msg}")]
     package = (ROOT_PACKAGE, *rel_path.parent.parts)
-    bare_clock_names = _bare_clock_names(tree)
+    imports = _import_table(tree)
+    scan = _Scan(
+        imports=imports,
+        bare_clock_names=_bare_clock_names(imports),
+        called_funcs=frozenset(id(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)),
+    )
     found: dict[Violation, None] = {}
     for node in ast.walk(tree):
         findings: list[Finding]
         if isinstance(node, ast.Import | ast.ImportFrom):
             findings = _import_findings(node, rel_path, package)
         elif isinstance(node, ast.Call):
-            findings = _call_findings(node, rel_path, bare_clock_names)
+            findings = _call_findings(node, rel_path, scan)
         elif isinstance(node, ast.Name):
             findings = _name_findings(node.id, rel_path)
+            findings += _bare_name_findings(node, rel_path, scan)
         elif isinstance(node, ast.Attribute):
             findings = _name_findings(node.attr, rel_path)
+            findings += _attribute_findings(node, rel_path, scan)
         else:
             continue
         for rule, detail in findings:
