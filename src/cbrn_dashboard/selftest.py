@@ -292,6 +292,63 @@ def _check_encrypted_backup(context: SelfTestContext) -> None:
     _require(material == crypto_backup.KEY_MATERIAL_BYTES, "the key derivation gave a wrong size")
 
 
+@register("pdf")
+def _check_pdf(context: SelfTestContext) -> None:
+    # Imported here so that the other checks still run if the PDF writer fails to load.
+    from datetime import date
+
+    from cbrn_dashboard.domain.alerts import Severity
+    from cbrn_dashboard.domain.indicators import Module
+    from cbrn_dashboard.reports.model import (
+        AlertCountRow,
+        Cell,
+        KeyFigureGroup,
+        ReportDocument,
+        ReportHeader,
+        ReportVariant,
+    )
+    from cbrn_dashboard.reports.pdf import write_report_pdf
+
+    ensure_application()
+    # A tiny, fictitious document; the time value is a constant, not the clock.
+    document = ReportDocument(
+        variant=ReportVariant.INTERNAL,
+        header=ReportHeader(
+            institution_name="Selftest Institution",
+            unit_name="Selftest Unit",
+            as_of=date(2026, 1, 15),
+            generated_at_utc="2026-01-15T12:00:00Z",
+            app_version=__version__,
+            operator_label="",
+        ),
+        handling_notice="",
+        is_demo=False,
+        small_count_threshold=5,
+        key_figures=(
+            KeyFigureGroup(
+                Module.PERSONNEL,
+                (Cell("kf:PERSONNEL:active_staff", 12.0, personnel_derived=True),),
+            ),
+        ),
+        indicators=(),
+        alert_summary=(
+            AlertCountRow(Severity.INFO, Cell("alert:INFO", 3.0, personnel_derived=True)),
+        ),
+        charts=(),
+        retraining=(),
+        overdue_assets=(),
+    )
+    target = context.workdir / "selftest-report.pdf"
+    try:
+        write_report_pdf(document, target, language=DEFAULT_LANGUAGE, qm_dir=context.qm_dir)
+        data = target.read_bytes()
+        _require(data.startswith(b"%PDF-"), "the report is not a PDF")
+        _require(len(data) > 1000, "the report PDF is too small")
+    finally:
+        target.unlink(missing_ok=True)
+    _require(not target.exists(), "the report PDF was not removed")
+
+
 # --------------------------------------------------------------------------- the runner
 
 

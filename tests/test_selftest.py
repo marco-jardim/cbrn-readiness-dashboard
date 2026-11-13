@@ -29,6 +29,7 @@ EXPECTED_CHECKS = [
     "database",
     "chart",
     "encrypted_backup",
+    "pdf",
 ]
 
 
@@ -285,6 +286,24 @@ def test_encrypted_backup_check_fails_with_the_type_name_only_when_the_bytes_dif
     }
     assert all(c["passed"] for name, c in by_name.items() if name != "encrypted_backup")
     assert [entry.name for entry in data.iterdir()] == ["selftest.json"]
+
+
+def test_the_pdf_check_is_registered_after_the_encrypted_backup_check() -> None:
+    names = [name for name, _ in selftest.CHECKS]
+    assert names.index("encrypted_backup") < names.index("pdf")
+
+
+def test_pdf_check_passes_and_leaves_nothing_in_the_throwaway_folder(
+    qapp: QApplication, qm_dir: Path, tmp_path: Path
+) -> None:
+    location = DataLocation(path=tmp_path / "data", source=LocationSource.CLI, writable=True)
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+
+    dict(selftest.CHECKS)["pdf"](selftest.SelfTestContext(location, workdir, qm_dir))
+
+    assert list(workdir.iterdir()) == []
+    assert not (tmp_path / "data").exists()
 
 
 def test_register_appends_a_check(monkeypatch: pytest.MonkeyPatch) -> None:
