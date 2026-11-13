@@ -2,8 +2,12 @@
 
 The demo mode opens a separate database full of fictitious data, so every page can be tried
 without touching real records. Nothing in it is real: the people, units, editions and amounts are
-generated from a fixed seed and are placed relative to today, so the same situations are visible
-whatever day the demo is opened.
+generated from a fixed seed and are placed relative to the day the demo database is created. The
+situations described below are those of that creation day. The data is not regenerated when the
+demo is opened again, so it ages with the calendar: a certificate that "expires in 30 days" expires
+a day closer each day, and an alert that is a warning today becomes critical later. When you open
+an existing demo database on another day, the application offers to create the demo data again for
+today (see "Start the demo").
 
 Names in `code font` that start with DEMO are records of the demo dataset. A test checks that each
 of them exists, so this page cannot drift from the data.
@@ -17,8 +21,14 @@ uv run cbrn-dashboard --demo
 ```
 
 Add `--data-dir <folder>` to choose the data folder and `--lang en-US` (or `pt-BR`, `es-ES`) to
-choose the language for one run. The first start creates and fills the demo database; later starts
-open it again without generating anything a second time.
+choose the language for one run. The first start creates and fills the demo database and stores the
+day it was created next to the demo flag. Later starts open it again without generating anything a
+second time.
+
+When a later start happens on another day than the creation day, the application asks once whether
+to create the demo data again for today. Answer yes to replace the demo database with a new one
+dated today (any change you made to the demo data is lost; the real database is never touched), or
+no to keep it exactly as it is. In read-only mode nothing is asked and nothing is written.
 
 A permanent banner at the top of the window says that the data is fictitious. It is driven by the
 database, not by the command-line option: any database marked as a demo database shows it.
@@ -82,8 +92,10 @@ metrics `DEMO-M1` (higher is better) and `DEMO-M2` (lower is better).
 
 The Budget page shows entries for the current fiscal year and the three before it, for the two
 built-in funding sources and the user-defined source `DEMO-SRC-A`. Each entry has several dated
-execution rows; in the current year one row is dated after today and does not count yet. The OPCW
-trust fund has entries in BRL and in USD, which are never added together.
+execution rows; in the current year one row is dated after today and does not count yet. The one
+exception is a demo database created on 31 December: a row must stay inside its fiscal year, so no
+row can be dated after that day. The OPCW trust fund has entries in BRL and in USD, which are never
+added together.
 
 - `DEMO - pending allocation` is a USD entry of `DEMO-SRC-A` with execution rows but no allocated
   amount, so its execution rate reads "No data".
@@ -121,14 +133,24 @@ Two readings read "No data" whatever the targets: `EX_LAST_PARTICIPANTS` for EXB
 no target and read "No target".
 
 The targets are written when the demo database is created. They are computed from the generated
-data so that the statuses above hold on any day; they are not standards of any kind.
+data of the creation day; they are not standards of any kind. They are not recomputed later, so
+the statuses above are those of the creation day and change as the dates age.
+
+One status depends on the creation day. The budget target is a year-end value that the application
+multiplies by the elapsed part of the year (day of the year divided by the days in the year), and
+the demo never stores a year-end ratio above 100 percent. The DIRSA group has executed between 4
+and 12 percent of its allocation, so it can only read Critical once the elapsed part of the year is
+above that share. In a demo database created from 13 February on, the table is exact. In one
+created before 13 February (on 1 January the elapsed part is 0.3 percent), `BUD_EXEC_RATE` for
+BRL and DIRSA reads OK instead of Critical. Every other row, and each of the five statuses on the
+dashboard, is the same on every creation day.
 
 ## Alerts
 
 The Alerts page lists alerts sorted by severity and then by due date, with the columns Severity,
 Module, Subject, Due date and Message. It can be filtered by module and by severity, and the
-"Open record" button opens the record of the selected alert. The demo data produces every kind,
-and each severity:
+"Open record" button opens the record of the selected alert. On the creation day the demo data
+produces every kind, and each severity:
 
 | Kind | Severity | Example |
 |---|---|---|
@@ -155,3 +177,54 @@ snapshot is taken in demo mode.
 The validation export of the demo database uses these snapshots when a retroactive reading is
 requested: every started edition then gets the readings of its own snapshot, while `DEMO-EX-09`
 carries the reason code `NO_PRIOR_SNAPSHOT`. Its file names start with DEMO-.
+
+## Reports
+
+The Reports page has four parts. The report and the exports write only to a file or folder you
+choose; importing and recording or withdrawing a snapshot change the demo database.
+
+- PDF report: "Create report..." opens a dialog to create the PDF report of the as-of date, either
+  internal or anonymised, and to choose the file.
+- Data export: "Export CSV files..." asks for a folder, warns that the files contain internal data
+  and writes the CSV files. "Validation export..." opens a dialog that asks for a folder and writes
+  the validation export described under Snapshots. In the demo database the file names start with
+  DEMO-.
+- Data import: "Import CSV file..." opens a wizard. A file is checked first, and a file with any
+  error imports nothing. The wizard asks for the kind of data and, before writing, how many rows
+  will be imported. Importing writes into the demo database only.
+- Readiness snapshots: the list of snapshots (eight retroactive ones in the demo database), a box
+  "Show withdrawn snapshots", "Record snapshot" for the as-of date and "Withdraw snapshot..." for
+  the selected one. Withdrawing asks for a reason; the snapshot stays stored.
+
+In read-only mode the report and the exports stay available; importing, recording and withdrawing
+are disabled.
+
+## Settings
+
+The Settings page has one tab per group of settings; each tab holds one box per section.
+
+- General: language, operator label, institution name and unit name.
+- Alerts: how many days ahead certificates and maintenance are warned about.
+- Targets: the table of indicator targets. In the demo database it lists the illustrative targets
+  of the Dashboard section. A target can be added, edited, switched on or off, or deleted. The
+  budget execution rate is entered as a year-end value; the note on the page says that it is scaled
+  over the fiscal year when the indicator is evaluated.
+- The sections of the modules (personnel rules and courses, infrastructure types, exercise metrics,
+  funding sources), the backup settings, the settings of reports and anonymisation, and the
+  snapshot settings.
+
+A setting that is still a placeholder shows a "Placeholder - to be confirmed" badge with a Confirm
+button. Changes made in the demo database stay in it; they are lost if the demo data is created
+again.
+
+## The File menu
+
+- "Back up..." chooses the file for an encrypted backup (the suggested name starts with DEMO- in the
+  demo database and ends in .cbrnbak), warns when the place is a network drive, a cloud-synchronised
+  folder or the data folder itself, asks for the passphrase twice and writes the file. It also works
+  in read-only mode.
+- "Restore..." chooses a backup file, asks you to confirm that ALL the data now in the application
+  is replaced (a safety copy of the current data is kept first) and asks for the passphrase. It is
+  disabled in read-only mode. In demo mode it works on the demo database.
+- "Open data folder" opens the data folder in the file manager.
+- "Quit" closes the application.

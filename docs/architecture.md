@@ -142,7 +142,13 @@ clock's date.
 
 At start-up a clock sanity check marks the session as suspect when the current UTC instant is
 earlier than the newest `change_log` row or than the build timestamp. A suspect session shows a
-banner and skips the automatic snapshot and the rotation of backups.
+banner and skips the automatic monthly snapshot. It still makes backups; what it skips is the
+rotation of three pools, because a time that is too early in a file name could push newer, good
+copies out: the daily pool (the daily backup itself still runs), the pre-migration pool (the
+migration backup is made, the pool is not rotated) and the before-restore pool (the safety copy is
+made, the pool is not rotated). The before-restore pool is also not rotated while the live database
+fails its own integrity check, whatever the clock says. The manual encrypted backup has no pool and
+no rotation.
 
 One known limit: Qt writes the creation date of a PDF itself, from the system clock, and it cannot
 be set through `QPdfWriter` (see `reports/pdf.py`).
@@ -158,10 +164,14 @@ be set through `QPdfWriter` (see `reports/pdf.py`).
 - **Process spawning and shell hand-offs.** The `HANDOFF` rule forbids `subprocess`, `ctypes`,
   `multiprocessing`, `QProcess`, `os.system`, `os.popen`, `os.spawn*` and `os.exec*` everywhere in
   `src/`. `os.startfile` and `QDesktopServices` are allowed only in `ui/shell/folders.py`, the one
-  place meant to hand a folder to the shell (when this was written, that file had not been created).
+  place meant to hand a folder to the shell.
 - **The wall clock** outside `clock.py` (section 5).
-- **Writing outside the data folder.** In read-only mode nothing is written to it at all
-  (section 8).
+- **Writing where the user did not choose.** The database, the logs, the preferences, the plain
+  backups and the temporary files live in the data folder. The program writes outside it in three
+  cases only: a file or folder the user chose for an encrypted backup, a PDF report, a CSV or a
+  validation export; and the pointer file `location.json` in the user profile folder, which
+  remembers a data folder chosen after an unusable one (`paths.py`). In read-only mode nothing is
+  written to the data folder at all (section 8).
 - **Logging contents.** Logs hold event codes, exception types and stack frames only, never record
   contents or exception messages. A crash dialog shows a code, never the message.
 
@@ -181,7 +191,10 @@ create the real window. In order:
 5. In read-write mode the exclusive instance lock is taken **before** the database is opened and
    before the log file is opened; a second instance explains itself and exits with code 1.
 6. The database is opened: the demo database for `--demo`, a read-only connection in read-only
-   mode, otherwise the real database, migrated. A refused database ends with exit code 1.
+   mode, otherwise the real database, migrated. A refused database ends with exit code 1. The
+   demo database stores the day it was created (`app_meta`); a read-write `--demo` start on another
+   day asks once, through the prompts, whether to create the demo data again for today. Yes
+   replaces only the demo database file; no keeps it. In read-only mode nothing is asked.
 7. The clock sanity check runs.
 8. `AppContext` and the main window are built.
 9. The registered start-up hooks run once, in order.
@@ -407,8 +420,10 @@ If the module adds a placeholder (a default that needs confirmation), declare it
 `uv run pytest` runs the default suite: the unit tests, ruff (`check` and `format`), mypy, the
 guards of section 2 and the translation tests. The markers are `ui` (needs a `QApplication`, run on
 Qt's offscreen platform), `packaging` (builds or inspects the bundle; deselected by default,
-`uv run pytest -m packaging`) and `slow`. Qt warnings fail a test unless they are listed by exact
-text in `qt_log_ignore` in `pyproject.toml`. Test data is fictitious.
+`uv run pytest -m packaging`) and `slow`. Qt warnings fail a test unless a message matches one of
+the regular expressions listed in `qt_log_ignore` in `pyproject.toml` (the entries there are
+anchored patterns, so escape any parenthesis or dot that must match literally). Test data is
+fictitious.
 
 ## 14. Packaging and release
 
@@ -416,8 +431,11 @@ text in `qt_log_ignore` in `pyproject.toml`. Test data is fictitious.
   --noupx`), removes unwanted Qt libraries and writes the third-party licence folder with
   `scripts/collect_licenses.py`.
 - `scripts/make_release_zip.py` writes the reproducible zip, `SHA256SUMS.txt` and
-  `SHA256-FILES.txt` and fills the release-notes template. The release workflow runs on a version
-  tag, attests the build provenance and creates a **draft** release.
+  `SHA256-FILES.txt` and fills the release-notes template.
+- The release workflow runs on a version tag in two jobs. The read-only `build` job runs the tests
+  and the packaging tests, zips the bundle those tests built and uploads it. The `release` job, the
+  only one with write permissions, attests the zip's build provenance and creates a **draft**
+  release.
 - The version in the source is `0.0.1` and nothing is tagged. See the
   [install guide](install.en-US.md).
 

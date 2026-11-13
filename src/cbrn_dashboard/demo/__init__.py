@@ -9,14 +9,22 @@ Seeding is deterministic. Every registered generator receives its OWN ``random.R
 from the seed and the generator's name, so adding a module's generator later does not change the
 data another module generates. Time enters only through the injected
 :class:`~cbrn_dashboard.clock.Clock` (``DemoContext.today`` is ``clock.local_date()``), so the
-generated data sits relative to "today".
+generated data sits relative to the day the database is created.
 
 Every generated identifier starts with ``DEMO`` (``DEMO-P001``, ``DEMO-A001``, ``DEMO-EX-01``);
 generators and tests enforce that with :func:`assert_demo_identifier`.
 
 A database is seeded exactly once: the generators run inside ONE transaction (rolled back as a
 whole on error) only while ``app_meta["demo_seed"]`` is absent, and the marker is written in that
-same transaction. Reopening an existing demo database neither regenerates nor duplicates anything.
+same transaction, together with the creation day (``app_meta["demo_created_on"]``, the local date
+of the clock). Reopening an existing demo database neither regenerates nor duplicates anything, so
+its dates and targets stay those of the creation day and the situations age with the calendar.
+:func:`is_outdated` tells whether the creation day is not today, and
+:func:`recreate_demo_database` replaces the demo database (only that file) with a new one for
+today; the application asks the user before it does.
+
+:func:`generate` refuses a database whose ``app_meta.is_demo`` is not ``"1"``: demo targets and
+snapshots are never written into a real database.
 
 Module generators register with exactly one line each in :data:`GENERATORS`. The two cross-module
 generators of T10.1 come after them: ``targets`` (illustrative indicator targets, demo database
@@ -49,6 +57,7 @@ from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
 
 __all__ = [
     "DEFAULT_SEED",
+    "DEMO_CREATED_ON_KEY",
     "DEMO_DATABASE_FILE_NAME",
     "DEMO_DIR_NAME",
     "DEMO_PREFIX",
@@ -60,11 +69,14 @@ __all__ = [
     "DemoDataError",
     "DemoGenerator",
     "assert_demo_identifier",
+    "creation_day",
     "demo_database_path",
     "demo_identifier",
     "generate",
     "is_demo_identifier",
+    "is_outdated",
     "open_demo_database",
+    "recreate_demo_database",
 ]
 
 DEMO_DIR_NAME = "demo"
@@ -74,6 +86,9 @@ DEFAULT_SEED = 20260101
 
 #: ``app_meta`` key of the marker that says the generators already ran (value: the seed as text).
 DEMO_SEED_KEY = "demo_seed"
+
+#: ``app_meta`` key of the day the demo data was created (ISO date of the clock's local date).
+DEMO_CREATED_ON_KEY = "demo_created_on"
 
 NOT_DEMO_IDENTIFIER = "NOT_DEMO_IDENTIFIER"
 NOT_A_DEMO_DATABASE = "NOT_A_DEMO_DATABASE"
@@ -165,7 +180,9 @@ def generate(
     """Run the generators once for this database; return whether they ran.
 
     Nothing happens (``False``) when ``app_meta["demo_seed"]`` is already present. Otherwise all
-    generators and the marker are written in one transaction, rolled back as a whole on error.
+    generators and the markers (the seed and the creation day) are written in one transaction,
+    rolled back as a whole on error. A database whose ``app_meta.is_demo`` is not ``"1"`` is
+    refused with :class:`DemoDataError` (``NOT_A_DEMO_DATABASE``) before anything is written.
     """
     chosen = GENERATORS if generators is None else tuple(generators)
     names = [generator.name for generator in chosen]
@@ -174,6 +191,9 @@ def generate(
         raise ValueError(msg)
     today = clock.local_date()
     with transaction(conn):
+        if not app_meta.read_is_demo(conn):
+            msg = "Demo data is only written into a database that is flagged as a demo database."
+            raise DemoDataError(NOT_A_DEMO_DATABASE, msg)
         if app_meta.get(conn, DEMO_SEED_KEY) is not None:
             return False
         for generator in chosen:
@@ -182,7 +202,28 @@ def generate(
             )
             generator.run(context)
         app_meta.set_value(conn, DEMO_SEED_KEY, str(seed))
+        app_meta.set_value(conn, DEMO_CREATED_ON_KEY, today.isoformat())
     return True
+
+
+def creation_day(conn: DatabaseConnection) -> date | None:
+    """The day the demo data was created, or ``None`` when it is not stored (or not a date)."""
+    text = app_meta.get(conn, DEMO_CREATED_ON_KEY)
+    if text is None:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def is_outdated(conn: DatabaseConnection, clock: Clock) -> bool:
+    """Whether the demo data was created on a day other than the clock's local date.
+
+    A database that stores no creation day (the day cannot be known) is not outdated.
+    """
+    created = creation_day(conn)
+    return created is not None and created != clock.local_date()
 
 
 def _probe_is_demo(path: Path) -> bool:
@@ -249,3 +290,25 @@ def open_demo_database(
         conn.close()
         raise
     return conn
+
+
+def recreate_demo_database(
+    data_dir: Path,
+    clock: Clock,
+    *,
+    seed: int = DEFAULT_SEED,
+    generators: Sequence[DemoGenerator] | None = None,
+) -> DatabaseConnection:
+    """Replace ``<data>/demo/demo.sqlite3`` with a new demo database for the clock's date.
+
+    The caller closes its connection to the demo database first and holds the instance lock. Only
+    the demo database file and its SQLite side files are deleted, and only when the file is a demo
+    database (anything else is refused with ``NOT_A_DEMO_DATABASE`` and left as it is). The real
+    database and the demo backup folder are never touched. Then the new file is created and seeded
+    exactly as the first start does (:func:`open_demo_database`).
+    """
+    path = demo_database_path(data_dir)
+    _refuse_if_not_demo(path)
+    for name in (path.name, f"{path.name}-journal", f"{path.name}-wal", f"{path.name}-shm"):
+        path.with_name(name).unlink(missing_ok=True)
+    return open_demo_database(data_dir, clock, seed=seed, generators=generators)

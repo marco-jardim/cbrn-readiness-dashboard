@@ -16,9 +16,19 @@ evaluated again and a wrong status raises :class:`~cbrn_dashboard.demo.DemoDataE
 of a module generator that breaks this cannot go unnoticed.
 
 Targets are written THROUGH :meth:`~cbrn_dashboard.services.indicators.IndicatorService.set_target`
-(validated and logged with the operator label ``DEMO``). ``BUD_EXEC_RATE`` targets are year-end
-values (P08): the stored value is the wanted threshold divided by the elapsed fraction of the
-fiscal year.
+(validated and logged with the operator label ``DEMO``).
+
+The rule for ``BUD_EXEC_RATE`` (P08). The stored target is a YEAR-END ratio, and the service
+multiplies it by the elapsed fraction of the fiscal year (``scale``) when it evaluates. So the
+stored value is the wanted threshold of the day divided by ``scale``, but it is never stored above
+:data:`YEAR_END_TARGET_MAX` (1.0, that is 100 % of the allocation): a year-end target is a share of
+the allocation, and early in January the plain quotient would be far above 1 (on 1 January
+``scale`` is 1/365) and the service refuses it. The target is therefore valid on every day of the
+year. The price is that a ratio can only read WARNING or CRITICAL while the group's executed share
+is at or below ``scale``: with the stored value at its 1.0 ceiling the threshold of the day is
+``scale`` itself. Where the executed share is above it (for the DIRSA group, executed 4 to 12 %,
+from 1 January until about the middle of February) the wish for WARNING or CRITICAL cannot be met
+and the group reads OK; :func:`reachable_status` says so and the check after writing expects it.
 
 Qt-free.
 """
@@ -39,10 +49,20 @@ from cbrn_dashboard.domain.indicators import (
 if TYPE_CHECKING:
     from cbrn_dashboard.demo import DemoContext, DemoDataError
 
-__all__ = ["DEMO_TARGET_STATUS", "TARGET_PLAN", "TargetWish", "generate"]
+__all__ = [
+    "DEMO_TARGET_STATUS",
+    "TARGET_PLAN",
+    "YEAR_END_TARGET_MAX",
+    "TargetWish",
+    "generate",
+    "reachable_status",
+]
 
 #: Error code raised when a reading cannot get the status the plan below wants for it.
 DEMO_TARGET_STATUS = "DEMO_TARGET_STATUS"
+
+#: The highest year-end ratio target the demo stores (100 % of the allocation).
+YEAR_END_TARGET_MAX = 1.0
 
 _OK = IndicatorStatus.OK
 _WARNING = IndicatorStatus.WARNING
@@ -78,8 +98,8 @@ TARGET_PLAN: tuple[TargetWish, ...] = (
     TargetWish("EX_LAST_PARTICIPANTS", "kind=OTHER", _WARNING),
     TargetWish("EX_DAYS_SINCE_LAST", "kind=CBRAMED", _OK),
     TargetWish("EX_DAYS_SINCE_LAST", "kind=OTHER", _CRITICAL),
-    # The two groups with a low executed share (the budget generator's first band), so that the
-    # stored year-end ratios stay below 1.
+    # The two groups with a low executed share (the budget generator's first band, 4 to 12 %).
+    # DIRSA is CRITICAL only while that share is at or below the elapsed fraction of the year.
     TargetWish("BUD_EXEC_RATE", "currency=BRL;source=DIRSA", _CRITICAL),
     TargetWish("BUD_EXEC_RATE", "currency=USD;source=OPCW_TRUST_FUND", _OK),
 )
@@ -118,6 +138,25 @@ def _ratio_thresholds(status: IndicatorStatus, value: float) -> tuple[float, flo
     return value * 1.2, value * 1.1
 
 
+def _year_end(threshold: float, scale: float) -> float:
+    """The stored year-end value for the wanted ``threshold`` of the day, at most the ceiling."""
+    return min(round(threshold / scale, _RATIO_DIGITS), YEAR_END_TARGET_MAX)
+
+
+def reachable_status(
+    wish: TargetWish, value: float | None, unit: UnitKind, scale: float
+) -> IndicatorStatus:
+    """The status the plan can give ``wish``: the wished one, or OK for a ratio above ``scale``.
+
+    With the stored year-end value capped at :data:`YEAR_END_TARGET_MAX`, the threshold of the day
+    cannot exceed ``scale``; a ratio reading above it is OK whatever the wish (see the module
+    docstring).
+    """
+    if unit is UnitKind.RATIO and wish.status is not _OK and value is not None and value > scale:
+        return _OK
+    return wish.status
+
+
 def _thresholds(
     wish: TargetWish, reading: IndicatorReading, direction: Direction, unit: UnitKind, scale: float
 ) -> tuple[float, float]:
@@ -128,7 +167,7 @@ def _thresholds(
         if direction is not Direction.HIGHER_IS_BETTER or value <= 0.0 or scale <= 0.0:
             raise _fail(f"{wish.code} {wish.dimension}: no ratio target can be derived")
         warning, critical = _ratio_thresholds(wish.status, value)
-        return round(warning / scale, _RATIO_DIGITS), round(critical / scale, _RATIO_DIGITS)
+        return _year_end(warning, scale), _year_end(critical, scale)
     if wish.status is not _OK and value < 1.0:
         raise _fail(f"{wish.code} {wish.dimension}: a value of 0 cannot be made {wish.status}")
     if wish.status is _OK and direction is Direction.HIGHER_IS_BETTER and value < 1.0:
@@ -144,17 +183,22 @@ def generate(ctx: DemoContext) -> None:
         (reading.code, reading.dimension): reading for reading in indicators.evaluate(ctx.today)
     }
     scale = services.budget.target_scale(ctx.today)
+    expected: dict[tuple[str, str], IndicatorStatus] = {}
     for wish in TARGET_PLAN:
         reading = readings.get((wish.code, wish.dimension))
         if reading is None:
             raise _fail(f"{wish.code} {wish.dimension}: the demo data has no such reading")
         definition = indicators.definition(wish.code)
         warning, critical = _thresholds(wish, reading, definition.direction, definition.unit, scale)
+        expected[(wish.code, wish.dimension)] = reachable_status(
+            wish, reading.value, definition.unit, scale
+        )
         indicators.set_target(
             wish.code, wish.dimension, warning_value=warning, critical_value=critical
         )
 
     after = {(item.code, item.dimension): item.status for item in indicators.evaluate(ctx.today)}
     for wish in TARGET_PLAN:
-        if after[(wish.code, wish.dimension)] is not wish.status:
-            raise _fail(f"{wish.code} {wish.dimension}: the status is not {wish.status}")
+        key = (wish.code, wish.dimension)
+        if after[key] is not expected[key]:
+            raise _fail(f"{wish.code} {wish.dimension}: the status is not {expected[key]}")

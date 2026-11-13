@@ -69,6 +69,7 @@ def opener(tmp_path: Path) -> Iterator[Opener]:
             folder / "budget.sqlite3", data_dir=folder, identity=DatabaseIdentity.DEMO
         )
         opened.append(conn)
+        app_meta.initialise(conn, is_demo=True, created_with="0.0.1")  # generate() needs the flag
         assert demo.generate(conn, clock, seed=seed, generators=[GENERATOR]) is True
         return conn
 

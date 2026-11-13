@@ -12,6 +12,7 @@ import io
 import json
 import re
 from collections.abc import Iterator
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -21,19 +22,25 @@ import pytest
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.demo import (
     DEFAULT_SEED,
+    DEMO_CREATED_ON_KEY,
     DEMO_SEED_KEY,
     GENERATORS,
+    NOT_A_DEMO_DATABASE,
+    DemoDataError,
+    creation_day,
+    generate,
+    is_outdated,
     open_demo_database,
 )
 from cbrn_dashboard.domain.alerts import AlertKind, Severity
-from cbrn_dashboard.domain.indicators import IndicatorStatus
+from cbrn_dashboard.domain.indicators import IndicatorStatus, UnitKind
 from cbrn_dashboard.domain.registry import build_registry
 from cbrn_dashboard.paths import DATABASE_FILE_NAME
 from cbrn_dashboard.services.alerts import AlertService
 from cbrn_dashboard.services.budget import BudgetService
 from cbrn_dashboard.services.dashboard import DashboardService
 from cbrn_dashboard.services.exercises import ExercisesService
-from cbrn_dashboard.services.indicators import IndicatorService
+from cbrn_dashboard.services.indicators import MAX_RATIO_TARGET, IndicatorService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
 from cbrn_dashboard.services.snapshots import SnapshotOrigin, SnapshotService
@@ -43,11 +50,9 @@ from cbrn_dashboard.services.validation_export import (
     ValidationExportService,
 )
 from cbrn_dashboard.storage import app_meta
-from cbrn_dashboard.storage.db import DatabaseConnection
+from cbrn_dashboard.storage.db import DatabaseConnection, open_database, transaction
 from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
 
-CLOCK = FixedClock.at("2026-03-05T12:00:00Z")
-TODAY = date(2026, 3, 5)
 DOCUMENT = Path(__file__).resolve().parents[2] / "docs" / "demo-walkthrough.md"
 
 OK = IndicatorStatus.OK
@@ -56,7 +61,42 @@ CRIT = IndicatorStatus.CRITICAL
 NO_TARGET = IndicatorStatus.NO_TARGET
 NO_DATA = IndicatorStatus.NO_DATA
 
-#: (indicator code, dimension, status) on TODAY, worked out by hand from demo/targets.py.
+DIRSA = ("BUD_EXEC_RATE", "currency=BRL;source=DIRSA")
+
+
+@dataclass(frozen=True)
+class Day:
+    """A creation day of the demo database and what differs on it, written by hand.
+
+    Only the budget group DIRSA depends on the day. Its executed share is 4 to 12 percent (the low
+    band of demo/budget.py) and the year-end target is multiplied by day-of-year / days-in-year,
+    so the group reads CRITICAL only when that fraction is at least the share, and OK before:
+
+    * 1 January: 1/365 = 0.27 percent, below 4 percent -> OK, and the stored year-end target is
+      capped at 1.0 (the quotient would be about 17 to 53);
+    * 5 March 2026: 64/365 = 17.5 percent -> CRITICAL, stored warning value 1.2 x (4..12 percent)
+      / 0.175, so between 0.27 and 0.83;
+    * 29 February 2028: 60/366 = 16.4 percent -> CRITICAL, stored warning between 0.29 and 0.88;
+    * 31 December 2026: 365/365 = 100 percent -> CRITICAL, stored warning 1.2 x (4..12 percent),
+      so between 0.047 and 0.145 (no execution row can be dated after this day).
+    """
+
+    clock_text: str
+    today: date
+    dirsa: IndicatorStatus
+    stored_warning: tuple[float, float]  # (lowest, highest) stored DIRSA warning value
+    future_rows: bool  # an execution row dated after today exists
+
+
+DAYS: tuple[Day, ...] = (
+    Day("2026-01-01T12:00:00Z", date(2026, 1, 1), OK, (1.0, 1.0), True),
+    Day("2026-03-05T12:00:00Z", date(2026, 3, 5), CRIT, (0.25, 0.9), True),
+    Day("2028-02-29T12:00:00Z", date(2028, 2, 29), CRIT, (0.25, 0.9), True),
+    Day("2026-12-31T12:00:00Z", date(2026, 12, 31), CRIT, (0.04, 0.15), False),
+)
+
+#: (indicator code, dimension, status), worked out by hand from demo/targets.py. They hold on
+#: every day of DAYS except the DIRSA budget group (see Day).
 EXPECTED_STATUSES: tuple[tuple[str, str, IndicatorStatus], ...] = (
     ("PERS_CERT_VALID", "level=A", OK),
     ("PERS_CERT_VALID", "level=B", WARN),
@@ -72,7 +112,6 @@ EXPECTED_STATUSES: tuple[tuple[str, str, IndicatorStatus], ...] = (
     ("EX_LAST_PARTICIPANTS", "kind=OTHER", WARN),
     ("EX_DAYS_SINCE_LAST", "kind=CBRAMED", OK),
     ("EX_DAYS_SINCE_LAST", "kind=OTHER", CRIT),
-    ("BUD_EXEC_RATE", "currency=BRL;source=DIRSA", CRIT),
     ("BUD_EXEC_RATE", "currency=USD;source=OPCW_TRUST_FUND", OK),
     # No target (P03): the application invents no standard.
     ("PERS_CERT_EXPIRING", "level=B", NO_TARGET),
@@ -110,21 +149,28 @@ class Demo:
     """The complete demo database with the services needed to read it."""
 
     conn: DatabaseConnection
+    day: Day
+    clock: FixedClock
     exercises: ExercisesService
     indicators: IndicatorService
     alerts: AlertService
     dashboard: DashboardService
     snapshots: SnapshotService
+    budget: BudgetService
+
+    @property
+    def today(self) -> date:
+        return self.day.today
 
 
-def _services(conn: DatabaseConnection) -> Demo:
-    personnel = PersonnelService(conn, CLOCK)
-    infrastructure = InfrastructureService(conn, CLOCK)
-    exercises = ExercisesService(conn, CLOCK)
-    budget = BudgetService(conn, CLOCK)
+def _services(conn: DatabaseConnection, day: Day, clock: FixedClock) -> Demo:
+    personnel = PersonnelService(conn, clock)
+    infrastructure = InfrastructureService(conn, clock)
+    exercises = ExercisesService(conn, clock)
+    budget = BudgetService(conn, clock)
     indicators = IndicatorService(
         conn,
-        CLOCK,
+        clock,
         personnel=personnel,
         infrastructure=infrastructure,
         exercises=exercises,
@@ -139,16 +185,21 @@ def _services(conn: DatabaseConnection) -> Demo:
         exercises=exercises,
         budget=budget,
     )
-    snapshots = SnapshotService(conn, CLOCK, indicators=indicators, infrastructure=infrastructure)
-    return Demo(conn, exercises, indicators, alerts, dashboard, snapshots)
+    snapshots = SnapshotService(conn, clock, indicators=indicators, infrastructure=infrastructure)
+    return Demo(conn, day, clock, exercises, indicators, alerts, dashboard, snapshots, budget)
 
 
-@pytest.fixture(scope="module")
-def demo(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Demo]:
+@pytest.fixture(scope="module", params=DAYS, ids=lambda day: day.today.isoformat())
+def demo(
+    request: pytest.FixtureRequest, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[Demo]:
+    """The complete demo database created on each day of DAYS (every test runs once per day)."""
+    day: Day = request.param
+    clock = FixedClock.at(day.clock_text)
     folder = tmp_path_factory.mktemp("demo-complete")
-    conn = open_demo_database(folder, CLOCK)
+    conn = open_demo_database(folder, clock)
     try:
-        yield _services(conn)
+        yield _services(conn, day, clock)
     finally:
         conn.close()
 
@@ -184,15 +235,35 @@ def test_the_demo_flag_and_the_seed_marker_are_set(demo: Demo) -> None:
 # --------------------------------------------------------------------------- targets and statuses
 
 
+def _tiles(demo: Demo) -> dict[tuple[str, str], IndicatorStatus]:
+    tiles = demo.dashboard.data(demo.today).tiles
+    return {(tile.code, tile.dimension): tile.status for tile in tiles}
+
+
 def test_the_dashboard_shows_the_hand_written_statuses(demo: Demo) -> None:
-    tiles = {(tile.code, tile.dimension): tile.status for tile in demo.dashboard.data(TODAY).tiles}
+    tiles = _tiles(demo)
     for code, dimension, status in EXPECTED_STATUSES:
         assert tiles[(code, dimension)] is status, (code, dimension)
+    assert tiles[DIRSA] is demo.day.dirsa
 
 
-def test_every_status_appears_on_the_dashboard(demo: Demo) -> None:
-    statuses = {tile.status for tile in demo.dashboard.data(TODAY).tiles}
-    assert statuses == set(IndicatorStatus)
+def test_every_status_appears_on_the_dashboard_on_every_day(demo: Demo) -> None:
+    # The CRITICAL tile of the DIRSA group is missing on 1 January (see Day), but PERS_CERT_VALID
+    # level C is CRITICAL on every day, so each of the five statuses still appears.
+    assert set(_tiles(demo).values()) == set(IndicatorStatus)
+
+
+def test_the_dirsa_group_has_the_executed_share_the_walkthrough_states(demo: Demo) -> None:
+    [reading] = [
+        reading
+        for reading in demo.indicators.evaluate(demo.today)
+        if (reading.code, reading.dimension) == DIRSA
+    ]
+    assert reading.value is not None
+    assert 0.039 <= reading.value <= 0.12  # "4 to 12 percent" (demo/budget.py, low band)
+    # The walkthrough: CRITICAL once the elapsed share of the year is above 12 percent, from 13
+    # February (day 44 of 365 is 12.05 percent, day 43 is 11.78 percent).
+    assert 44 / 365 > 0.12 > 43 / 365
 
 
 def test_there_are_exactly_the_planned_targets_and_all_are_enabled(demo: Demo) -> None:
@@ -203,26 +274,68 @@ def test_there_are_exactly_the_planned_targets_and_all_are_enabled(demo: Demo) -
     assert all(target.indicator_code in registry for target in targets)
 
 
-def test_a_stored_budget_target_is_a_year_end_ratio_below_one(demo: Demo) -> None:
-    target = demo.indicators.get_target("BUD_EXEC_RATE", "currency=BRL;source=DIRSA")
+def test_a_stored_budget_target_is_a_year_end_ratio_within_zero_and_one(demo: Demo) -> None:
+    for dimension in (DIRSA[1], "currency=USD;source=OPCW_TRUST_FUND"):
+        target = demo.indicators.get_target("BUD_EXEC_RATE", dimension)
+        assert target.warning_value is not None
+        assert target.critical_value is not None
+        assert 0.0 < target.critical_value <= target.warning_value <= 1.0
+
+
+def test_the_dirsa_target_is_the_hand_worked_year_end_value_of_the_day(demo: Demo) -> None:
+    target = demo.indicators.get_target(*DIRSA)
     assert target.warning_value is not None
-    assert target.critical_value is not None
-    assert 0.0 < target.critical_value <= target.warning_value < 1.0
+    low, high = demo.day.stored_warning
+    assert low <= target.warning_value <= high
+
+
+def test_every_stored_ratio_target_is_accepted_by_the_service(demo: Demo) -> None:
+    # The service refuses a ratio target below 0 or above MAX_RATIO_TARGET (TARGET_OUT_OF_RANGE);
+    # the demo database could not be created on 1 January while it stored 17 to 53.
+    registry = build_registry()
+    ratios = [
+        target
+        for target in demo.indicators.list_targets()
+        if registry.get(target.indicator_code).unit is UnitKind.RATIO
+    ]
+    assert {target.indicator_code for target in ratios} == {"BUD_EXEC_RATE"}
+    for target in ratios:
+        for value in (target.warning_value, target.critical_value):
+            assert value is not None
+            assert 0.0 <= value <= MAX_RATIO_TARGET
+
+
+def test_an_execution_row_dated_after_today_exists_except_on_the_last_day_of_the_year(
+    demo: Demo,
+) -> None:
+    after = demo.conn.execute(
+        "SELECT count(*) FROM budget_execution AS e JOIN budget_entry AS b ON b.id = e.entry_id"
+        " WHERE b.fiscal_year = ? AND e.executed_on > ?",
+        (demo.today.year, demo.today.isoformat()),
+    ).fetchone()[0]
+    assert (after > 0) is demo.day.future_rows
+    # Rows dated on or before today exist on every day (even on 1 January).
+    until = demo.conn.execute(
+        "SELECT count(*) FROM budget_execution AS e JOIN budget_entry AS b ON b.id = e.entry_id"
+        " WHERE b.fiscal_year = ? AND e.executed_on <= ?",
+        (demo.today.year, demo.today.isoformat()),
+    ).fetchone()[0]
+    assert until > 0
 
 
 # --------------------------------------------------------------------------- alerts
 
 
 def test_the_alerts_show_every_kind_and_every_severity(demo: Demo) -> None:
-    alerts = demo.alerts.alerts(TODAY)
+    alerts = demo.alerts.alerts(demo.today)
     assert {alert.kind for alert in alerts} == set(AlertKind)
     assert {alert.severity for alert in alerts} == set(Severity)
-    counts = demo.dashboard.data(TODAY).alert_counts
+    counts = demo.dashboard.data(demo.today).alert_counts
     assert all(counts[severity] > 0 for severity in Severity)
 
 
 def test_the_fixed_cases_raise_their_alerts(demo: Demo) -> None:
-    alerts = demo.alerts.alerts(TODAY)
+    alerts = demo.alerts.alerts(demo.today)
     found = {(a.kind, a.subject_ref, a.severity, a.days_remaining) for a in alerts}
     for expected in EXPECTED_ALERTS:
         assert expected in found, expected
@@ -232,7 +345,7 @@ def test_the_fixed_cases_raise_their_alerts(demo: Demo) -> None:
 
 
 def test_a_person_without_renewal_and_an_unscheduled_asset_raise_nothing(demo: Demo) -> None:
-    subjects = {alert.subject_ref for alert in demo.alerts.alerts(TODAY)}
+    subjects = {alert.subject_ref for alert in demo.alerts.alerts(demo.today)}
     assert "DEMO-P004" not in subjects  # certificate valid, marked "no renewal"
     assert "DEMO-A004" not in subjects  # interval 0: no scheduled maintenance
     assert "DEMO-A008" not in subjects  # retired
@@ -240,7 +353,7 @@ def test_a_person_without_renewal_and_an_unscheduled_asset_raise_nothing(demo: D
 
 
 def test_the_alerts_are_sorted_by_severity(demo: Demo) -> None:
-    ranks = [alert.severity.rank for alert in demo.alerts.alerts(TODAY)]
+    ranks = [alert.severity.rank for alert in demo.alerts.alerts(demo.today)]
     assert ranks == sorted(ranks)
 
 
@@ -250,7 +363,7 @@ def test_the_alerts_are_sorted_by_severity(demo: Demo) -> None:
 def test_one_retroactive_snapshot_exists_for_every_started_edition(demo: Demo) -> None:
     editions = demo.exercises.list_editions()
     assert len(editions) == 9  # DEMO-EX-01 .. DEMO-EX-09
-    started = [edition for edition in editions if edition.start_on < TODAY]
+    started = [edition for edition in editions if edition.start_on < demo.today]
     # list_editions() orders by start date, then code. The plan of demo/exercises.py puts the
     # editions at 44 (01), 38 (04), 32 (07), 28 (02), 20 (05), 14 (08), 9 (03), 4 (06) months
     # before today and 09 five months after it.
@@ -264,17 +377,18 @@ def test_one_retroactive_snapshot_exists_for_every_started_edition(demo: Demo) -
     }
     assert {snapshot.origin for snapshot in snapshots} == {SnapshotOrigin.RETROACTIVE}
     assert min(snapshot.as_of for snapshot in snapshots) < min(e.start_on for e in editions)
-    assert all(snapshot.taken_at_utc.startswith("2026-03-05T12:00:00") for snapshot in snapshots)
+    taken = demo.day.clock_text.removesuffix("Z")  # e.g. 2026-03-05T12:00:00
+    assert all(snapshot.taken_at_utc.startswith(taken) for snapshot in snapshots)
     assert all(snapshot.note and snapshot.note.startswith("DEMO") for snapshot in snapshots)
     assert not any(snapshot.withdrawn for snapshot in snapshots)
     assert len(demo.snapshots.list_snapshots(include_withdrawn=True)) == 8
 
 
 def test_the_future_edition_has_no_snapshot(demo: Demo) -> None:
-    future = [e for e in demo.exercises.list_editions() if e.start_on > TODAY]
+    future = [e for e in demo.exercises.list_editions() if e.start_on > demo.today]
     assert [edition.code for edition in future] == ["DEMO-EX-09"]
     latest_as_of = max(snapshot.as_of for snapshot in demo.snapshots.list_snapshots())
-    assert latest_as_of < TODAY
+    assert latest_as_of < demo.today
 
 
 def test_each_snapshot_stores_the_readings_and_the_targets_in_force(demo: Demo) -> None:
@@ -296,7 +410,7 @@ def test_each_snapshot_stores_the_readings_and_the_targets_in_force(demo: Demo) 
 def _export_service(demo: Demo) -> ValidationExportService:
     return ValidationExportService(
         demo.conn,
-        CLOCK,
+        demo.clock,
         snapshots=demo.snapshots,
         exercises=demo.exercises,
         indicators=demo.indicators,
@@ -422,7 +536,7 @@ def test_every_change_is_attributed_to_the_demo_operator(demo: Demo) -> None:
 
 
 def test_two_runs_give_identical_content(demo: Demo, tmp_path: Path) -> None:
-    other = open_demo_database(tmp_path, CLOCK)
+    other = open_demo_database(tmp_path, demo.clock)
     try:
         assert _dump(other) == _dump(demo.conn)
     finally:
@@ -432,32 +546,90 @@ def test_two_runs_give_identical_content(demo: Demo, tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- the real database
 
 
-def test_a_real_database_in_another_folder_has_no_targets_and_no_snapshots(
+def test_the_real_database_of_the_same_folder_has_no_demo_rows_targets_or_snapshots(
     demo: Demo, tmp_path: Path
 ) -> None:
-    assert demo.indicators.list_targets()  # the demo run happened and wrote targets
-    real_folder = tmp_path / "real"
-    real_folder.mkdir()
+    # The REAL database lives in the same data folder as the demo one (the case that matters:
+    # a copy of the demo data in another folder could not show a leak).
     real = open_and_migrate(
-        real_folder / DATABASE_FILE_NAME, data_dir=real_folder, identity=DatabaseIdentity.REAL
+        tmp_path / DATABASE_FILE_NAME, data_dir=tmp_path, identity=DatabaseIdentity.REAL
     )
-    try:
+    app_meta.initialise(real, is_demo=False, created_with="0.0.1")
+    real.close()
+    other = open_demo_database(tmp_path, demo.clock)
+    other.close()
+    assert demo.indicators.list_targets()  # the demo run happened and wrote targets
+
+    with closing(open_database(tmp_path / DATABASE_FILE_NAME, read_only=True)) as reopened:
         for table in (
             "indicator_target",
             "readiness_snapshot",
             "readiness_snapshot_value",
             "snapshot_withdrawal",
+            "staff_member",
+            "asset",
+            "exercise_edition",
+            "budget_entry",
+            "change_log",
         ):
+            assert _rows(reopened, f"SELECT count(*) FROM {table}") == [(0,)], table
+        assert not app_meta.read_is_demo(reopened)
+        assert app_meta.get(reopened, DEMO_SEED_KEY) is None
+        assert app_meta.get(reopened, DEMO_CREATED_ON_KEY) is None
+
+
+def test_the_demo_run_creates_no_real_database(demo: Demo, tmp_path: Path) -> None:
+    conn = open_demo_database(tmp_path, demo.clock)
+    conn.close()
+    assert not (tmp_path / DATABASE_FILE_NAME).exists()
+
+
+def test_the_creation_day_is_stored_next_to_the_demo_flag(demo: Demo) -> None:
+    assert app_meta.get(demo.conn, DEMO_CREATED_ON_KEY) == demo.today.isoformat()
+    assert creation_day(demo.conn) == demo.today
+    assert is_outdated(demo.conn, demo.clock) is False
+    assert is_outdated(demo.conn, FixedClock.at("2030-06-15T12:00:00Z")) is True
+
+
+def test_a_demo_database_without_a_creation_day_is_not_outdated(demo: Demo, tmp_path: Path) -> None:
+    other = open_demo_database(tmp_path, demo.clock)
+    try:
+        with transaction(other):
+            other.execute("DELETE FROM app_meta WHERE key = ?", (DEMO_CREATED_ON_KEY,))
+        assert creation_day(other) is None
+        assert is_outdated(other, FixedClock.at("2030-06-15T12:00:00Z")) is False
+    finally:
+        other.close()
+
+
+def test_generate_refuses_a_database_that_is_not_flagged_demo(demo: Demo, tmp_path: Path) -> None:
+    real = open_and_migrate(
+        tmp_path / DATABASE_FILE_NAME, data_dir=tmp_path, identity=DatabaseIdentity.REAL
+    )
+    try:
+        app_meta.initialise(real, is_demo=False, created_with="0.0.1")
+        with pytest.raises(DemoDataError) as excinfo:
+            generate(real, demo.clock)
+        assert excinfo.value.code == NOT_A_DEMO_DATABASE
+        for table in ("indicator_target", "readiness_snapshot", "staff_member", "asset"):
             assert _rows(real, f"SELECT count(*) FROM {table}") == [(0,)], table
-        assert not app_meta.read_is_demo(real)
+        assert app_meta.get(real, DEMO_SEED_KEY) is None
+        assert app_meta.get(real, DEMO_CREATED_ON_KEY) is None
     finally:
         real.close()
 
 
-def test_the_demo_run_creates_no_real_database(tmp_path: Path) -> None:
-    conn = open_demo_database(tmp_path, CLOCK)
-    conn.close()
-    assert not (tmp_path / DATABASE_FILE_NAME).exists()
+def test_generate_refuses_a_database_without_an_is_demo_row(demo: Demo, tmp_path: Path) -> None:
+    bare = open_and_migrate(
+        tmp_path / "bare.sqlite3", data_dir=tmp_path, identity=DatabaseIdentity.REAL
+    )
+    try:
+        with pytest.raises(DemoDataError) as excinfo:
+            generate(bare, demo.clock)
+        assert excinfo.value.code == NOT_A_DEMO_DATABASE
+        assert _rows(bare, "SELECT count(*) FROM indicator_target") == [(0,)]
+    finally:
+        bare.close()
 
 
 # --------------------------------------------------------------------------- the walkthrough
@@ -519,3 +691,73 @@ def test_every_code_quoted_in_the_walkthrough_is_a_known_code(demo: Demo) -> Non
     ]
     assert codes
     assert [code for code in codes if code not in known and code != "OPCW_TRUST_FUND"] == []
+
+
+# The two tables of the walkthrough are tied to the dataset: they are parsed and compared with the
+# statuses and the alerts the dataset gives on the day it was created.
+
+_STATUS_WORDS = {"OK": OK, "Warning": WARN, "Critical": CRIT}
+
+
+def _table_rows() -> list[list[str]]:
+    """The cells of every Markdown table row whose first cell is a code in backquotes."""
+    rows: list[list[str]] = []
+    for line in _document_text().splitlines():
+        if not line.startswith("| `"):
+            continue
+        rows.append([cell.strip() for cell in line.strip().strip("|").split("|")])
+    return rows
+
+
+def _dimension(code: str, text: str) -> str:
+    """The encoded dimension (PLAN.md 5.4) of a dimension as the walkthrough words it."""
+    if text in ("none", ""):
+        return ""
+    if text.startswith("level "):
+        return "level=" + text.removeprefix("level ")
+    if code.startswith("INFRA_"):
+        return f"type={text}"
+    if code.startswith("EX_"):
+        return f"kind={text}"
+    currency, source = text.split(", ")
+    return f"currency={currency};source={source}"
+
+
+def _documented_statuses() -> dict[tuple[str, str], IndicatorStatus]:
+    documented: dict[tuple[str, str], IndicatorStatus] = {}
+    for cells in _table_rows():
+        if len(cells) == 3 and cells[2] in _STATUS_WORDS:
+            code = cells[0].strip("`")
+            documented[(code, _dimension(code, cells[1]))] = _STATUS_WORDS[cells[2]]
+    return documented
+
+
+def test_the_walkthrough_status_table_is_the_statuses_of_the_dataset(demo: Demo) -> None:
+    documented = _documented_statuses()
+    assert len(documented) == TARGET_COUNT
+    tiles = _tiles(demo)
+    on_the_day = {key: status for key, status in tiles.items() if status in (OK, WARN, CRIT)}
+    # The table is written for a database created from 13 February on; the walkthrough says that
+    # the DIRSA group reads OK before (its executed share is above the elapsed part of the year).
+    assert "13 February" in _document_text()
+    if demo.day.dirsa is OK:
+        documented[DIRSA] = OK
+    assert documented == on_the_day
+
+
+def test_the_walkthrough_alert_table_is_the_alerts_of_the_dataset(demo: Demo) -> None:
+    alerts = demo.alerts.alerts(demo.today)
+    rows = [cells for cells in _table_rows() if cells[0].strip("`") in AlertKind.__members__]
+    assert {cells[0].strip("`") for cells in rows} == set(AlertKind.__members__)
+    for cells in rows:
+        kind, severity, example = cells[0].strip("`"), cells[1], cells[2]
+        reference, _, level = example.partition(", ")
+        matching = [
+            alert
+            for alert in alerts
+            if alert.kind.value == kind
+            and alert.subject_ref == reference.strip("`")
+            and alert.dimension == _dimension("", level)
+        ]
+        assert matching, (kind, example)
+        assert {alert.severity.value.lower() for alert in matching} == {severity}, (kind, example)

@@ -15,7 +15,9 @@ validated and written to the change log with the operator label ``DEMO``):
   totals keep two currencies apart for the same source and year (D15);
 * several DATED execution rows per entry, spread over its fiscal year. In the current fiscal year
   all but one row are dated on or before ``ctx.today``; the last one is dated after it, so a reading
-  as of today visibly ignores it. Every executed total stays at or below the allocation, and the
+  as of today visibly ignores it. The exception is 31 December: a row must stay inside its entry's
+  fiscal year, no day of it is left after today, so there is no row after today on that date.
+  Every executed total stays at or below the allocation, and the
   executed fractions vary, so some sources fall below a mid-year pro-rated target and others above;
 * ONE entry with no allocated amount that still has execution rows: the USD entry of the DEMO
   source in the current fiscal year, alone in its (year, source, currency) group, so
@@ -165,7 +167,9 @@ def generate(ctx: DemoContext) -> None:
                 days = [first_day + timedelta(days=offset) for offset in offsets]
                 amounts = _split(allocated_units * percent // 100, len(days), rng)
                 remaining = (date(year, 12, 31) - ctx.today).days
-                if remaining > 0:  # one row after today: the as-of reading must ignore it
+                # One row after today: the as-of reading must ignore it. On 31 December there is
+                # no day left in the fiscal year, so there is none.
+                if remaining > 0:
                     days.append(ctx.today + timedelta(days=rng.randint(1, remaining)))
                     amounts.append(allocated_units * rng.randint(*_FUTURE_PERCENT) // 100)
             else:

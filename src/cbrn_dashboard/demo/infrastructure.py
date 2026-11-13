@@ -7,8 +7,10 @@ comes from the seed (``ctx.rng``) or from the fixed cases below, never from a re
 number, equipment model or record. Every tag, type code, label, description and location starts
 with ``DEMO``.
 
-All dates are placed RELATIVE TO ``ctx.today`` (the injected clock's date), so the sample always
-shows the same situations whatever day the demo is opened. The data is written THROUGH
+All dates are placed RELATIVE TO ``ctx.today`` (the injected clock's date), so the sample shows
+the same situations on the day the demo database is created. They age with the calendar afterwards
+(a due date passes), so a later ``--demo`` start offers to create the data again. The data is
+written THROUGH
 :class:`~cbrn_dashboard.services.infrastructure.InfrastructureService`, so every row is validated
 and logged (with the operator label ``DEMO``).
 
