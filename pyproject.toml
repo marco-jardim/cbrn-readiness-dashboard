@@ -90,4 +90,16 @@ qt_api = "pyside6"
 qt_log_level_fail = "WARNING"
 # Benign offscreen-platform messages are added here by exact text when first
 # seen in CI, each with a comment saying where it comes from.
-qt_log_ignore = []
+qt_log_ignore = [
+    # Emitted by Qt's offscreen platform plugin on Windows, which ships no fonts
+    # (the directory is the machine-specific PySide6 install path, hence the
+    # wildcard; the message continues "Note that Qt no longer ships fonts...").
+    # Benign. First seen in the T0.7 main-window tests with PySide6 6.12.0.
+    # qt_log_level_fail = "WARNING" still fails tests on every other Qt warning.
+    '^QFontDatabase: Cannot find font directory .*',
+    # Emitted by Qt's offscreen platform plugin, which does not implement
+    # size-hint propagation for top-level windows. Benign. First seen in the
+    # T0.7 main-window tests with PySide6 6.12.0.
+    # qt_log_level_fail = "WARNING" still fails tests on every other Qt warning.
+    '^This plugin does not support propagateSizeHints\(\)$',
+]

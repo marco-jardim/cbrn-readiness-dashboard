@@ -26,5 +26,29 @@
             <numerusform>%n idiomas disponíveis</numerusform>
         </translation>
     </message>
+    <message>
+        <source>&amp;File</source>
+        <translation type="unfinished">&amp;Arquivo</translation>
+    </message>
+    <message>
+        <source>&amp;Quit</source>
+        <translation type="unfinished">&amp;Sair</translation>
+    </message>
+    <message>
+        <source>&amp;Language</source>
+        <translation type="unfinished">&amp;Idioma</translation>
+    </message>
+    <message>
+        <source>Navigation</source>
+        <translation type="unfinished">Navegação</translation>
+    </message>
+    <message>
+        <source>Data folder: %1</source>
+        <translation type="unfinished">Pasta de dados: %1</translation>
+    </message>
+    <message>
+        <source>Translations are not compiled: the English source text is shown.</source>
+        <translation type="unfinished">As traduções não estão compiladas: o texto-fonte em inglês é exibido.</translation>
+    </message>
 </context>
 </TS>

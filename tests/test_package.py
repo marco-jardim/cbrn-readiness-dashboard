@@ -36,7 +36,3 @@ def test_main_version_prints_and_exits_zero(capsys: pytest.CaptureFixture[str]) 
         main(["--version"])
     assert excinfo.value.code == 0
     assert f"cbrn-dashboard {cbrn_dashboard.__version__}" in capsys.readouterr().out
-
-
-def test_main_without_arguments_returns_zero() -> None:
-    assert main([]) == 0

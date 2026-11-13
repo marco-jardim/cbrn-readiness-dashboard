@@ -26,5 +26,29 @@
             <numerusform>%n languages available</numerusform>
         </translation>
     </message>
+    <message>
+        <source>&amp;File</source>
+        <translation>&amp;File</translation>
+    </message>
+    <message>
+        <source>&amp;Quit</source>
+        <translation>&amp;Quit</translation>
+    </message>
+    <message>
+        <source>&amp;Language</source>
+        <translation>&amp;Language</translation>
+    </message>
+    <message>
+        <source>Navigation</source>
+        <translation>Navigation</translation>
+    </message>
+    <message>
+        <source>Data folder: %1</source>
+        <translation>Data folder: %1</translation>
+    </message>
+    <message>
+        <source>Translations are not compiled: the English source text is shown.</source>
+        <translation>Translations are not compiled: the English source text is shown.</translation>
+    </message>
 </context>
 </TS>
