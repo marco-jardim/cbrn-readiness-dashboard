@@ -26,6 +26,8 @@ from cbrn_dashboard.ui.infrastructure import page as infrastructure_page
 from cbrn_dashboard.ui.personnel import page as personnel_page
 from cbrn_dashboard.ui.reports import page as reports_page
 from cbrn_dashboard.ui.settings import page as settings_page
+from cbrn_dashboard.ui.shell import about as about_dialog
+from cbrn_dashboard.ui.shell import help as help_viewer
 from cbrn_dashboard.ui.shell.context import AppContext
 
 __all__ = [
@@ -205,6 +207,8 @@ DIALOGS: tuple[DialogSpec, ...] = (
     DialogSpec("reports.report", reports_page.demo_report_dialog),
     DialogSpec("reports.validation_export", reports_page.demo_validation_export_dialog),
     DialogSpec("reports.import", reports_page.demo_import_dialog),
+    DialogSpec("shell.help", help_viewer.demo_help_dialog),
+    DialogSpec("shell.about", about_dialog.demo_about_dialog),
 )
 
 # Temporary registrations made by tests, in registration order.

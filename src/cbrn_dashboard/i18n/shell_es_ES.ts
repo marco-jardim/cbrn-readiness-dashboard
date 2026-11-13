@@ -44,6 +44,18 @@
         <translation type="unfinished">&amp;Idioma</translation>
     </message>
     <message>
+        <source>&amp;Help</source>
+        <translation type="unfinished">A&amp;yuda</translation>
+    </message>
+    <message>
+        <source>Help &amp;contents</source>
+        <translation type="unfinished">&amp;Contenido de la ayuda</translation>
+    </message>
+    <message>
+        <source>&amp;About</source>
+        <translation type="unfinished">Acerca &amp;de</translation>
+    </message>
+    <message>
         <source>Navigation</source>
         <translation type="unfinished">Navegación</translation>
     </message>
@@ -294,6 +306,64 @@
     <message>
         <source>Shared computer: several people can take turns on one computer only with one shared Windows account, or with --data-dir pointing to a local folder restricted to the committee. With separate Windows accounts each person gets a separate database.</source>
         <translation type="unfinished">Equipo compartido: varias personas pueden turnarse en un equipo solo con una cuenta de Windows compartida, o con --data-dir apuntando a una carpeta local restringida al comité. Con cuentas de Windows separadas, cada persona tiene una base de datos separada.</translation>
+    </message>
+    <message>
+        <source>About</source>
+        <extracomment>The source repository, shown as plain text (never as a link). The licence of the application source. The folder of the licence texts beside the executable, and the index in it.</extracomment>
+        <translation type="unfinished">Acerca de</translation>
+    </message>
+    <message>
+        <source>Version %1</source>
+        <translation type="unfinished">Versión %1</translation>
+    </message>
+    <message>
+        <source>Licence: %1</source>
+        <translation type="unfinished">Licencia: %1</translation>
+    </message>
+    <message>
+        <source>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</source>
+        <translation type="unfinished">Este programa es software libre: puede redistribuirlo y/o modificarlo bajo los términos de la Licencia Pública General GNU publicada por la Free Software Foundation, ya sea la versión 3 de la Licencia o (a su elección) cualquier versión posterior.</translation>
+    </message>
+    <message>
+        <source>This program comes with ABSOLUTELY NO WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</source>
+        <translation type="unfinished">Este programa se distribuye SIN NINGUNA GARANTÍA; ni siquiera la garantía implícita de COMERCIABILIDAD o de IDONEIDAD PARA UN PROPÓSITO PARTICULAR.</translation>
+    </message>
+    <message>
+        <source>In the released bundle, the complete licence texts and the offer of source for the bundled components are in the licenses folder next to the program.</source>
+        <translation type="unfinished">En el paquete distribuido, los textos completos de las licencias y la oferta de código fuente de los componentes incluidos están en la carpeta licenses, junto al programa.</translation>
+    </message>
+    <message>
+        <source>Source code:</source>
+        <translation type="unfinished">Código fuente:</translation>
+    </message>
+    <message>
+        <source>Third-party components</source>
+        <translation type="unfinished">Componentes de terceros</translation>
+    </message>
+    <message>
+        <source>The list of third-party components could not be read.</source>
+        <translation type="unfinished">No se pudo leer la lista de componentes de terceros.</translation>
+    </message>
+    <message>
+        <source>The list of third-party components is not available in this build.</source>
+        <translation type="unfinished">La lista de componentes de terceros no está disponible en esta compilación.</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <extracomment>The folder of the help files inside the package. The language tried when the file of the wanted language cannot be used.</extracomment>
+        <translation type="unfinished">Ayuda</translation>
+    </message>
+    <message>
+        <source>Help topics</source>
+        <translation type="unfinished">Temas de la ayuda</translation>
+    </message>
+    <message>
+        <source>Help text</source>
+        <translation type="unfinished">Texto de la ayuda</translation>
+    </message>
+    <message>
+        <source>The help text could not be loaded.</source>
+        <translation type="unfinished">No se pudo cargar el texto de la ayuda.</translation>
     </message>
 </context>
 </TS>

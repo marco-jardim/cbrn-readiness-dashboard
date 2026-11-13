@@ -114,4 +114,8 @@ qt_log_ignore = [
     # T0.7 main-window tests with PySide6 6.12.0.
     # qt_log_level_fail = "WARNING" still fails tests on every other Qt warning.
     '^This plugin does not support propagateSizeHints\(\)$',
+    # Emitted by the same offscreen plugin, which has no window stacking, when a
+    # dialog is brought forward with raise() (the Help and About dialogs, T10.2).
+    # Benign. First seen in the T10.2 tests with PySide6 6.12.0.
+    '^This plugin does not support raise\(\)$',
 ]

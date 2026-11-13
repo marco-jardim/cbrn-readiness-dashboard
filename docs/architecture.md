@@ -67,9 +67,10 @@ Top-level packages of `src/cbrn_dashboard/`:
 | `storage/` | `db.py` (the single place that opens connections), `migrate.py` and `migrations/`, `repository.py` (writes with the change log), one repository per area, `settings_repo.py`, `targets_repo.py`, `snapshots_repo.py`, `app_meta.py`, `backup.py` (plain copies and rotation), `crypto_backup.py` (the `.cbrnbak` container), `csv_io.py` |
 | `services/` | use cases over storage and domain: `personnel.py`, `infrastructure.py`, `exercises.py`, `budget.py`, `indicators.py`, `alerts.py`, `dashboard.py`, `config.py`, `snapshots.py`, `validation_export.py`, `backup.py`, `restore.py`, `export.py`, `importer.py`, `countries.py`, `errors.py` |
 | `reports/` | `model.py` (report content as codes and numbers), `anonymise.py` (small-count suppression), `message_keys.py` (code-to-message-key map) and `labels.py` (texts in the language chosen for the report), `pdf.py` (Qt rendering) |
-| `ui/` | one sub-package per area: `ui/shell/` (main window, registry, context, prompts, banners, charts, formatting, translators, first-run notice, instance lock), `ui/personnel/`, `ui/infrastructure/`, `ui/exercises/`, `ui/budget/`, `ui/dashboard/`, `ui/alerts/`, `ui/settings/`, `ui/backup/`, `ui/reports/` |
+| `ui/` | one sub-package per area: `ui/shell/` (main window, registry, context, prompts, banners, charts, formatting, translators, first-run notice, instance lock, the in-app help viewer `help.py` and the About dialog `about.py`), `ui/personnel/`, `ui/infrastructure/`, `ui/exercises/`, `ui/budget/`, `ui/dashboard/`, `ui/alerts/`, `ui/settings/`, `ui/backup/`, `ui/reports/` |
 | `i18n/` | the languages, the area-to-source map and the Qt Linguist catalogues `<area>_<lang>.ts` |
 | `resources/` | `app.ico`, `countries.json` and `THIRD_PARTY_DATA.md` |
+| `help/` | the in-app help, one Markdown file per language (`pt_BR.md`, `en_US.md`, `es_ES.md`); package data, shown by `ui/shell/help.py` |
 | `demo/` | the deterministic generators of the fictitious demo database |
 
 Top-level modules of `src/cbrn_dashboard/`:
@@ -321,6 +322,13 @@ folder" (`ui/backup/actions.py`, wired in `ui/shell/main_window.py`). Restore is
 read-only mode; Back up stays available. "Open data folder" goes through `ui/shell/folders.py`,
 which accepts an existing local folder only.
 
+The Help menu opens the in-app help (`ui/shell/help.py`, F1 at the topic of the page shown) and the
+About dialog (`ui/shell/about.py`). Both are ordinary `QDialog`s that open without blocking and are
+built on the first request. The About dialog shows the version, the GPL-3.0-or-later notice, the
+source URL as plain text, the preliminary notice and one line per entry of `licenses\index.json`,
+which the bundle ships beside the executable; running from source there is no such index and the
+dialog says so. Neither dialog makes a network connection or opens a link.
+
 ## 10. Registries of the shell
 
 `ui/shell/registry.py` holds three tuples. A module registers itself by adding one line to the tuple
@@ -376,6 +384,11 @@ English and Spanish (Spain), written `pt_BR`, `en_US` and `es_ES` in file names 
   a language-change event and each widget re-applies its texts in `retranslate()`.
 - **Reports** use their own translators for the language chosen in the report, and never swap
   the application's translators.
+- **The in-app help** is not a catalogue: it is one Markdown file per language in `help/`, with
+  the same topics in every language. Each topic is a `##` or `###` heading followed by the marker
+  line `<!-- topic: <id> -->`; the id of a page topic is the registry key of the page, so a page
+  without a help topic fails a test. The files hold no link and no image. The viewer chooses the
+  file of the current language and follows a language switch.
 - Dates, numbers and money are formatted for display with the locale; exports always use a
   locale-independent format ([import-templates.md](import-templates.md)).
 
@@ -451,4 +464,3 @@ fictitious.
 - Qt writes the creation date of a PDF from the system clock (section 5).
 - The pt-BR and es-ES translations are drafts (`unfinished`, section 11).
 - The executable is unsigned; the effects are described in the install guides.
-- Not yet in the interface: the About dialog and the in-app help.

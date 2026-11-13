@@ -9,7 +9,8 @@ clock, backup-reminder and translation banners and the permanent preliminary not
 
 The File menu holds "Back up...", "Restore..." and "Open data folder" (T7.4, the actions of
 :class:`~cbrn_dashboard.ui.backup.actions.BackupActions`; the folder is opened by the single helper
-of ``ui/shell/folders.py``) and "Quit".
+of ``ui/shell/folders.py``) and "Quit". The Help menu (T10.2) opens the in-app help (F1, at the
+topic of the page shown) and the About dialog, both non-modal and built on the first request.
 
 The status bar holds the alert badge (T6.6): the alert counts by severity for the as-of date. At
 start-up, when warning or critical alerts exist and the start-up summary preference is on, the
@@ -32,6 +33,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
     QDateEdit,
+    QDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -49,10 +51,12 @@ from cbrn_dashboard.logging_setup import log_exception
 from cbrn_dashboard.prefs import PreferencesWarning
 from cbrn_dashboard.ui.backup.actions import BackupActions
 from cbrn_dashboard.ui.shell import registry
+from cbrn_dashboard.ui.shell.about import AboutDialog
 from cbrn_dashboard.ui.shell.banners import AlertCounts, BannerArea, BannerCode, alert_badge_text
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.folders import open_local_folder
 from cbrn_dashboard.ui.shell.formatting import apply_locale, from_qdate, to_qdate
+from cbrn_dashboard.ui.shell.help import HelpDialog
 from cbrn_dashboard.ui.shell.i18n import app_display_name, language_display_name
 
 _PAGE_KEY_ROLE = Qt.ItemDataRole.UserRole
@@ -120,6 +124,22 @@ class MainWindow(QMainWindow):
             self._language_group.addAction(action)
             self.language_menu.addAction(action)
             self.language_actions[code] = action
+
+        # T10.2: the in-app help and the About dialog; both open non-modally and are built on the
+        # first request (they need no service and no database).
+        self.help_menu = self.menuBar().addMenu("")
+        self.help_menu.setObjectName("menu_help")
+        self.help_action = QAction(self)
+        self.help_action.setObjectName("action_help")
+        self.help_action.setShortcuts(QKeySequence.StandardKey.HelpContents)
+        self.help_action.triggered.connect(self._on_help_triggered)
+        self.about_action = QAction(self)
+        self.about_action.setObjectName("action_about")
+        self.about_action.triggered.connect(self._on_about_triggered)
+        self.help_menu.addAction(self.help_action)
+        self.help_menu.addAction(self.about_action)
+        self.help_dialog: HelpDialog | None = None
+        self.about_dialog: AboutDialog | None = None
 
         self.toolbar = QToolBar()
         self.toolbar.setObjectName("toolbar_main")
@@ -227,6 +247,42 @@ class MainWindow(QMainWindow):
     def show_page(self, key: str) -> None:
         """Navigate to the page registered under ``key``."""
         self.navigation.setCurrentRow(self._page_keys.index(key))
+
+    def current_page_key(self) -> str | None:
+        """The key of the page shown now, or ``None`` when there is no page."""
+        row = self.pages.currentIndex()
+        return self._page_keys[row] if 0 <= row < len(self._page_keys) else None
+
+    # ------------------------------------------------------------------ help and About (T10.2)
+
+    def show_help(self, topic: str | None = None) -> HelpDialog:
+        """Show the help (built on the first call), at ``topic`` when the help has that topic."""
+        if self.help_dialog is None:
+            self.help_dialog = HelpDialog(self._context, self)
+        if topic is not None:
+            self.help_dialog.show_topic(topic)
+        self._bring_forward(self.help_dialog)
+        return self.help_dialog
+
+    def show_about(self) -> AboutDialog:
+        """Show the About dialog (built on the first call)."""
+        if self.about_dialog is None:
+            self.about_dialog = AboutDialog(self._context, self)
+        self._bring_forward(self.about_dialog)
+        return self.about_dialog
+
+    @staticmethod
+    def _bring_forward(dialog: QDialog) -> None:
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _on_help_triggered(self, _checked: bool = False) -> None:
+        # F1 and the menu entry open the topic of the page that is shown.
+        self.show_help(self.current_page_key())
+
+    def _on_about_triggered(self, _checked: bool = False) -> None:
+        self.show_about()
 
     # ------------------------------------------------------------------ banners
 
@@ -359,6 +415,9 @@ class MainWindow(QMainWindow):
         self.language_menu.setTitle(QCoreApplication.translate("Shell", "&Language"))
         for code, action in self.language_actions.items():
             action.setText(language_display_name(code))
+        self.help_menu.setTitle(QCoreApplication.translate("Shell", "&Help"))
+        self.help_action.setText(QCoreApplication.translate("Shell", "Help &contents"))
+        self.about_action.setText(QCoreApplication.translate("Shell", "&About"))
         self.navigation.setAccessibleName(QCoreApplication.translate("Shell", "Navigation"))
         for placeholder in self._placeholders:
             placeholder.setText(

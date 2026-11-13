@@ -44,6 +44,18 @@
         <translation>&amp;Language</translation>
     </message>
     <message>
+        <source>&amp;Help</source>
+        <translation>&amp;Help</translation>
+    </message>
+    <message>
+        <source>Help &amp;contents</source>
+        <translation>Help &amp;contents</translation>
+    </message>
+    <message>
+        <source>&amp;About</source>
+        <translation>&amp;About</translation>
+    </message>
+    <message>
         <source>Navigation</source>
         <translation>Navigation</translation>
     </message>
@@ -294,6 +306,64 @@
     <message>
         <source>Shared computer: several people can take turns on one computer only with one shared Windows account, or with --data-dir pointing to a local folder restricted to the committee. With separate Windows accounts each person gets a separate database.</source>
         <translation>Shared computer: several people can take turns on one computer only with one shared Windows account, or with --data-dir pointing to a local folder restricted to the committee. With separate Windows accounts each person gets a separate database.</translation>
+    </message>
+    <message>
+        <source>About</source>
+        <extracomment>The source repository, shown as plain text (never as a link). The licence of the application source. The folder of the licence texts beside the executable, and the index in it.</extracomment>
+        <translation>About</translation>
+    </message>
+    <message>
+        <source>Version %1</source>
+        <translation>Version %1</translation>
+    </message>
+    <message>
+        <source>Licence: %1</source>
+        <translation>Licence: %1</translation>
+    </message>
+    <message>
+        <source>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</source>
+        <translation>This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.</translation>
+    </message>
+    <message>
+        <source>This program comes with ABSOLUTELY NO WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</source>
+        <translation>This program comes with ABSOLUTELY NO WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.</translation>
+    </message>
+    <message>
+        <source>In the released bundle, the complete licence texts and the offer of source for the bundled components are in the licenses folder next to the program.</source>
+        <translation>In the released bundle, the complete licence texts and the offer of source for the bundled components are in the licenses folder next to the program.</translation>
+    </message>
+    <message>
+        <source>Source code:</source>
+        <translation>Source code:</translation>
+    </message>
+    <message>
+        <source>Third-party components</source>
+        <translation>Third-party components</translation>
+    </message>
+    <message>
+        <source>The list of third-party components could not be read.</source>
+        <translation>The list of third-party components could not be read.</translation>
+    </message>
+    <message>
+        <source>The list of third-party components is not available in this build.</source>
+        <translation>The list of third-party components is not available in this build.</translation>
+    </message>
+    <message>
+        <source>Help</source>
+        <extracomment>The folder of the help files inside the package. The language tried when the file of the wanted language cannot be used.</extracomment>
+        <translation>Help</translation>
+    </message>
+    <message>
+        <source>Help topics</source>
+        <translation>Help topics</translation>
+    </message>
+    <message>
+        <source>Help text</source>
+        <translation>Help text</translation>
+    </message>
+    <message>
+        <source>The help text could not be loaded.</source>
+        <translation>The help text could not be loaded.</translation>
     </message>
 </context>
 </TS>
