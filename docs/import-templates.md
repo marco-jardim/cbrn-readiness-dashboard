@@ -275,6 +275,125 @@ One row per dated execution (spending) of a budget entry.
 
 ## Import rules
 
-**Placeholder: task T8.4 completes this section** (header-only templates, dry run, single
-transaction, per-row errors, duplicates by natural key, `,` as an alternative delimiter, legacy
-encodings rejected as `NOT_UTF8`). Until then, the export format above is the only specification.
+The import (task T8.4) reads the same files the export writes. It serves the retroactive records
+(2022-2025): the committee fills in the header-only templates, or edits an export, and imports the
+files one entity at a time in the import order above. Import only ADDS rows: an existing row is
+never changed or merged.
+
+### Templates
+
+A template is a file with the header row only, in the export format (BOM, `;`, CRLF). It is named
+`<entity>-template.csv` (for example `staff_member-template.csv`). The application writes the
+template of one entity or of all entities into a folder; the header of every template is exactly
+the column list in the tables above.
+
+### Encoding
+
+The file must be UTF-8, with or without a byte order mark. Any other encoding is refused as a
+whole with `NOT_UTF8`; nothing is imported. Typical case: a spreadsheet saved as "CSV" in the
+legacy Windows encoding, where accented letters break. To fix it, save the file again as
+"CSV UTF-8 (comma delimited)" (Excel) or choose the character set "Unicode (UTF-8)" (LibreOffice
+Calc, in the text export dialog).
+
+### Separator and header
+
+* The separator is `;` or `,`. It is detected from the header row: the one under which the cells
+  are column codes. Quoting is the same as in the export (`"`, doubled inside); line breaks inside
+  a quoted field are allowed.
+* The header row must hold exactly the column codes of the entity, in any order, written exactly
+  (lower case). A code that is not a column is `UNKNOWN_COLUMN` (the error names it), a column that
+  is absent is `MISSING_COLUMN`, a column written twice is `DUPLICATE_COLUMN`. With a header error
+  no row is read.
+* An empty file, or a file with the header row only, is valid and holds zero rows.
+* Completely blank lines are skipped. A row with more or fewer fields than the header is
+  `WRONG_FIELD_COUNT`. A quote that is never closed, or text after a closing quote, is
+  `MALFORMED_CSV`; the rows before it are still checked.
+
+### Cells
+
+| Kind | Rule | Error code |
+|---|---|---|
+| `TEXT` | Kept exactly as written, spaces included (the module trims it when it stores it). | none |
+| `CODE` | Always read as text, so `00123` stays `00123`; spaces around it are removed. | none |
+| `INTEGER` | Digits with an optional leading `-`; no decimal point and no thousands separator. | `INVALID_NUMBER` |
+| `REAL` | `.` as the decimal point, no thousands separator, optional exponent (`1e-05`). | `INVALID_NUMBER` |
+| `DATE` | Strict `YYYY-MM-DD` and a real calendar day. | `INVALID_DATE` |
+| `BOOL` | `0` or `1`. | `INVALID_BOOL` |
+| `CURRENCY` | Three upper-case letters of an accepted currency (`BRL`, `USD`, `EUR`). | `INVALID_CURRENCY` |
+| `MONEY` | Major units with `.`, at most the decimal places of the currency of the same row (two for the three currencies), converted exactly. | `INVALID_AMOUNT`, `INVALID_CURRENCY` |
+
+An empty cell is NULL. NULL in a required column is `REQUIRED`; the exception is a required `TEXT`
+column, which reads an empty cell as the empty text (the `description` of a budget entry). Spaces
+around the value of any kind except `TEXT` are ignored.
+
+The formula guard is reversed: when a `TEXT` or `CODE` cell starts with `'` and the next
+character is `=`, `+`, `-`, `@`, a tab, a carriage return or another `'`, exactly one leading `'`
+is removed. So `'=1+1` is imported as `=1+1` and `''quoted` as `'quoted`; `'plain` is kept as it
+is.
+
+### References, natural keys and duplicates
+
+A row refers to its parents by natural key: `staff_identifier`, `course_code`, `asset_tag`,
+`type_code`, `edition_code`, `metric_code`, `source_code`, and for an execution row the budget
+entry (`fiscal_year`, `source_code`, `currency`, `description`). The parent must exist when the
+row is read: it is already in the database or was imported by an earlier file, which is why the
+import order matters. A parent that does not exist is `UNKNOWN_REFERENCE` on the column that
+refers to it (for an execution row whose budget entry is missing, on `description`; on
+`source_code` when the source itself is unknown).
+
+The natural key of each entity is marked in the tables above. A row whose key already occurs in
+the file is `DUPLICATE_IN_FILE` (reported on the later line); a row whose key already exists in
+the database is `DUPLICATE_KEY`. Neither is merged or updated. A `training_course`, `asset_type`,
+`evaluation_metric` or `funding_source` row is not created for a built-in code that already exists
+(`DUPLICATE_KEY`); a row with `built_in` = 1 and any other code is `BUILT_IN_NOT_ALLOWED`. Import
+the user-defined rows only.
+
+Every other rule is the rule of the screens, because each row is written through the same module
+service: for example `VALID_UNTIL_BEFORE_ISSUED`, `END_BEFORE_START`, `ACTIVE_UNTIL_BEFORE_FROM`,
+`IDENTIFIER_LOOKS_LIKE_NATIONAL_ID`, `INVALID_PPE_LEVEL`, `UNKNOWN_COUNTRY`,
+`VALUE_OUT_OF_SCALE`, `NEGATIVE_AMOUNT`, `COURSE_INACTIVE`, `TYPE_INACTIVE`, `METRIC_INACTIVE`,
+`SOURCE_INACTIVE`. The code is reported with the line and the column of the field. A row that
+uses an inactive course, type, metric or source is refused like on the screen; activate it first.
+
+Two entities need a note:
+
+* `asset` creates the asset only. The status history, including the first status on
+  `in_service_from`, comes from `asset_status_event`; import that file next.
+* `exercise_country` adds one country to an existing edition per row.
+
+### All or nothing and the dry run
+
+* A file is imported as a whole or not at all. If any row has any problem, nothing of the file is
+  written. The report lists EVERY problem, not the first one: the line (1-based, counting the
+  header; for a record with line breaks inside quotes, the line where it starts), the column code
+  (empty for a problem of the whole row) and the code. A problem of the whole file has line 0.
+* The check is complete: format, cells, references, duplicates and the rules of the module.
+* The dry run does the same work and writes nothing: its report is what the real import would
+  report, with zero rows imported. Both need a database that can be written; on a read-only
+  database they are refused with `READ_ONLY`.
+* Each imported row is recorded in the change log with the action `import`, with the operator and
+  the time of the import. The log row names the table and the row, never the contents: staff
+  identifiers, labels, certificate references and degree fields do not reach the log.
+
+### Error codes
+
+| Code | Meaning |
+|---|---|
+| `NOT_UTF8` | The file is not UTF-8; save it again as UTF-8 (line 0, whole file). |
+| `MALFORMED_CSV` | Quoting is broken; reading stopped at that line. |
+| `UNKNOWN_COLUMN` | The header has a column that is not in the table of the entity (the column is named). |
+| `MISSING_COLUMN` | The header lacks a column of the entity (the column is named). |
+| `DUPLICATE_COLUMN` | The header names a column twice (the column is named). |
+| `WRONG_FIELD_COUNT` | The row has more or fewer fields than the header. |
+| `REQUIRED` | A required column is empty. |
+| `INVALID_NUMBER` | An `INTEGER` or `REAL` cell is not a plain number. |
+| `INVALID_DATE` | A `DATE` cell is not a real `YYYY-MM-DD` date. |
+| `INVALID_BOOL` | A `BOOL` cell is not `0` or `1`. |
+| `INVALID_CURRENCY` | The currency is not an accepted code, or an amount has no valid currency in its row. |
+| `INVALID_AMOUNT` | A `MONEY` cell is not a plain amount, has more decimals than the currency, or is too large. |
+| `UNKNOWN_REFERENCE` | The parent named by the row does not exist. |
+| `DUPLICATE_IN_FILE` | The natural key already occurred earlier in the same file. |
+| `DUPLICATE_KEY` | The natural key already exists in the database. |
+| `BUILT_IN_NOT_ALLOWED` | The row claims to be a built-in list entry that this version does not have. |
+| `FILE_UNREADABLE` | The file cannot be opened (reported as an exception, not as a row problem). |
+| any rule code | The module refused the value, for example `VALID_UNTIL_BEFORE_ISSUED`; reported on the column of the field. |

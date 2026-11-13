@@ -1,0 +1,4 @@
+identifier;label;category;active_from;active_until
+DEMO-DUP;;;2020-01-01;
+DEMO-OTHER;;;2020-01-01;
+DEMO-DUP;;;2021-01-01;

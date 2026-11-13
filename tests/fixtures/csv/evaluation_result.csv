@@ -1,0 +1,4 @@
+edition_code;metric_code;value;respondents;note
+DEMO-ED-1;DEMO-M1;87.5;30;'-x
+DEMO-ED-1;DEMO-M2;1234567.125;;
+DEMO-ED-2;DEMO-M1;42.0;;

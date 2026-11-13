@@ -1,0 +1,4 @@
+staff_identifier;level;status;year;field
+DEMO-00123;master;completed;2018;DEMO field
+DEMO-00123;doctorate;in_progress;;
+DEMO-00124;specialisation;completed;2015;DEMO field two

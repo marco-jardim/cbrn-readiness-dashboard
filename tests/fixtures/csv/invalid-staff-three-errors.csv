@@ -1,0 +1,6 @@
+identifier;label;category;active_from;active_until
+DEMO-OK-1;;;2020-01-01;
+DEMO-BAD-1;;;2020-13-01;
+;;;2020-01-01;
+DEMO-BAD-3;;;2021-01-01;2020-01-01
+DEMO-OK-2;;;2020-02-02;

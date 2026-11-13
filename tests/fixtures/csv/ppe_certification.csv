@@ -1,0 +1,4 @@
+staff_identifier;ppe_level;issued_on;valid_until;no_renewal_from;no_renewal_reason;reference
+DEMO-00123;A;2024-01-10;2026-01-10;;;DEMO-REF-1
+DEMO-00123;B;2024-02-10;2026-02-10;;;
+DEMO-00124;C;2023-03-01;2025-03-01;2025-01-01;left_unit;

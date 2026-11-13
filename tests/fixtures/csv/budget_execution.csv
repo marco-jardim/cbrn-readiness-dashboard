@@ -1,0 +1,5 @@
+fiscal_year;source_code;currency;description;executed_on;amount;note
+2024;DIRSA;BRL;"DEMO line; ""A""";2024-02-01;1000.00;DEMO exec
+2024;DIRSA;BRL;"DEMO line; ""A""";2024-03-01;234.56;
+2024;DIRSA;USD;;2024-04-01;0.07;
+2025;OPCW_TRUST_FUND;EUR;;2025-01-15;2.50;

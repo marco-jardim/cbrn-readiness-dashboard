@@ -1,0 +1,3 @@
+code;label_pt_br;label_en_us;label_es_es;unit;scale_min;scale_max;higher_is_better;active
+DEMO-M1;Metrica DEMO 1;;;pct;0.0;100.0;1;1
+DEMO-M2;Metrica DEMO 2;;;;;;0;1

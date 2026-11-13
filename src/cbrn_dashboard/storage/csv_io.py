@@ -29,16 +29,23 @@ column is an integer number of minor units. :func:`read_entity` is the strict re
 THIS exporter wrote and returns the same shape: DATE cells as ISO text, MONEY cells as minor units.
 An empty TEXT/CODE cell is NULL (``None``) unless the column is ``required`` (NOT NULL in the
 database), where it is the empty string; so a nullable text column cannot tell ``''`` from NULL.
+
+The import half (T8.4) is :func:`read_import_file`: a LENIENT reader that accepts ``;`` or ``,``
+and UTF-8 with or without the byte order mark, and that never stops at the first problem. It
+returns every row with its typed values and a list of :class:`CellError` (physical line, column
+code, stable code) instead of raising. It does no database work: references, duplicates and the
+service rules are the job of ``services/importer.py``.
 """
 
 from __future__ import annotations
 
 import contextlib
 import csv
+import io
 import math
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -49,6 +56,7 @@ from cbrn_dashboard.domain.budget import (
     InvalidCurrencyError,
     TooManyDecimalsError,
     decimal_to_minor,
+    is_valid_currency,
     minor_to_decimal,
 )
 from cbrn_dashboard.domain.dates import InvalidDateError, format_iso_date, parse_iso_date
@@ -62,16 +70,22 @@ __all__ = [
     "GUARD_TRIGGERS",
     "LINE_TERMINATOR",
     "QUOTE_CHAR",
+    "CellError",
     "ColumnKind",
     "ColumnSpec",
     "CsvFormatError",
     "EntitySpec",
+    "ImportFile",
+    "ImportRow",
     "entity_spec",
     "export_file_name",
     "guard_cell",
     "read_entity",
+    "read_import_file",
+    "template_file_name",
     "unguard_cell",
     "write_entity",
+    "write_template",
 ]
 
 #: UTF-8 with a byte order mark: spreadsheets recognise the file as UTF-8. Reading accepts a file
@@ -589,3 +603,241 @@ def read_entity(path: Path, spec: EntitySpec) -> list[dict[str, object]]:
     if not records or tuple(records[0][1]) != spec.column_codes:
         raise CsvFormatError("HEADER_MISMATCH", line=1)
     return [_parse_record(spec, record, line) for line, record in records[1:] if record]
+
+
+# --------------------------------------------------------------------------- templates (import)
+
+
+def template_file_name(spec: EntitySpec) -> str:
+    """``<file_stem>-template.csv``: the name of the header-only template of an entity."""
+    return f"{spec.file_stem}-template.csv"
+
+
+def write_template(path: Path, spec: EntitySpec) -> None:
+    """Write the header-only template of ``spec`` in the export format (BOM, ``;``, CRLF)."""
+    write_entity(path, spec, [])
+
+
+# --------------------------------------------------------------------------- the import reader
+
+#: The delimiters accepted on import; the one that fits the header line is used.
+IMPORT_DELIMITERS = (";", ",")
+
+#: ``line`` of an error that concerns the whole file (``NOT_UTF8``).
+FILE_LEVEL_LINE = 0
+
+_INT64_LIMIT = 2**63
+_MAX_INTEGER_TEXT = 20
+_MAX_MONEY_TEXT = 40
+
+
+@dataclass(frozen=True)
+class CellError:
+    """One problem found in a file: the physical line, the column code and a stable code.
+
+    ``column`` is ``""`` for an error of a whole row or file; for ``UNKNOWN_COLUMN``,
+    ``DUPLICATE_COLUMN`` and ``MISSING_COLUMN`` it is the name of the column concerned. ``line`` is
+    ``0`` (:data:`FILE_LEVEL_LINE`) when the whole file is concerned (``NOT_UTF8``). The error holds
+    no cell values and no translated text.
+    """
+
+    line: int
+    column: str
+    code: str
+
+
+@dataclass
+class ImportRow:
+    """One data record: the line where it starts, its typed values and the errors of its cells.
+
+    ``values`` maps every column code to the typed value (``None`` = NULL; MONEY as integer minor
+    units; DATE as ISO text). It is empty when the record has the wrong number of fields.
+    """
+
+    line: int
+    values: dict[str, object] = field(default_factory=dict)
+    errors: list[CellError] = field(default_factory=list)
+
+
+@dataclass
+class ImportFile:
+    """A file read for import: its rows and the errors that concern the whole file."""
+
+    rows: list[ImportRow] = field(default_factory=list)
+    errors: list[CellError] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        """No file-level error and no row with an error."""
+        return not self.errors and not any(row.errors for row in self.rows)
+
+
+def _first_content_line(text: str) -> str | None:
+    for line in text.splitlines():
+        if line:
+            return line
+    return None
+
+
+def _split_header(line: str, delimiter: str) -> list[str]:
+    try:
+        return next(csv.reader([line], delimiter=delimiter, quotechar=QUOTE_CHAR))
+    except (csv.Error, StopIteration):
+        return line.split(delimiter)
+
+
+def _detect_delimiter(text: str, expected: frozenset[str]) -> str:
+    """The delimiter under which most header cells are column codes (``;`` on a tie)."""
+    first = _first_content_line(text)
+    if first is None:
+        return DELIMITER
+    best, best_score = DELIMITER, -1
+    for delimiter in IMPORT_DELIMITERS:
+        score = sum(1 for cell in _split_header(first, delimiter) if cell in expected)
+        if score > best_score:
+            best, best_score = delimiter, score
+    return best
+
+
+def _header_errors(spec: EntitySpec, header: list[str], line: int) -> list[CellError]:
+    expected = set(spec.column_codes)
+    errors: list[CellError] = []
+    seen: set[str] = set()
+    for cell in header:
+        if cell in seen:
+            if cell in expected:
+                errors.append(CellError(line, cell, "DUPLICATE_COLUMN"))
+            continue
+        seen.add(cell)
+        if cell not in expected:
+            errors.append(CellError(line, cell, "UNKNOWN_COLUMN"))
+    errors.extend(
+        CellError(line, code, "MISSING_COLUMN") for code in spec.column_codes if code not in seen
+    )
+    return errors
+
+
+def _read_cell(column: ColumnSpec, raw: str) -> tuple[object, str | None]:
+    """The typed value of one cell and the error code (``None`` when fine).
+
+    MONEY is returned as the validated text; the amount is converted once the currency is known.
+    """
+    kind = column.kind
+    text = raw if kind is ColumnKind.TEXT else raw.strip()
+    if text == "":
+        if column.required and kind is ColumnKind.TEXT:
+            return "", None
+        if column.required:
+            return None, "REQUIRED"
+        return None, None
+    if kind in (ColumnKind.TEXT, ColumnKind.CODE):
+        return unguard_cell(text), None
+    if kind is ColumnKind.INTEGER:
+        if len(text) <= _MAX_INTEGER_TEXT and _INTEGER_RE.fullmatch(text):
+            number = int(text)
+            if -_INT64_LIMIT <= number < _INT64_LIMIT:
+                return number, None
+        return None, "INVALID_NUMBER"
+    if kind is ColumnKind.REAL:
+        if _REAL_RE.fullmatch(text):
+            real = float(text)
+            if math.isfinite(real):
+                return real, None
+        return None, "INVALID_NUMBER"
+    if kind is ColumnKind.DATE:
+        try:
+            return format_iso_date(parse_iso_date(text)), None
+        except InvalidDateError:
+            return None, "INVALID_DATE"
+    if kind is ColumnKind.BOOL:
+        if text in ("0", "1"):
+            return text == "1", None
+        return None, "INVALID_BOOL"
+    if kind is ColumnKind.CURRENCY:
+        if _CURRENCY_RE.fullmatch(text) and is_valid_currency(text):
+            return text, None
+        return None, "INVALID_CURRENCY"
+    if len(text) <= _MAX_MONEY_TEXT and _MONEY_RE.fullmatch(text):  # MONEY
+        return text, None
+    return None, "INVALID_AMOUNT"
+
+
+def _read_record(
+    spec: EntitySpec, index_of: Mapping[str, int], record: list[str], line: int
+) -> ImportRow:
+    row = ImportRow(line=line)
+    if len(record) != len(spec.columns):
+        row.errors.append(CellError(line, "", "WRONG_FIELD_COUNT"))
+        return row
+    for column in spec.columns:
+        value, code = _read_cell(column, record[index_of[column.code]])
+        row.values[column.code] = value
+        if code is not None:
+            row.errors.append(CellError(line, column.code, code))
+    failed = {error.column for error in row.errors}
+    currency = row.values.get("currency")
+    for column in spec.columns:
+        pending = row.values[column.code]
+        if column.kind is not ColumnKind.MONEY or column.code in failed or pending is None:
+            continue
+        if not isinstance(pending, str):
+            continue
+        if not isinstance(currency, str):
+            if "currency" not in failed:
+                row.errors.append(CellError(line, column.code, "INVALID_CURRENCY"))
+            continue
+        try:
+            row.values[column.code] = decimal_to_minor(Decimal(pending), currency)
+        except InvalidCurrencyError:
+            row.errors.append(CellError(line, column.code, "INVALID_CURRENCY"))
+        except (TooManyDecimalsError, InvalidAmountError):
+            row.errors.append(CellError(line, column.code, "INVALID_AMOUNT"))
+    return row
+
+
+def read_import_file(path: Path, spec: EntitySpec) -> ImportFile:
+    """Read a file for import; never raises for the content (``OSError`` for the file itself).
+
+    * the bytes must be UTF-8, with or without a byte order mark, else the whole file is refused
+      with ``NOT_UTF8`` (line 0);
+    * the delimiter (``;`` or ``,``) is detected from the header line; the header must hold
+      exactly the column codes in any order: ``UNKNOWN_COLUMN``, ``MISSING_COLUMN``,
+      ``DUPLICATE_COLUMN`` (then no row is read);
+    * an empty file and a header-only file have no rows and no error;
+    * completely blank lines are skipped; a record with the wrong number of fields is
+      ``WRONG_FIELD_COUNT``; a quoting error ends the reading with ``MALFORMED_CSV`` (the rows
+      before it are kept);
+    * cells: see :func:`_read_cell`: ``REQUIRED``, ``INVALID_NUMBER``, ``INVALID_DATE``,
+      ``INVALID_BOOL``, ``INVALID_CURRENCY``, ``INVALID_AMOUNT``.
+    """
+    result = ImportFile()
+    try:
+        text = path.read_bytes().decode(ENCODING)
+    except UnicodeDecodeError:
+        result.errors.append(CellError(FILE_LEVEL_LINE, "", "NOT_UTF8"))
+        return result
+    if not text.strip():
+        return result
+    delimiter = _detect_delimiter(text, frozenset(spec.column_codes))
+    reader = csv.reader(
+        io.StringIO(text, newline=""), delimiter=delimiter, quotechar=QUOTE_CHAR, strict=True
+    )
+    index_of: dict[str, int] | None = None
+    previous_end = 0
+    try:
+        for record in reader:
+            start = previous_end + 1
+            previous_end = reader.line_num
+            if not record:
+                continue
+            if index_of is None:
+                errors = _header_errors(spec, record, start)
+                if errors:
+                    result.errors.extend(errors)
+                    return result
+                index_of = {code: position for position, code in enumerate(record)}
+                continue
+            result.rows.append(_read_record(spec, index_of, record, start))
+    except csv.Error:
+        result.errors.append(CellError(reader.line_num, "", "MALFORMED_CSV"))
+    return result

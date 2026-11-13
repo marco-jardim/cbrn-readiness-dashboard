@@ -1,0 +1,4 @@
+identifier;label;category;active_from;active_until
+DEMO-00123;DEMO label;DEMO-cat;2020-01-15;
+DEMO-00124;;;2021-02-01;2025-12-31
+DEMO-00125;;DEMO-cat;2022-03-01;

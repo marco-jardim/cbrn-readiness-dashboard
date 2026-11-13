@@ -1,0 +1,7 @@
+asset_tag;effective_on;status;note
+00789;2023-01-01;degraded;
+DEMO-BAY-002;2022-06-01;operational;
+DEMO-BAY-002;2023-03-01;out_of_service;"DEMO; note"
+DEMO-BED-001;2022-01-01;operational;
+DEMO-BED-001;2023-01-01;degraded;'@note
+DEMO-BED-001;2023-02-01;operational;

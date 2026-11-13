@@ -1,0 +1,5 @@
+tag;type_code;description;location;in_service_from;in_service_until;maintenance_interval_days;notes
+00789;DEMO-TYPE;;;2023-01-01;;;
+DEMO-BAY-002;bay;;'-x;2022-06-01;;;''quoted
+DEMO-BED-001;bed;"Line one; ""quoted""
+line two";DEMO ward;2022-01-01;;30;'=1+1
