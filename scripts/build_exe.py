@@ -353,6 +353,8 @@ def pyinstaller_arguments(
     arguments = [
         "--onedir",
         "--windowed",
+        # D22: an escaped exception must never be shown by the bootloader with its message.
+        "--disable-windowed-traceback",
         "--noupx",
         "--noconfirm",
         "--clean",

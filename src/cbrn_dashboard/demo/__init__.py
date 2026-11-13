@@ -36,7 +36,13 @@ from cbrn_dashboard import __version__
 from cbrn_dashboard.clock import Clock
 from cbrn_dashboard.demo import budget, exercises, infrastructure, personnel
 from cbrn_dashboard.storage import app_meta
-from cbrn_dashboard.storage.db import DatabaseConnection, DatabaseError, open_database, transaction
+from cbrn_dashboard.storage.db import (
+    DatabaseConnection,
+    DatabaseError,
+    HotJournalError,
+    open_database,
+    transaction,
+)
 from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
 
 __all__ = [
@@ -175,23 +181,43 @@ def generate(
     return True
 
 
-def _refuse_if_not_demo(path: Path) -> None:
-    """Refuse an existing file that is not a demo database, without touching it."""
-    if not path.is_file() or path.stat().st_size == 0:
-        return
+def _probe_is_demo(path: Path) -> bool:
+    """Whether the existing file at ``path`` is a demo database (read-only probe)."""
     msg = "The file at the demo database location is not a demo database."
     try:
         probe = open_database(path, read_only=True)
-    except sqlite3.DatabaseError as exc:
+    except HotJournalError:
+        raise  # the caller recovers the journal and probes again
+    except (sqlite3.DatabaseError, DatabaseError) as exc:
         raise DemoDataError(NOT_A_DEMO_DATABASE, msg) from exc
     try:
         try:
-            is_demo = app_meta.read_is_demo(probe)
-        except sqlite3.DatabaseError as exc:
+            return app_meta.read_is_demo(probe)
+        except HotJournalError:
+            raise
+        except (sqlite3.DatabaseError, DatabaseError) as exc:
             raise DemoDataError(NOT_A_DEMO_DATABASE, msg) from exc
     finally:
         probe.close()
+
+
+def _refuse_if_not_demo(path: Path) -> None:
+    """Refuse an existing file that is not a demo database, without touching it.
+
+    The one exception: a hot rollback journal (an earlier crash during a write) cannot be rolled
+    back by the read-only probe, so the file is opened read-write once (the caller holds the
+    instance lock) and SQLite recovers it. That is what any SQLite open does, and it is the only
+    change this check may make to a file that is then refused as not a demo database.
+    """
+    if not path.is_file() or path.stat().st_size == 0:
+        return
+    try:
+        is_demo = _probe_is_demo(path)
+    except HotJournalError:
+        open_database(path).close()
+        is_demo = _probe_is_demo(path)  # still failing: the error propagates
     if not is_demo:
+        msg = "The file at the demo database location is not a demo database."
         raise DemoDataError(NOT_A_DEMO_DATABASE, msg)
 
 

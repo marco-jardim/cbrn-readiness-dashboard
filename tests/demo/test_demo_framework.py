@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Demo-data framework and ``--demo`` mode (T1.7): separate database, D25 rules, determinism."""
 
+import shutil
 from collections.abc import Iterator, Sequence
+from contextlib import closing
 from pathlib import Path
 from typing import Protocol
 
@@ -32,13 +34,18 @@ from cbrn_dashboard.demo import (
 )
 from cbrn_dashboard.paths import DATABASE_FILE_NAME, DataLocation, LocationSource
 from cbrn_dashboard.storage import app_meta
-from cbrn_dashboard.storage.db import DatabaseConnection, open_database
+from cbrn_dashboard.storage.db import (
+    DatabaseConnection,
+    HotJournalError,
+    open_database,
+    transaction,
+)
 from cbrn_dashboard.storage.migrate import (
     DatabaseIdentity,
     backup_before_migration,
     open_and_migrate,
 )
-from tests.ui._fakes import FakePrompts, expect_handle
+from tests.ui._fakes import FakePrompts, create_database, expect_handle
 
 CLOCK = FixedClock.at("2026-03-05T12:00:00Z")
 
@@ -420,6 +427,71 @@ def test_a_non_demo_database_at_the_demo_path_is_refused_untouched(
     assert {entry.name for entry in path.parent.iterdir()} == {"demo.sqlite3"}
 
 
+# --------------------------------------------------------------------------- hot journal
+
+HOT_ROWS = 3000
+HOT_PAYLOAD = "a" * 300
+
+
+def _demo_database_with_hot_journal(tmp_path: Path, connections: Connections) -> Path:
+    """Data folder whose demo database has a genuine hot rollback journal.
+
+    A demo database is built and given a big table; a writer with a tiny page cache then updates
+    it in one uncommitted transaction, so SQLite spills dirty pages (syncing the journal first).
+    The database and its journal are copied byte for byte into another data folder, which is
+    returned.
+    """
+    source_dir = tmp_path / "source"
+    connections.demo(source_dir, [_items()]).close()
+    source = demo_database_path(source_dir)
+    with closing(open_database(source)) as setup:
+        setup.execute("CREATE TABLE hot (id INTEGER PRIMARY KEY, payload TEXT NOT NULL) STRICT")
+        with transaction(setup):
+            setup.executemany(
+                "INSERT INTO hot (id, payload) VALUES (?, ?)",
+                ((number, HOT_PAYLOAD) for number in range(HOT_ROWS)),
+            )
+
+    target_dir = tmp_path / "copy"
+    target = demo_database_path(target_dir)
+    target.parent.mkdir(parents=True)
+    writer = open_database(source)
+    try:
+        writer.execute("PRAGMA cache_size=1")
+        writer.execute("BEGIN")
+        writer.execute("UPDATE hot SET payload = ?", ("b" * 300,))
+        journal = source.with_name(source.name + "-journal")
+        assert journal.is_file()
+        shutil.copyfile(source, target)
+        shutil.copyfile(journal, target.with_name(target.name + "-journal"))
+        assert target.with_name(target.name + "-journal").stat().st_size > 0
+        writer.execute("ROLLBACK")
+    finally:
+        writer.close()
+    return target_dir
+
+
+def test_a_demo_database_with_a_hot_journal_is_recovered_and_opens(
+    tmp_path: Path, connections: Connections
+) -> None:
+    data_dir = _demo_database_with_hot_journal(tmp_path, connections)
+    path = demo_database_path(data_dir)
+    journal = path.with_name(path.name + "-journal")
+    with pytest.raises(HotJournalError):  # the premise: a read-only open cannot cope with it
+        open_database(path, read_only=True)
+    assert journal.is_file()
+
+    conn = connections.demo(data_dir, [_items(), _items("more", kind="A")])
+
+    assert not journal.exists()
+    assert app_meta.get(conn, DEMO_SEED_KEY) == str(DEFAULT_SEED)
+    assert len(_rows(conn)) == 5  # seeded once before; the new generator did not run
+    assert _rows(conn, "more") == []
+    assert _count(conn, "hot") == HOT_ROWS
+    original = conn.execute("SELECT count(*) FROM hot WHERE payload = ?", (HOT_PAYLOAD,))
+    assert original.fetchone()[0] == HOT_ROWS  # the unfinished update was rolled back
+
+
 # --------------------------------------------------------------------------- application wiring
 
 
@@ -479,19 +551,22 @@ def test_without_demo_the_real_database_is_opened_and_no_demo_folder_appears(
 
 
 @pytest.mark.ui
-def test_is_demo_follows_app_meta_not_the_flag(
-    tmp_path: Path, make_app: MakeApp, connections: Connections
+def test_the_context_follows_app_meta_for_a_normal_start_and_for_demo(
+    tmp_path: Path, make_app: MakeApp
 ) -> None:
-    handle = make_app(tmp_path / "flagged", demo=True)
-    assert handle.is_demo is True
-    handle.close_database()
-
-    handle.database = connections.plain(tmp_path / "real.sqlite3", is_demo=False)
-    assert handle.is_demo is False  # the command-line flag said demo, the database says real
-
+    # (a) no --demo, but the open database says app_meta.is_demo = 1: the context and the banner
+    # follow the database (D25), not the command line.
+    create_database(tmp_path / "plain", is_demo=True)
     plain = make_app(tmp_path / "plain", demo=False)
-    plain.database = connections.plain(tmp_path / "demo-like.sqlite3", is_demo=True)
-    assert plain.is_demo is True  # no flag, but the database says demo
+    assert plain.context.is_demo is True
+    assert "DEMO" in plain.window.banners.visible_codes()
+
+    # (b) --demo opens the demo database, whose app_meta.is_demo is 1.
+    flagged = make_app(tmp_path / "flagged", demo=True)
+    assert flagged.context.is_demo is True
+    assert "DEMO" in flagged.window.banners.visible_codes()
+    assert flagged.database is not None
+    assert app_meta.read_is_demo(flagged.database) is True
 
 
 @pytest.mark.ui
@@ -513,9 +588,7 @@ def test_demo_with_an_unwritable_data_folder_returns_one(
     assert main(argv, qm_dir=qm_dir, prompts=prompts) == 1
     [call] = prompts.calls_of("error")  # one translated explanation instead of a silent exit
     assert call.title == "Cannot start"
-    assert call.text == (
-        "The data folder is not writable and has no database, so nothing can be opened."
-    )
+    assert call.text == "The data folder is not writable, so the demo database cannot be created."
     assert blocked.read_text(encoding="utf-8") == "a file, not a folder"
     assert [entry.name for entry in tmp_path.iterdir()] == ["blocked"]
 

@@ -180,6 +180,17 @@ def test_package_data_comes_from_git_in_this_work_tree(build_script: ModuleType)
     assert Path("storage") / "migrations" / "0001_core.sql" in files
 
 
+def test_windowed_build_disables_the_bootloader_traceback(
+    build_script: ModuleType, tmp_path: Path
+) -> None:
+    # D22: the frozen window must never show a traceback with the exception message (no build).
+    arguments = build_script.pyinstaller_arguments(
+        tmp_path / "dist", tmp_path / "work", [], data_files=[]
+    )
+    assert "--windowed" in arguments
+    assert "--disable-windowed-traceback" in arguments
+
+
 def test_filesystem_fallback_lists_data_and_skips_sources(
     build_script: ModuleType, tmp_path: Path
 ) -> None:
