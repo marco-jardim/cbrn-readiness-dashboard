@@ -10,26 +10,30 @@ zip's first-run notes (`README-first-run.*.txt`) is shorter and says the same.
 
 ## 1. Status of this guide
 
-The version in the source tree is `1.0.2`; it is prepared and not published yet (no tag). The last
-version **published** on GitHub is 1.0.1, on 2026-11-13, as the
-tag `v1.0.1`: [release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1).
+The version in the source tree is `1.0.2`, and it is the latest **published** release: it was
+published on GitHub on 2026-11-14, as the tag `v1.0.2`:
+[release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2).
+The previous release, 1.0.1, was published on 2026-11-13
+([release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1)).
 The release workflow (`.github/workflows/release.yml`) runs only when a tag `vX.Y.Z` is pushed,
 builds the bundle, and creates a *draft* release that a person publishes (version 1.0.0 was built
-the same way, but its draft was never published and was withdrawn). The owner published 1.0.1
+the same way, but its draft was never published and was withdrawn). The owner published 1.0.2
 before the manual test on a clean Windows profile
 ([smoke-test.pt-BR.md](smoke-test.pt-BR.md) and
 [manual-test-script.pt-BR.md](manual-test-script.pt-BR.md), in Portuguese), which is **still
-pending**; the result will be recorded in the changelog. On the published zip, the SHA-256 matched
-`SHA256SUMS.txt`, `gh attestation verify` passed and the frozen self-test passed.
+pending**; the result will be recorded in the changelog. On the downloaded assets, every SHA-256
+matched `SHA256SUMS.txt`, `gh attestation verify` passed for the installer and the zip, and the
+installer passed the silent install, self-test and silent uninstall smoke test.
 
 Everything below that talks about a download describes the files of that release page and the
 scripts in `scripts/` that produce them. The program has not yet been tried by a person on a clean
 Windows profile.
 
-Since the release workflow builds a per-user **installer** (`...-setup.exe`) on every release, with
-no manual step, the releases from 1.0.2 on carry it next to the zip; release 1.0.1 has the zip
+The release workflow builds a per-user **installer** (`...-setup.exe`) on every release, with no
+manual step, so the releases from 1.0.2 on carry it next to the zip; release 1.0.1 has the zip
 only. The workflow installs it silently, runs the self-test of the installed program and removes
-it again before the release is created; a failure there fails the release. A person has not yet
+it again before the release is created; a failure there fails the release. The installer is the
+recommended download and the zip is the portable one. Both are unsigned. A person has not yet
 installed it on a clean Windows profile.
 
 To try the program today, run it from a source checkout (needs [uv](https://docs.astral.sh/uv/)):
@@ -279,7 +283,7 @@ To make one, choose **File > Back up...** in the main window, choose where to sa
 type the passphrase twice. To restore one, choose **File > Restore...**, choose the `.cbrnbak`
 file, confirm that all current data will be replaced and type the passphrase. Restore is not
 available in read-only mode; Back up is. **File > Open data folder** shows the local data folder.
-Release 1.0.1 contains these entries (section 1); a person has not yet tried them on a clean
+Release 1.0.2 contains these entries (section 1); a person has not yet tried them on a clean
 profile.
 
 ## 12. Upgrades
@@ -307,7 +311,7 @@ media are not touched by either.
 
 ## 14. Known limits
 
-- Release 1.0.1 is published, but its manual test on a clean profile is still pending (section 1).
+- Release 1.0.2 is published, but its manual test on a clean profile is still pending (section 1).
   The executable is unsigned.
 - The installer is built and smoke-tested by the release workflow only; it is unsigned (section
   4.3), and a person has not yet run it on a clean profile.

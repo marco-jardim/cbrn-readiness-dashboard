@@ -7,10 +7,11 @@ código e a documentação, e é isso que o teste deve confirmar ou desmentir.
 
 **Versão preliminar - indicadores não validados institucionalmente.**
 
-A versão 1.0.2 está preparada no repositório, mas não foi marcada com tag nem publicada. O fluxo de
-publicação (`.github/workflows/release.yml`) cria um *rascunho* de lançamento; **uma pessoa
-executa este roteiro sobre o zip desse rascunho, antes de publicá-lo**. Se algum passo falhar, o
-rascunho não deve ser publicado até a causa ser entendida.
+A versão 1.0.2 foi publicada em 14/11/2026, por decisão do responsável, antes da execução deste
+roteiro. O fluxo de publicação (`.github/workflows/release.yml`) cria um *rascunho* de lançamento;
+nas próximas versões, **uma pessoa executa este roteiro sobre o rascunho, antes de publicá-lo**.
+Para a 1.0.2, execute-o sobre os arquivos da página pública da versão. Se algum passo falhar, avise
+o responsável pelo projeto.
 
 Os nomes de menus, botões e mensagens abaixo são os do português do programa, que ainda é um
 rascunho de tradução (marcado `unfinished`): a redação na tela pode diferir levemente. Em caso de

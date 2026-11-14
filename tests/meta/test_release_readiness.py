@@ -49,9 +49,10 @@ WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 TEMPLATE = ROOT / ".github" / "release-body.template.md"
 LANGUAGES = ("pt-BR", "en-US", "es-ES")
 
-#: The last version published on GitHub (1.0.1, on 2026-11-13). The current version in the source
+#: The last version published on GitHub (1.0.2, on 2026-11-14). The current version in the source
 #: may be newer and not published yet; the documents then name both.
-LAST_PUBLISHED = "1.0.1"
+LAST_PUBLISHED = "1.0.2"
+LAST_PUBLISHED_DATE = "2026-11-14"
 
 #: The questions of PLAN.md section 12 that the changelog lists: Q1 to Q24.
 QUESTION_NUMBERS = range(1, 25)
@@ -196,7 +197,7 @@ def test_the_readme_states_the_version_and_links_the_release_material() -> None:
 
 def test_the_readme_states_the_current_and_the_last_published_version() -> None:
     text = _read(ROOT / "README.md")
-    assert f"Version {LAST_PUBLISHED} was published on GitHub on 2026-11-13" in text
+    assert f"Version {LAST_PUBLISHED} was published on GitHub on {LAST_PUBLISHED_DATE}" in text
     assert f"/releases/tag/v{LAST_PUBLISHED})" in text
     assert f"cbrn-readiness-dashboard-{__version__}-win-x64-setup.exe" in text
     assert "(docs/manual-test-script.pt-BR.md)" in text
@@ -212,7 +213,7 @@ def test_install_guides_state_the_version_and_the_last_published_one(
     assert f"`{__version__}`" in text
     assert "smoke-test.pt-BR.md" in text
     assert "manual-test-script.pt-BR.md" in text
-    assert "2026-11-13" in text
+    assert LAST_PUBLISHED_DATE in text
     assert f"/releases/tag/v{LAST_PUBLISHED})" in text
 
 
@@ -371,6 +372,7 @@ def test_the_unfinished_count_stated_equals_the_count_found() -> None:
     [
         "unsigned",
         "published on 2026-11-13",
+        "published on 2026-11-14",
         "visual c++ runtime",
         "unc",
         "branch protection",

@@ -83,15 +83,15 @@ Não adicione a conta ao grupo "Administradores".
 4. Confira também que a pasta `%LOCALAPPDATA%\cbrn-readiness-dashboard` **não existe**. Se existir, o
    perfil não é limpo.
 
-## 3. Obter o instalador e o zip do rascunho da versão
+## 3. Obter o instalador e o zip da versão
 
-A versão 1.0.2 é um **rascunho** (*draft*) no GitHub: ele aparece só para quem colabora no
-repositório `marco-jardim/cbrn-readiness-dashboard`, na página
-[releases](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases). Quem não colabora não
-o vê. Há duas formas de obtê-lo; escolha uma:
+A versão 1.0.2 foi publicada em 14/11/2026 e está na página pública
+[v1.0.2](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2), que não
+exige conta. (Nas próximas versões o teste é feito antes da publicação, sobre o *rascunho*, que só
+quem colabora no repositório vê.) Há duas formas de obter os arquivos; escolha uma:
 
-- **A. Baixar com a conta do responsável pelo projeto**, em um navegador, em outro perfil ou outro
-  computador. Baixe os quatro arquivos da **mesma** página de versão:
+- **A. Baixar da página da versão**, em um navegador. Baixe os quatro arquivos da **mesma** página
+  de versão:
   - `cbrn-readiness-dashboard-1.0.2-win-x64-setup.exe` (o instalador, a forma recomendada de
     instalar)
   - `cbrn-readiness-dashboard-1.0.2-win-x64.zip` (o zip, para o modo portátil e para equipes de TI)

@@ -10,18 +10,21 @@ reales: vea [data-protection.md](data-protection.md) (en inglés).
 
 ## 1. Estado de esta guía
 
-La versión del árbol de código es `1.0.2`; está preparada y todavía no publicada (sin etiqueta). La
-última versión **publicada** en GitHub es la 1.0.1, el 2026-11-13, con la etiqueta
-`v1.0.1`: [página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1).
+La versión del árbol de código es `1.0.2` y es la última versión **publicada**: se publicó en
+GitHub el 2026-11-14, con la etiqueta
+`v1.0.2`: [página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2).
+La versión anterior, la 1.0.1, se publicó el 2026-11-13
+([página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1)).
 El flujo de publicación (`.github/workflows/release.yml`) solo se ejecuta cuando se envía una
 etiqueta `vX.Y.Z`, construye el paquete y crea una versión en *borrador* que una persona publica
 (la 1.0.0 se construyó igual, pero su borrador nunca se publicó y fue retirado). El propietario
-publicó la 1.0.1 antes de la prueba manual en un perfil limpio de Windows
+publicó la 1.0.2 antes de la prueba manual en un perfil limpio de Windows
 ([smoke-test.pt-BR.md](smoke-test.pt-BR.md) y
 [manual-test-script.pt-BR.md](manual-test-script.pt-BR.md), en portugués), que **sigue
-pendiente**; su resultado se registrará en el registro de cambios. En el zip publicado, el SHA-256
-coincidió con `SHA256SUMS.txt`, `gh attestation verify` fue aprobado y la autoprueba del
-ejecutable empaquetado fue aprobada.
+pendiente**; su resultado se registrará en el registro de cambios. En los archivos descargados,
+todos los SHA-256 coincidieron con `SHA256SUMS.txt`, `gh attestation verify` fue aprobado para el
+instalador y para el zip, y el instalador pasó la prueba de instalación silenciosa, autoprueba y
+desinstalación silenciosa.
 
 Todo lo que sigue sobre la descarga describe los archivos de esa página y los scripts de
 `scripts/` que los producen. Ninguna persona ha probado todavía el programa en un perfil limpio de
@@ -31,7 +34,8 @@ Como el flujo de publicación construye un **instalador** por usuario (`...-setu
 versión, sin ningún paso manual, las versiones desde la 1.0.2 lo llevan junto al zip; la
 1.0.1 solo tiene el zip. El flujo lo instala en modo silencioso, ejecuta la autoprueba del
 programa instalado y lo vuelve a quitar antes de crear la versión; un fallo ahí hace fallar la
-publicación. Ninguna persona lo ha instalado todavía en un perfil limpio de Windows.
+publicación. El instalador es la descarga recomendada y el zip es el portátil; ambos son sin
+firma. Ninguna persona lo ha instalado todavía en un perfil limpio de Windows.
 
 Para probar el programa hoy, ejecútelo desde una copia del código fuente (requiere
 [uv](https://docs.astral.sh/uv/)):
@@ -298,7 +302,7 @@ dónde guardar el archivo y escriba la contraseña dos veces. Para restaurar, el
 Restaurar...**, elija el archivo `.cbrnbak`, confirme que se sustituirán todos los datos actuales
 y escriba la contraseña. Restaurar no está disponible en el modo de solo lectura; la copia de
 seguridad sí. **Archivo > Abrir carpeta de datos** muestra la carpeta de datos local. La
-versión 1.0.1 contiene estas entradas (sección 1); una persona todavía no las ha probado en un
+versión 1.0.2 contiene estas entradas (sección 1); una persona todavía no las ha probado en un
 perfil limpio.
 
 ## 12. Actualizaciones
@@ -327,7 +331,7 @@ Las copias cifradas guardadas en otros medios no se ven afectadas en ninguno de 
 
 ## 14. Límites conocidos
 
-- La versión 1.0.1 está publicada, pero su prueba manual en un perfil limpio sigue pendiente
+- La versión 1.0.2 está publicada, pero su prueba manual en un perfil limpio sigue pendiente
   (sección 1). El ejecutable no está firmado.
 - El instalador lo construye y lo prueba en modo silencioso solo el flujo de publicación; no está
   firmado (sección 4.3), y una persona todavía no lo ha ejecutado en un perfil limpio.

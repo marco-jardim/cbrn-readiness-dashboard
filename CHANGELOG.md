@@ -9,19 +9,28 @@ This file records only the **status** of each open question (open / answered and
 answered and implemented in task Tn), never the content of an answer. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and section 12 of [PLAN.md](PLAN.md).
 
-## [1.0.2] - unreleased
+## [1.0.2] - 2026-11-14
 
-**Status of this entry: prepared in the repository, not published.** The version is set to 1.0.2 in
-`src/cbrn_dashboard/__init__.py`, but no tag `v1.0.2` exists and no release has been created. The
-installer build of the release workflow (`.github/workflows/release.yml`) has never run, and
-neither has its optional signing job. A person still has to tag `v1.0.2` and publish the draft
-release that the workflow creates. The manual smoke test
-([docs/smoke-test.pt-BR.md](docs/smoke-test.pt-BR.md)) has not been executed yet, and neither has
-the manual test script for the committee
+**Status of this entry: published.** Version 1.0.2 was published on GitHub on 2026-11-14 as the
+tag `v1.0.2` (commit `4d57a4f`), marked Latest:
+<https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2>. The release
+carries the installer `cbrn-readiness-dashboard-1.0.2-win-x64-setup.exe` (SHA-256
+`c1fb8b3f525e68343c56a1a6bb9f7fc91e496421bd2b2c200e57b4eb15b8d070`), the portable zip
+`cbrn-readiness-dashboard-1.0.2-win-x64.zip` (SHA-256
+`34aec1c53bd9705e8765daae0db43ad21de58e0fc55ef7a0d8ff1f4bd63af20e`), the source archives
+`qt-everywhere-src-6.12.0.tar.xz` and `pyside-setup-everywhere-src-6.12.0.tar.xz` (their pinned
+SHA-256 verified), `SHA256SUMS.txt` and `SHA256-FILES.txt`. The release workflow ran: the build,
+package and release jobs succeeded, and the optional signing job was skipped because SignPath is
+not configured. Checks made on the downloaded assets: every hash matches `SHA256SUMS.txt`;
+`gh attestation verify` passed for the installer and for the zip; and the downloaded installer
+passed the smoke test (silent install, self-test of the installed program, silent uninstall, data
+kept). The owner published it **before** the manual test on a clean Windows profile, by decision.
+That manual test is **still pending**: the manual smoke test
+([docs/smoke-test.pt-BR.md](docs/smoke-test.pt-BR.md)) and the manual test script for the committee
 ([docs/manual-test-script.pt-BR.md](docs/manual-test-script.pt-BR.md), with the guide
-[docs/guia-teste-manual.pt-BR.md](docs/guia-teste-manual.pt-BR.md)). This
-entry must be given a date when the release is published. The last published version is 1.0.1
-(2026-11-13, zip only; see its entry below).
+[docs/guia-teste-manual.pt-BR.md](docs/guia-teste-manual.pt-BR.md)) have not been executed yet, and
+the result will be recorded in this entry. The previous published version is 1.0.1 (2026-11-13,
+zip only; see its entry below).
 
 **Preliminary version - indicators not institutionally validated.** The placeholders listed below
 are still flagged in code, and the terminology review is pending.
@@ -57,7 +66,8 @@ are still flagged in code, and the terminology review is pending.
   (`.signpath/artifact-configurations/release.xml`). The policy page is
   [CODE-SIGNING-POLICY.md](CODE-SIGNING-POLICY.md).
 - The version is 1.0.2 in the source, the install guides, the manual test documents and the
-  readiness tests, which now tell the current version from the last published one (1.0.1).
+  readiness tests. After the publication the readiness tests and the documents name 1.0.2 as the
+  last published version (1.0.1 stays in this changelog as history).
 
 ### Placeholders still flagged in `domain/config.py`
 
@@ -162,8 +172,10 @@ in the catalogues since 1.0.1.
   applies to the setup stub of the installer. It is not part of the bundle, so it is not in the
   bundle's `licenses\` folder.
 - The release workflow ran for the tag `v1.0.0`, whose draft release was never published and was
-  withdrawn, and then for the tag `v1.0.1`, whose release was published on 2026-11-13 before the
-  manual test on a clean profile. Its installer steps have never run on a real tag.
+  withdrawn, then for the tag `v1.0.1`, whose release was published on 2026-11-13 before the
+  manual test on a clean profile, and then for the tag `v1.0.2`, published on 2026-11-14, also
+  before that test. The installer steps ran for the first time on `v1.0.2`; the optional signing
+  job was skipped because SignPath is not configured.
 - The Visual C++ runtime files are redistributed under Microsoft's terms (see
   `licenses\MSVC-RUNTIME.md`); the full Visual Studio licence text was not reviewed by counsel.
 - The warning about writing reports or CSV exports to removable media is never shown, because the
@@ -172,8 +184,9 @@ in the catalogues since 1.0.1.
 - The branch protection of `main` is a setting of the hosting site (configured); it cannot be
   checked from the repository's files.
 - The manual smoke test has not been run, the manual test script for the committee has not been
-  run either, and neither the built zip nor the installer has been tried on a clean Windows
-  machine without administrator rights.
+  run either, and neither the published zip nor the installer has been tried by a person on a
+  clean Windows machine without administrator rights. The installer passed only the automated
+  smoke test (silent install, self-test, silent uninstall).
 - The indicators are not institutionally validated, and no target exists until the committee
   enters one.
 

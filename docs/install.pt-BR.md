@@ -10,18 +10,20 @@ veja [data-protection.md](data-protection.md) (em inglês).
 
 ## 1. Situação deste guia
 
-A versão na árvore de código é `1.0.2`; ela está preparada e ainda não foi publicada (sem tag). A
-última versão **publicada** no GitHub é a 1.0.1, em 2026-11-13, com a tag
-`v1.0.1`: [página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1).
+A versão na árvore de código é `1.0.2`, e é a última versão **publicada**: ela foi publicada no
+GitHub em 2026-11-14, com a tag
+`v1.0.2`: [página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2).
+A versão anterior, a 1.0.1, foi publicada em 2026-11-13
+([página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1)).
 O fluxo de publicação (`.github/workflows/release.yml`) só roda quando uma tag `vX.Y.Z` é enviada,
 monta o pacote e cria uma versão em *rascunho* que uma pessoa publica (a 1.0.0 foi montada do mesmo
-modo, mas o rascunho dela nunca foi publicado e foi retirado). O proprietário publicou a 1.0.1
+modo, mas o rascunho dela nunca foi publicado e foi retirado). O proprietário publicou a 1.0.2
 antes do teste manual em um perfil limpo do Windows
 ([smoke-test.pt-BR.md](smoke-test.pt-BR.md) e
 [manual-test-script.pt-BR.md](manual-test-script.pt-BR.md)), que **continua pendente**; o resultado
-será registrado no registro de alterações. No zip publicado, o SHA-256 conferiu com
-`SHA256SUMS.txt`, o `gh attestation verify` foi aprovado e o autoteste do executável empacotado
-foi aprovado.
+será registrado no registro de alterações. Nos arquivos baixados, todos os SHA-256 conferiram com
+`SHA256SUMS.txt`, o `gh attestation verify` foi aprovado para o instalador e para o zip, e o
+instalador passou no teste de instalação silenciosa, autoteste e desinstalação silenciosa.
 
 Tudo o que abaixo fala de download descreve os arquivos dessa página e os scripts em `scripts/`
 que os produzem. Nenhuma pessoa ainda experimentou o programa em um perfil limpo do Windows.
@@ -29,7 +31,8 @@ que os produzem. Nenhuma pessoa ainda experimentou o programa em um perfil limpo
 Como o fluxo de publicação monta um **instalador** por usuário (`...-setup.exe`) em toda versão, sem
 nenhuma etapa manual, as versões a partir da 1.0.2 o trazem ao lado do zip; a 1.0.1 só tem
 o zip. O fluxo o instala em modo silencioso, executa o autoteste do programa instalado e o remove
-de novo antes de criar a versão; uma falha aí faz a publicação falhar. Nenhuma pessoa ainda o
+de novo antes de criar a versão; uma falha aí faz a publicação falhar. O instalador é o download
+recomendado e o zip é o portátil; ambos são sem assinatura. Nenhuma pessoa ainda o
 instalou em um perfil limpo do Windows.
 
 Para experimentar o programa hoje, execute-o a partir de uma cópia do código-fonte (requer
@@ -289,7 +292,7 @@ Para fazer um, escolha **Arquivo > Fazer backup...** na janela principal, escolh
 arquivo e digite a senha duas vezes. Para restaurar, escolha **Arquivo > Restaurar...**, escolha o
 arquivo `.cbrnbak`, confirme que todos os dados atuais serão substituídos e digite a senha.
 Restaurar não fica disponível no modo somente leitura; Fazer backup fica. **Arquivo > Abrir pasta
-de dados** mostra a pasta de dados local. A versão 1.0.1 contém esses itens (seção 1); uma pessoa
+de dados** mostra a pasta de dados local. A versão 1.0.2 contém esses itens (seção 1); uma pessoa
 ainda não os experimentou em um perfil limpo.
 
 ## 12. Atualizações
@@ -317,7 +320,7 @@ em outras mídias não são tocadas por nenhuma das duas formas.
 
 ## 14. Limites conhecidos
 
-- A versão 1.0.1 está publicada, mas o teste manual dela em um perfil limpo continua pendente
+- A versão 1.0.2 está publicada, mas o teste manual dela em um perfil limpo continua pendente
   (seção 1). O executável não é assinado.
 - O instalador é montado e testado em modo silencioso apenas pelo fluxo de publicação; ele não é
   assinado (seção 4.3), e uma pessoa ainda não o executou em um perfil limpo.
