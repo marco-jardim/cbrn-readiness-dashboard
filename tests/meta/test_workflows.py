@@ -661,6 +661,13 @@ def test_release_has_build_sign_package_and_release_jobs_in_a_chain() -> None:
     assert job_needs(text, "release") == {"package"}
 
 
+def test_release_job_runs_when_the_optional_sign_job_was_skipped() -> None:
+    # The implicit success() of a job looks at every job upstream, so without an explicit
+    # condition the release job is skipped whenever signing is off (the first v1.0.2 run).
+    lines = [line.strip() for line in job_lines(_release_text(), "release")]
+    assert "if: ${{ !cancelled() && needs.package.result == 'success' }}" in lines
+
+
 def test_release_elevated_permissions_are_only_inside_the_release_job() -> None:
     """P9-01: dependency install, tests and PyInstaller run without any write permission."""
     text = _release_text()

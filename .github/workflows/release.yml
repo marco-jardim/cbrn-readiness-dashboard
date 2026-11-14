@@ -245,6 +245,9 @@ jobs:
 
   release:
     needs: package
+    # Without this condition the job inherits the skip of the optional sign job (GitHub's implicit
+    # success() looks at every job upstream), and no draft release is made (first v1.0.2 run).
+    if: ${{ !cancelled() && needs.package.result == 'success' }}
     runs-on: windows-2025
     timeout-minutes: 15
     # Elevated permissions are granted to this job only (top level stays read-only). It has no
