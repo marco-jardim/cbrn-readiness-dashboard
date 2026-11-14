@@ -1,10 +1,11 @@
-# Guia prático para executar o teste manual - versão 1.0.1
+# Guia prático para executar o teste manual - versão 1.0.2
 
 **Versão preliminar - indicadores não validados institucionalmente.**
 
-Este guia é para a pessoa que vai executar os roteiros de teste da versão 1.0.1 em um **perfil limpo
+Este guia é para a pessoa que vai executar os roteiros de teste da versão 1.0.2 em um **perfil limpo
 do Windows, sem direitos de administrador**. Ele diz como preparar o computador, como obter e conferir
-o pacote, o que executar e como registrar o resultado. Os testes em si estão nestes dois roteiros:
+o instalador e o zip, o que executar e como registrar o resultado. Os testes em si estão nestes dois
+roteiros:
 
 1. [smoke-test.pt-BR.md](smoke-test.pt-BR.md): o roteiro rápido de instalação e de perfil limpo
    (execute este primeiro);
@@ -23,7 +24,8 @@ perguntas Q19, Q4, Q11 e Q13 (veja [questionario-comite.pt-BR.md](questionario-c
 - Um computador com Windows 10 (versão 1809 ou posterior) ou Windows 11, 64 bits (x64).
 - Uma pessoa com conta de administrador **uma única vez**, só para o passo 1 (criar a conta de
   teste). O teste em si roda na conta nova, sem administrador.
-- O zip e os arquivos de checksum do rascunho da versão (passo 3), ou alguém que os baixe para você.
+- O instalador, o zip e os arquivos de checksum do rascunho da versão (passo 3), ou alguém que os
+  baixe para você.
 - Um pen drive (ou outra mídia removível) para o teste de backup, e uma frase secreta inventada para
   o teste, com pelo menos 12 caracteres. Não a escreva em nenhuma folha de resultado.
 - Um dia livre para executar os dois roteiros. Os dados de demonstração envelhecem: execute no mesmo
@@ -81,64 +83,86 @@ Não adicione a conta ao grupo "Administradores".
 4. Confira também que a pasta `%LOCALAPPDATA%\cbrn-readiness-dashboard` **não existe**. Se existir, o
    perfil não é limpo.
 
-## 3. Obter o zip do rascunho da versão
+## 3. Obter o instalador e o zip do rascunho da versão
 
-A versão 1.0.1 é um **rascunho** (*draft*) no GitHub: ele aparece só para quem colabora no
+A versão 1.0.2 é um **rascunho** (*draft*) no GitHub: ele aparece só para quem colabora no
 repositório `marco-jardim/cbrn-readiness-dashboard`, na página
 [releases](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases). Quem não colabora não
 o vê. Há duas formas de obtê-lo; escolha uma:
 
 - **A. Baixar com a conta do responsável pelo projeto**, em um navegador, em outro perfil ou outro
-  computador. Baixe os três arquivos da **mesma** página de versão:
-  - `cbrn-readiness-dashboard-1.0.1-win-x64.zip`
+  computador. Baixe os quatro arquivos da **mesma** página de versão:
+  - `cbrn-readiness-dashboard-1.0.2-win-x64-setup.exe` (o instalador, a forma recomendada de
+    instalar)
+  - `cbrn-readiness-dashboard-1.0.2-win-x64.zip` (o zip, para o modo portátil e para equipes de TI)
   - `SHA256SUMS.txt`
   - `SHA256-FILES.txt`
-- **B. Pedir ao responsável pelo projeto** que copie esses três arquivos para um pen drive ou uma
+- **B. Pedir ao responsável pelo projeto** que copie esses quatro arquivos para um pen drive ou uma
   pasta compartilhada, e copie-os de lá para uma pasta da conta de teste (por exemplo,
   `%USERPROFILE%\Downloads`).
 
 Não entre na conta do GitHub do responsável dentro do perfil de teste: as credenciais ficariam
 guardadas nele. Se um pen drive em exFAT ou FAT32 for usado, o Windows pode não manter a marca de
-"arquivo baixado da internet" (Mark-of-the-Web) no zip; isso não atrapalha o teste, mas anote como o
-arquivo chegou (navegador, pen drive ou pasta compartilhada) na folha de resultado.
+"arquivo baixado da internet" (Mark-of-the-Web) nos arquivos; isso não atrapalha o teste, mas anote
+como os arquivos chegaram (navegador, pen drive ou pasta compartilhada) na folha de resultado.
 
-## 4. Verificar o checksum
+## 4. Verificar os checksums
 
-1. Abra o PowerShell na pasta dos arquivos e execute:
+1. Abra o PowerShell na pasta dos arquivos e execute, para o instalador **e** para o zip:
 
    ```powershell
-   Get-FileHash .\cbrn-readiness-dashboard-1.0.1-win-x64.zip -Algorithm SHA256
+   Get-FileHash .\cbrn-readiness-dashboard-1.0.2-win-x64-setup.exe -Algorithm SHA256
+   Get-FileHash .\cbrn-readiness-dashboard-1.0.2-win-x64.zip -Algorithm SHA256
    ```
 
-2. Compare o valor da coluna `Hash` com a linha do zip em `SHA256SUMS.txt`. Os dois devem ser
-   iguais. Para esta compilação, o valor esperado é:
-
-   ```text
-   bc7bc0f7f96a097281ae453807af1e778b8dbe9f87edc4e42b38661aca1e2f18
-   ```
-
-   O `Get-FileHash` mostra o valor em maiúsculas; a comparação não diferencia maiúsculas de
-   minúsculas. **Se o valor diferir, pare:** não extraia nem execute nada e avise o responsável pelo
-   projeto. Se o rascunho tiver sido gerado de novo, o valor muda; nesse caso vale o do
-   `SHA256SUMS.txt` da mesma página, e o responsável deve confirmá-lo.
+2. Compare o valor da coluna `Hash` de cada arquivo com a linha correspondente em
+   `SHA256SUMS.txt`. Os valores devem ser iguais. Valor esperado de cada arquivo: consulte o
+   arquivo SHA256SUMS.txt do release (este guia não repete o valor, que só existe depois da
+   compilação). O `Get-FileHash` mostra o valor em
+   maiúsculas; a comparação não diferencia maiúsculas de minúsculas. **Se algum valor diferir,
+   pare:** não instale, não extraia nem execute nada e avise o responsável pelo projeto. Se o
+   rascunho tiver sido gerado de novo, os valores mudam; nesse caso vale o do `SHA256SUMS.txt` da
+   mesma página, e o responsável deve confirmá-lo.
 3. Opcional (precisa do [GitHub CLI](https://cli.github.com/) e de rede): verifique a proveniência da
-   compilação.
+   compilação de cada arquivo.
 
    ```powershell
-   gh attestation verify .\cbrn-readiness-dashboard-1.0.1-win-x64.zip --repo marco-jardim/cbrn-readiness-dashboard
+   gh attestation verify .\cbrn-readiness-dashboard-1.0.2-win-x64-setup.exe --repo marco-jardim/cbrn-readiness-dashboard
+   gh attestation verify .\cbrn-readiness-dashboard-1.0.2-win-x64.zip --repo marco-jardim/cbrn-readiness-dashboard
    ```
 
    Se a atestação não estiver disponível, anote o fato; ele não impede o teste. O checksum prova a
    integridade da transferência, não a autenticidade; a atestação prova onde e como a compilação foi
    feita, não que o programa é seguro (veja a seção 4.3 de [install.pt-BR.md](install.pt-BR.md)).
 
-## 5. Desbloquear e extrair
+## 5. Instalar (ou desbloquear e extrair)
+
+Escolha **um** caminho. O caminho do instalador é o que o testador deve usar; o do zip é o do modo
+portátil e das equipes de TI, e vale como segundo teste, se o responsável pedir.
+
+### 5.1 Pelo instalador (caminho recomendado)
+
+1. Execute `cbrn-readiness-dashboard-1.0.2-win-x64-setup.exe` com um duplo clique, **sem** "Executar
+   como administrador". O instalador não deve pedir elevação: ele instala só para o usuário atual,
+   em `%LOCALAPPDATA%\Programs`. Se pedir elevação de administrador, anote.
+2. Como o instalador **não é assinado**, o Windows pode mostrar **"O Windows protegeu o
+   computador"** (SmartScreen). Escolha **Mais informações** e depois **Executar assim mesmo**. Se
+   uma política da organização (SmartScreen, Smart App Control, AppLocker ou WDAC) impedir a
+   execução, não a contorne: anote qual foi o bloqueio e a mensagem exata. A instalação por usuário
+   em `%LOCALAPPDATA%\Programs` pode ser bloqueada pelas regras padrão do AppLocker; isso é um
+   achado do teste, não necessariamente um defeito.
+3. Siga o assistente (ele existe em português, inglês e espanhol) e conclua. O programa é iniciado
+   pelo atalho do menu Iniciar. Ao desinstalar, no fim do teste, os dados em
+   `%LOCALAPPDATA%\cbrn-readiness-dashboard` são mantidos.
+4. O Windows **não** deve pedir elevação de administrador em nenhum momento. Se pedir, anote.
+
+### 5.2 Pelo zip
 
 1. Clique com o botão direito no zip, escolha **Propriedades**, marque **Desbloquear** (se a opção
    aparecer) e clique em **OK**. Alternativa no PowerShell:
 
    ```powershell
-   Unblock-File .\cbrn-readiness-dashboard-1.0.1-win-x64.zip
+   Unblock-File .\cbrn-readiness-dashboard-1.0.2-win-x64.zip
    ```
 
    Faça isso **antes** de extrair.
@@ -148,9 +172,8 @@ arquivo chegou (navegador, pen drive ou pasta compartilhada) na folha de resulta
    visualização de zip do Explorador: lá ele falha.
 3. Na primeira vez que iniciar `cbrn-dashboard.exe`, o Windows pode mostrar **"O Windows protegeu o
    computador"**, porque o executável **não é assinado**. Escolha **Mais informações** e depois
-   **Executar assim mesmo**. Se uma política da organização (SmartScreen, Smart App Control,
-   AppLocker ou WDAC) impedir a execução, não a contorne: anote qual foi o bloqueio e a mensagem
-   exata. Um bloqueio por política é um achado do teste, não necessariamente um defeito.
+   **Executar assim mesmo**. Se uma política da organização impedir a execução, não a contorne:
+   anote o bloqueio e a mensagem exata.
 4. O Windows **não** deve pedir elevação de administrador em nenhum momento. Se pedir, anote.
 
 ## 6. Executar os roteiros
@@ -177,9 +200,9 @@ arquivo chegou (navegador, pen drive ou pasta compartilhada) na folha de resulta
 1. **Quem testou** preenche as tabelas de resultado (seção 11 do roteiro rápido e seção 16 do roteiro
    completo) e envia ao responsável pelo projeto: as tabelas, as capturas de tela e a decisão
    sugerida sobre publicar o rascunho (sim ou não). Informe a data da execução, a edição e a versão do
-   Windows e o valor do `Get-FileHash` do zip que foi testado.
+   Windows e os valores do `Get-FileHash` do instalador e do zip que foram testados.
 2. **O responsável pelo projeto** registra o status em [CHANGELOG.md](../CHANGELOG.md), na entrada da
-   versão 1.0.1: data, versão testada, resultado e decisão sobre publicar, **sem** o conteúdo das
+   versão 1.0.2: data, versão testada, resultado e decisão sobre publicar, **sem** o conteúdo das
    respostas ao questionário. Depois troca a linha de status no início dos dois roteiros de "NÃO
    EXECUTADO" para o formato que os testes do repositório aceitam:
 
@@ -197,7 +220,9 @@ arquivo chegou (navegador, pen drive ou pasta compartilhada) na folha de resulta
 Quando o teste terminar, na conta de teste:
 
 1. Feche o programa pelo menu **Arquivo > Sair**.
-2. Apague a pasta do programa extraída (`%USERPROFILE%\Apps\cbrn`), os arquivos baixados, o arquivo
+2. Se instalou pelo instalador, desinstale o programa em **Configurações > Aplicativos**. Se usou
+   o zip, apague a pasta do programa extraída (`%USERPROFILE%\Apps\cbrn`). Apague também os
+   arquivos baixados, o arquivo
    `.cbrnbak` do teste (e o do pen drive), `C:\Temp\cbrn-selftest` e `C:\Temp\cbrn-teste`.
 3. Apague a pasta de dados `%LOCALAPPDATA%\cbrn-readiness-dashboard` **deste perfil**: ela contém o
    banco de teste, os backups e o registro (log) do programa.

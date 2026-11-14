@@ -49,6 +49,10 @@ WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 TEMPLATE = ROOT / ".github" / "release-body.template.md"
 LANGUAGES = ("pt-BR", "en-US", "es-ES")
 
+#: The last version published on GitHub (1.0.1, on 2026-11-13). The current version in the source
+#: may be newer and not published yet; the documents then name both.
+LAST_PUBLISHED = "1.0.1"
+
 #: The questions of PLAN.md section 12 that the changelog lists: Q1 to Q24.
 QUESTION_NUMBERS = range(1, 25)
 
@@ -190,18 +194,18 @@ def test_the_readme_states_the_version_and_links_the_release_material() -> None:
     assert "https://github.com/marco-jardim/cbrn-readiness-dashboard/releases" in text
 
 
-def test_the_readme_states_version_1_0_1() -> None:
-    assert __version__ == "1.0.1"
+def test_the_readme_states_the_current_and_the_last_published_version() -> None:
     text = _read(ROOT / "README.md")
-    assert f"Version {__version__} was published on GitHub on 2026-11-13" in text
-    assert f"/releases/tag/v{__version__})" in text
+    assert f"Version {LAST_PUBLISHED} was published on GitHub on 2026-11-13" in text
+    assert f"/releases/tag/v{LAST_PUBLISHED})" in text
+    assert f"cbrn-readiness-dashboard-{__version__}-win-x64-setup.exe" in text
     assert "(docs/manual-test-script.pt-BR.md)" in text
     assert "still pending" in text
     assert "unsigned" in text
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_install_guides_state_the_version_as_published_with_the_test_pending(
+def test_install_guides_state_the_version_and_the_last_published_one(
     language: str,
 ) -> None:
     text = _read(DOCS / f"install.{language}.md")
@@ -209,7 +213,7 @@ def test_install_guides_state_the_version_as_published_with_the_test_pending(
     assert "smoke-test.pt-BR.md" in text
     assert "manual-test-script.pt-BR.md" in text
     assert "2026-11-13" in text
-    assert f"/releases/tag/v{__version__})" in text
+    assert f"/releases/tag/v{LAST_PUBLISHED})" in text
 
 
 def test_the_architecture_document_states_the_version() -> None:

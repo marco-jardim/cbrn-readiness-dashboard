@@ -1,4 +1,4 @@
-# Roteiro de teste manual para o comitê - versão 1.0.1
+# Roteiro de teste manual para o comitê - versão 1.0.2
 
 **Status da execução: NÃO EXECUTADO.** Este roteiro foi escrito a partir do que o código e a
 documentação descrevem. Nenhuma pessoa o executou ainda. Nenhum resultado abaixo foi observado: cada
@@ -199,7 +199,7 @@ dados e os registros de prontidão (instantâneos). Esta seção trata do relat�
      interno.
 2. Abra o PDF.
    - Resultado esperado: título "Relatório de Prontidão QBRN" e "Relatório interno"; a marca "DEMO -
-     DADOS FICTÍCIOS"; a data de referência, a versão do aplicativo (1.0.1) e o aviso de versão
+     DADOS FICTÍCIOS"; a data de referência, a versão do aplicativo (1.0.2) e o aviso de versão
      preliminar em todas as páginas; seções de principais números, indicadores, alertas abertos e
      gráficos; os identificadores do pessoal (`DEMO-P...`) aparecem no relatório interno. Os nomes da
      instituição e da unidade e o aviso de manuseio só aparecem se tiverem sido preenchidos em
@@ -349,7 +349,7 @@ demonstração forem recriados.
 1. Menu "Ajuda" > "Conteúdo da ajuda" (ou F1).
    - Resultado esperado: abre-se a ajuda, com uma lista de tópicos e o texto do tópico escolhido.
 2. Menu "Ajuda" > "Sobre".
-   - Resultado esperado: a janela mostra "Versão 1.0.1", a licença GNU GPL versão 3 ou posterior, a
+   - Resultado esperado: a janela mostra "Versão 1.0.2", a licença GNU GPL versão 3 ou posterior, a
      ausência de garantia, a pasta de licenças e a lista de componentes de terceiros.
 
 ## 15. Modo somente leitura
@@ -398,7 +398,7 @@ em uma pasta descartável:
 
 Preencha a folha abaixo após a execução. A folha em si não deve conter dados reais nem frases
 secretas, e é guardada **fora** do repositório. O **resultado** é registrado em
-[CHANGELOG.md](../CHANGELOG.md), na entrada da versão 1.0.1: o status deste teste manual para o
+[CHANGELOG.md](../CHANGELOG.md), na entrada da versão 1.0.2: o status deste teste manual para o
 lançamento (data, versão testada, resultado e decisão de publicar o rascunho), sem o conteúdo das
 respostas às perguntas em aberto. Depois do registro, a linha "Status da execução" no início deste
 documento passa de "NÃO EXECUTADO" para "EXECUTADO em AAAA-MM-DD, resultado: ...".

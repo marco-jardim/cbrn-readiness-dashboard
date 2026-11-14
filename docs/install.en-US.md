@@ -10,7 +10,8 @@ zip's first-run notes (`README-first-run.*.txt`) is shorter and says the same.
 
 ## 1. Status of this guide
 
-The version in the source tree is `1.0.1`. It was **published** on GitHub on 2026-11-13 as the
+The version in the source tree is `1.0.2`; it is prepared and not published yet (no tag). The last
+version **published** on GitHub is 1.0.1, on 2026-11-13, as the
 tag `v1.0.1`: [release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1).
 The release workflow (`.github/workflows/release.yml`) runs only when a tag `vX.Y.Z` is pushed,
 builds the bundle, and creates a *draft* release that a person publishes (version 1.0.0 was built
@@ -26,7 +27,7 @@ scripts in `scripts/` that produce them. The program has not yet been tried by a
 Windows profile.
 
 Since the release workflow builds a per-user **installer** (`...-setup.exe`) on every release, with
-no manual step, the releases after 1.0.1 carry it next to the zip; release 1.0.1 itself has the zip
+no manual step, the releases from 1.0.2 on carry it next to the zip; release 1.0.1 has the zip
 only. The workflow installs it silently, runs the self-test of the installed program and removes
 it again before the release is created; a failure there fails the release. A person has not yet
 installed it on a clean Windows profile.

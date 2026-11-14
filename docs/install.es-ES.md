@@ -10,7 +10,8 @@ reales: vea [data-protection.md](data-protection.md) (en inglés).
 
 ## 1. Estado de esta guía
 
-La versión del árbol de código es `1.0.1`. Se **publicó** en GitHub el 2026-11-13 con la etiqueta
+La versión del árbol de código es `1.0.2`; está preparada y todavía no publicada (sin etiqueta). La
+última versión **publicada** en GitHub es la 1.0.1, el 2026-11-13, con la etiqueta
 `v1.0.1`: [página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1).
 El flujo de publicación (`.github/workflows/release.yml`) solo se ejecuta cuando se envía una
 etiqueta `vX.Y.Z`, construye el paquete y crea una versión en *borrador* que una persona publica
@@ -27,8 +28,8 @@ Todo lo que sigue sobre la descarga describe los archivos de esa página y los s
 Windows.
 
 Como el flujo de publicación construye un **instalador** por usuario (`...-setup.exe`) en cada
-versión, sin ningún paso manual, las versiones posteriores a la 1.0.1 lo llevan junto al zip; la
-propia 1.0.1 solo tiene el zip. El flujo lo instala en modo silencioso, ejecuta la autoprueba del
+versión, sin ningún paso manual, las versiones desde la 1.0.2 lo llevan junto al zip; la
+1.0.1 solo tiene el zip. El flujo lo instala en modo silencioso, ejecuta la autoprueba del
 programa instalado y lo vuelve a quitar antes de crear la versión; un fallo ahí hace fallar la
 publicación. Ninguna persona lo ha instalado todavía en un perfil limpio de Windows.
 

@@ -10,7 +10,8 @@ veja [data-protection.md](data-protection.md) (em inglês).
 
 ## 1. Situação deste guia
 
-A versão na árvore de código é `1.0.1`. Ela foi **publicada** no GitHub em 2026-11-13, com a tag
+A versão na árvore de código é `1.0.2`; ela está preparada e ainda não foi publicada (sem tag). A
+última versão **publicada** no GitHub é a 1.0.1, em 2026-11-13, com a tag
 `v1.0.1`: [página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1).
 O fluxo de publicação (`.github/workflows/release.yml`) só roda quando uma tag `vX.Y.Z` é enviada,
 monta o pacote e cria uma versão em *rascunho* que uma pessoa publica (a 1.0.0 foi montada do mesmo
@@ -26,7 +27,7 @@ Tudo o que abaixo fala de download descreve os arquivos dessa página e os scrip
 que os produzem. Nenhuma pessoa ainda experimentou o programa em um perfil limpo do Windows.
 
 Como o fluxo de publicação monta um **instalador** por usuário (`...-setup.exe`) em toda versão, sem
-nenhuma etapa manual, as versões posteriores à 1.0.1 o trazem ao lado do zip; a própria 1.0.1 só tem
+nenhuma etapa manual, as versões a partir da 1.0.2 o trazem ao lado do zip; a 1.0.1 só tem
 o zip. O fluxo o instala em modo silencioso, executa o autoteste do programa instalado e o remove
 de novo antes de criar a versão; uma falha aí faz a publicação falhar. Nenhuma pessoa ainda o
 instalou em um perfil limpo do Windows.
