@@ -116,9 +116,14 @@ como os arquivos chegaram (navegador, pen drive ou pasta compartilhada) na folha
    ```
 
 2. Compare o valor da coluna `Hash` de cada arquivo com a linha correspondente em
-   `SHA256SUMS.txt`. Os valores devem ser iguais. Valor esperado de cada arquivo: consulte o
-   arquivo SHA256SUMS.txt do release (este guia não repete o valor, que só existe depois da
-   compilação). O `Get-FileHash` mostra o valor em
+   `SHA256SUMS.txt`. Os valores devem ser iguais. Para a versão 1.0.2, os valores esperados são:
+
+   ```text
+   1f3a93c999f9873cbe0c6be1a33a13bfb9b53c98e798ecf05b112ad87854d625  cbrn-readiness-dashboard-1.0.2-win-x64-setup.exe
+   c1727cc561908e3569d3715c1a6581dcb4c4521149b31ec75e6cd450079186f8  cbrn-readiness-dashboard-1.0.2-win-x64.zip
+   ```
+
+   O `Get-FileHash` mostra o valor em
    maiúsculas; a comparação não diferencia maiúsculas de minúsculas. **Se algum valor diferir,
    pare:** não instale, não extraia nem execute nada e avise o responsável pelo projeto. Se o
    rascunho tiver sido gerado de novo, os valores mudam; nesse caso vale o do `SHA256SUMS.txt` da
