@@ -5,7 +5,8 @@ Sub-commands, all used by ``.github/workflows/release.yml``:
 
 ``check-tag --tag TAG``
     Fail unless ``TAG`` equals ``v`` + ``cbrn_dashboard.__version__``.
-``package --bundle-dir DIR --out-dir DIR [--extra FILE ...] [--installer FILE]``
+``package --bundle-dir DIR --out-dir DIR [--extra FILE ...] [--installer FILE]
+[--source-archives-dir DIR]``
     Write ``cbrn-readiness-dashboard-<version>-win-x64.zip`` (top folder
     ``cbrn-readiness-dashboard/``), ``SHA256SUMS.txt`` and ``SHA256-FILES.txt``; print the paths.
     The three first-run notes and ``portable.ini.example`` from ``packaging/`` always go at the
@@ -13,16 +14,25 @@ Sub-commands, all used by ``.github/workflows/release.yml``:
     ``--installer`` names the ``*-setup.exe`` that ``scripts/build_installer.py`` made: it is
     copied into ``--out-dir`` when it is elsewhere and gets its own line in ``SHA256SUMS.txt``
     (after the zip's); ``SHA256-FILES.txt`` stays about the bundle.
+    ``--source-archives-dir`` names the folder where ``scripts/fetch_source_archives.py`` put the
+    Qt and PySide6 source archives pinned in ``packaging/source-archives.json``: each one is
+    checked against its pin, copied into ``--out-dir`` when it is elsewhere and gets a line in
+    ``SHA256SUMS.txt`` (after the installer's). They are not part of the zip. This command is the
+    only writer of ``SHA256SUMS.txt``.
 ``prerelease-flag``
     Print ``--prerelease`` when the current version is a prerelease (below 1.0.0, or with a
     pre/dev suffix), otherwise an empty line.
 ``print-version``
     Print ``cbrn_dashboard.__version__`` (the workflow passes it to the SignPath request).
-``release-body --template FILE --out FILE --zip FILE [--installer FILE] [--signed]``
+``release-body --template FILE --out FILE --zip FILE [--installer FILE] [--signed]
+[--source-archives-dir DIR]``
     Fill the release-notes template. ``--signed`` (given only when the workflow signed the
     executable through SignPath) swaps the "unsigned" section for the signed one.
     ``--installer`` keeps the "Installer" section of the template and fills it with the name and
     the SHA-256 of the setup file; without it the section is left out.
+    ``--source-archives-dir`` keeps the "Source code of Qt and PySide6" section and fills it with
+    the file names and the pinned SHA-256 of the archives found (and verified) in that folder;
+    without it the section is left out.
 
 The zip is reproducible: entries in a fixed order, a fixed timestamp, fixed attributes, a fixed
 compression level, no extra fields. Two runs over the same file contents give identical bytes,
@@ -33,19 +43,26 @@ path, since ``scripts/`` is not a package).
 """
 
 import argparse
+import functools
 import hashlib
 import importlib
+import importlib.util
 import re
 import shutil
 import sys
 import zipfile
 from collections.abc import Sequence
 from pathlib import Path
+from types import ModuleType
+from typing import Protocol
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = REPO_ROOT / "src"
 
 PACKAGING_DIR = REPO_ROOT / "packaging"
+#: The script that downloads the pinned source archives. It also owns the pin file schema
+#: (``packaging/source-archives.json``), so this script loads it instead of parsing the file again.
+FETCH_SCRIPT = REPO_ROOT / "scripts" / "fetch_source_archives.py"
 #: Files of ``packaging/`` that ``package`` puts at the root of the top folder (T9.4): the
 #: first-run notes (the MVP mitigation for the unsigned executable) and the portable-mode example.
 DEFAULT_ROOT_FILES: tuple[str, ...] = (
@@ -72,7 +89,10 @@ FIXED_EXTERNAL_ATTR = 0o644 << 16
 FIXED_COMPRESS_LEVEL = 9
 
 # The two links below are the only places that know the layout of the upstream download sites;
-# correct them here if a link ever breaks.
+# correct them here if a link ever breaks. The URLs in ``packaging/source-archives.json`` (what
+# ``scripts/fetch_source_archives.py`` downloads) are pinned copies of what these formats give for
+# the bundled version; a test fails when they differ or when the pinned version is not the
+# installed PySide6 version.
 #: Qt source archive. ``{major_minor}`` is for example ``6.12``, ``{qt_version}`` is ``6.12.0``.
 QT_SOURCE_URL_FORMAT = (
     "https://download.qt.io/official_releases/qt/{major_minor}/{qt_version}/single/"
@@ -117,6 +137,13 @@ SIGNING_END_MARKER = "<!-- signing-notice:end -->"
 #: ``{{installer_name}}`` and ``{{installer_sha256}}`` are filled.
 INSTALLER_START_MARKER = "<!-- installer:start -->"
 INSTALLER_END_MARKER = "<!-- installer:end -->"
+
+#: The template wraps its "Source code of Qt and PySide6" section in these two lines. Without
+#: source archives (:func:`render_release_body` called with ``source_archives=None``) the lines
+#: and everything between them are removed; with them, only the marker lines are removed and the
+#: token ``{{source_archives}}`` is filled with one bullet per archive.
+SOURCE_ARCHIVES_START_MARKER = "<!-- source-archives:start -->"
+SOURCE_ARCHIVES_END_MARKER = "<!-- source-archives:end -->"
 
 #: What the release notes say when the executable was signed through SignPath. ``{{version}}`` is
 #: filled like every other token. Only ``cbrn-dashboard.exe`` is signed; the third-party files of
@@ -264,18 +291,25 @@ def _write_text(path: Path, text: str) -> None:
     path.write_bytes(text.encode("utf-8"))
 
 
-def write_sha256sums(zip_path: Path, out_dir: Path, installer_path: Path | None = None) -> Path:
+def write_sha256sums(
+    zip_path: Path,
+    out_dir: Path,
+    installer_path: Path | None = None,
+    source_archive_paths: Sequence[Path] = (),
+) -> Path:
     """Write ``SHA256SUMS.txt`` (``sha256sum`` text format); return its path.
 
-    One line for ``zip_path`` and, when given, a second one for the setup file
-    ``installer_path``. The per-file manifest (``SHA256-FILES.txt``) stays about the bundle.
+    One line for ``zip_path``, then one for the setup file ``installer_path`` when given, then
+    one for each of ``source_archive_paths`` (the Qt and PySide6 source archives). The per-file
+    manifest (``SHA256-FILES.txt``) stays about the bundle.
     """
     path = out_dir / SUMS_NAME
     lines = [f"{sha256_file(zip_path)}  {zip_path.name}\n"]
-    if installer_path is not None:
-        if not installer_path.is_file():
-            raise ValueError(f"Not a file: {installer_path}")
-        lines.append(f"{sha256_file(installer_path)}  {installer_path.name}\n")
+    extras = [installer_path] if installer_path is not None else []
+    for extra in [*extras, *source_archive_paths]:
+        if not extra.is_file():
+            raise ValueError(f"Not a file: {extra}")
+        lines.append(f"{sha256_file(extra)}  {extra.name}\n")
     _write_text(path, "".join(lines))
     return path
 
@@ -294,6 +328,59 @@ def place_installer(installer: Path, out_dir: Path) -> Path:
     if target.resolve() != installer.resolve():
         shutil.copyfile(installer, target)
     return target
+
+
+class SourceArchiveLike(Protocol):
+    """What this script needs from a pinned archive (``fetch_source_archives.SourceArchive``)."""
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def version(self) -> str: ...
+
+    @property
+    def filename(self) -> str: ...
+
+    @property
+    def sha256(self) -> str: ...
+
+
+@functools.cache
+def _fetch_script() -> ModuleType:
+    """Load ``scripts/fetch_source_archives.py`` by path (``scripts/`` is not a package)."""
+    spec = importlib.util.spec_from_file_location("cbrn_fetch_source_archives", FETCH_SCRIPT)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load {FETCH_SCRIPT}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_source_archives(pins_path: Path | None = None) -> list[SourceArchiveLike]:
+    """Return the pinned Qt and PySide6 source archives (``packaging/source-archives.json``)."""
+    fetch = _fetch_script()
+    pins: list[SourceArchiveLike] = fetch.load_pins(pins_path or fetch.PINS_PATH)
+    return pins
+
+
+def place_source_archives(
+    archives: Sequence[SourceArchiveLike], directory: Path, out_dir: Path
+) -> list[Path]:
+    """Verify the pinned ``archives`` in ``directory``; return their paths inside ``out_dir``.
+
+    Each file is checked against its pinned size and SHA-256 (``ArchiveError`` otherwise) and
+    copied into ``out_dir`` when it is somewhere else.
+    """
+    paths: list[Path] = _fetch_script().verify_archives(archives, directory)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    placed: list[Path] = []
+    for path in paths:
+        target = out_dir / path.name
+        if target.resolve() != path.resolve():
+            shutil.copyfile(path, target)
+        placed.append(target)
+    return placed
 
 
 def default_root_files(packaging_dir: Path = PACKAGING_DIR) -> list[Path]:
@@ -375,26 +462,49 @@ def apply_signing_notice(template: str, *, signed: bool) -> str:
     return "\n".join([*lines[:start], *inner, *lines[end + 1 :]])
 
 
-def apply_installer_section(template: str, *, present: bool) -> str:
-    """Resolve the installer section of ``template``, delimited by the two marker lines.
+def _apply_optional_section(
+    template: str, start_marker: str, end_marker: str, *, present: bool
+) -> str:
+    """Resolve an optional section of ``template``, delimited by two marker lines.
 
-    With the installer: only the marker lines are dropped. Without: the lines between them go as
-    well. A template without any installer marker is returned as it is. Raise
-    :class:`ValueError` when the markers are not exactly one start line followed by one end line.
+    Present: only the marker lines are dropped. Absent: the lines between them go as well. A
+    template without any of the two markers is returned as it is. Raise :class:`ValueError`
+    when the markers are not exactly one start line followed by one end line.
     """
-    if INSTALLER_START_MARKER not in template and INSTALLER_END_MARKER not in template:
+    if start_marker not in template and end_marker not in template:
         return template
     lines = template.split("\n")
-    starts = [i for i, line in enumerate(lines) if line.strip() == INSTALLER_START_MARKER]
-    ends = [i for i, line in enumerate(lines) if line.strip() == INSTALLER_END_MARKER]
+    starts = [i for i, line in enumerate(lines) if line.strip() == start_marker]
+    ends = [i for i, line in enumerate(lines) if line.strip() == end_marker]
     if len(starts) != 1 or len(ends) != 1 or starts[0] >= ends[0]:
         raise ValueError(
-            f"The template needs one {INSTALLER_START_MARKER} line followed by one "
-            f"{INSTALLER_END_MARKER} line"
+            f"The template needs one {start_marker} line followed by one {end_marker} line"
         )
     start, end = starts[0], ends[0]
     inner = lines[start + 1 : end] if present else []
     return "\n".join([*lines[:start], *inner, *lines[end + 1 :]])
+
+
+def apply_installer_section(template: str, *, present: bool) -> str:
+    """Resolve the installer section of ``template`` (see :func:`_apply_optional_section`)."""
+    return _apply_optional_section(
+        template, INSTALLER_START_MARKER, INSTALLER_END_MARKER, present=present
+    )
+
+
+def apply_source_archives_section(template: str, *, present: bool) -> str:
+    """Resolve the source-archives section (see :func:`_apply_optional_section`)."""
+    return _apply_optional_section(
+        template, SOURCE_ARCHIVES_START_MARKER, SOURCE_ARCHIVES_END_MARKER, present=present
+    )
+
+
+def source_archives_list(archives: Sequence[SourceArchiveLike]) -> str:
+    """Return the markdown bullets that name each archive and give its pinned SHA-256."""
+    return "\n".join(
+        f"- `{archive.filename}` ({archive.name} {archive.version}), SHA-256: `{archive.sha256}`"
+        for archive in archives
+    )
 
 
 def render_release_body(
@@ -409,18 +519,22 @@ def render_release_body(
     signed: bool = False,
     installer_name: str | None = None,
     installer_sha256: str | None = None,
+    source_archives: Sequence[SourceArchiveLike] | None = None,
 ) -> str:
     """Fill the ``{{name}}`` tokens of ``template``; raise :class:`ValueError` on a leftover.
 
     The installer section is resolved first (see :func:`apply_installer_section`;
-    ``installer_name`` and ``installer_sha256`` go together). A template that has the signing
-    markers is resolved next (see :func:`apply_signing_notice`); one without them is filled as
-    it is, unless ``signed`` is true, which then raises :class:`ValueError`.
+    ``installer_name`` and ``installer_sha256`` go together), then the source-archives section
+    (kept and filled when ``source_archives`` is given, see
+    :func:`apply_source_archives_section`). A template that has the signing markers is resolved
+    next (see :func:`apply_signing_notice`); one without them is filled as it is, unless
+    ``signed`` is true, which then raises :class:`ValueError`.
     """
     if (installer_name is None) != (installer_sha256 is None):
         raise ValueError("installer_name and installer_sha256 go together")
     flagged = ", ".join(f"`{name}`" for name in flagged_placeholders) or "none"
     template = apply_installer_section(template, present=installer_name is not None)
+    template = apply_source_archives_section(template, present=source_archives is not None)
     if SIGNING_START_MARKER in template or SIGNING_END_MARKER in template or signed:
         template = apply_signing_notice(template, signed=signed)
     values = {
@@ -438,6 +552,8 @@ def render_release_body(
     if installer_name is not None and installer_sha256 is not None:
         values["installer_name"] = installer_name
         values["installer_sha256"] = installer_sha256
+    if source_archives is not None:
+        values["source_archives"] = source_archives_list(source_archives)
     body = template
     for name, value in values.items():
         body = body.replace("{{" + name + "}}", value)
@@ -502,11 +618,17 @@ def _command_package(args: argparse.Namespace) -> int:
     installer_path = None
     if args.installer is not None:
         installer_path = place_installer(args.installer, args.out_dir)
-    sums_path = write_sha256sums(zip_path, args.out_dir, installer_path)
+    archive_paths: list[Path] = []
+    if args.source_archives_dir is not None:
+        archive_paths = place_source_archives(
+            load_source_archives(), args.source_archives_dir, args.out_dir
+        )
+    sums_path = write_sha256sums(zip_path, args.out_dir, installer_path, archive_paths)
     manifest_path = write_file_manifest(args.bundle_dir, args.out_dir, root_files)
     printed = [zip_path, sums_path, manifest_path]
     if installer_path is not None:
         printed.append(installer_path)
+    printed.extend(archive_paths)
     for path in printed:
         print(path)
     return 0
@@ -531,6 +653,10 @@ def _command_release_body(args: argparse.Namespace) -> int:
             raise ValueError(f"Not a file: {args.installer}")
         installer_name = args.installer.name
         installer_sha256 = sha256_file(args.installer)
+    archives: list[SourceArchiveLike] | None = None
+    if args.source_archives_dir is not None:
+        archives = load_source_archives()
+        _fetch_script().verify_archives(archives, args.source_archives_dir)
     body = render_release_body(
         args.template.read_text(encoding="utf-8"),
         version=read_version(),
@@ -542,6 +668,7 @@ def _command_release_body(args: argparse.Namespace) -> int:
         signed=args.signed,
         installer_name=installer_name,
         installer_sha256=installer_sha256,
+        source_archives=archives,
     )
     _write_text(args.out, body)
     print(args.out)
@@ -569,6 +696,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="the *-setup.exe made by build_installer.py: it goes into SHA256SUMS.txt too",
     )
+    package.add_argument(
+        "--source-archives-dir",
+        type=Path,
+        default=None,
+        help="folder with the pinned Qt and PySide6 source archives: verified, listed in "
+        "SHA256SUMS.txt and copied into --out-dir",
+    )
     package.set_defaults(handler=_command_package)
 
     flag = commands.add_parser("prerelease-flag", help="print --prerelease below 1.0.0")
@@ -586,6 +720,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="the *-setup.exe of the release: the notes then have the Installer section",
+    )
+    body.add_argument(
+        "--source-archives-dir",
+        type=Path,
+        default=None,
+        help="folder with the pinned source archives: the notes then list them with their SHA-256",
     )
     body.add_argument(
         "--signed",

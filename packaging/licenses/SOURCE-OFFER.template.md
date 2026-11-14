@@ -11,6 +11,11 @@ corresponding source of those versions can be downloaded here:
 - PySide6 {{pyside_version}}: {{pyside_source_url}}
 - This application (source tag of this release, with the build scripts): {{project_source_url}}
 
+The two archives of Qt and PySide6 are also attached to the GitHub release of this bundle, next
+to the zip and the installer, as unmodified copies of the files above. The release workflow
+checks them against SHA-256 values pinned in the repository before it attaches them, and
+`SHA256SUMS.txt` of the release lists them.
+
 ## Every other Python package in the bundle
 
 The versions of the Python packages in the bundle are fixed by `uv.lock` in the source tag

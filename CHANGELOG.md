@@ -41,6 +41,13 @@ are still flagged in code, and the terminology review is pending.
   its build provenance and attaches it to the draft release next to the zip. A failure in any of
   these steps fails the release. The packaging tests build and smoke-test the installer too, so CI
   does it on every push to `main`; on GitHub Actions a missing Inno Setup is a failure.
+- The release workflow attaches the source archives of Qt and PySide6 (the LGPL-3.0 sources of
+  the bundled libraries) to every release, automatically; for 1.0.1 they were attached by hand.
+  `scripts/fetch_source_archives.py` downloads the archives pinned in
+  `packaging/source-archives.json` (URL, size, SHA-256), verifies them, and they are listed in
+  `SHA256SUMS.txt` and in a new "Source code of Qt and PySide6 (LGPL-3.0)" section of the release
+  notes. They are unmodified copies of the files at download.qt.io and are not attested. A test
+  ties the pinned version to the installed PySide6, so a PySide6 upgrade needs new pins.
 - The release notes have an "Installer" section; the install guides recommend the installer for
   end users and keep the zip for IT teams and portable mode.
 - The SignPath Foundation code signing integration is prepared and **off**: the release workflow

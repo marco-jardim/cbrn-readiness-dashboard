@@ -975,6 +975,96 @@ def test_release_has_no_manual_or_optional_path_for_the_installer() -> None:
 
 
 # --------------------------------------------------------------------------------------------
+# Release workflow: the Qt and PySide6 source archives (LGPL-3.0) go with every release
+# --------------------------------------------------------------------------------------------
+
+FETCH_COMMAND = "uv run python scripts/fetch_source_archives.py --out release"
+
+
+def test_release_package_job_fetches_the_pinned_source_archives_automatically() -> None:
+    """Owner decision: the archives are downloaded, verified and attached by CI, never by hand."""
+    package = _package_job()
+    step = step_with(package, "scripts/fetch_source_archives.py")
+    assert f"run: {FETCH_COMMAND}" in step
+    # No condition and no tolerated failure: a failed download or a hash mismatch fails the
+    # release.
+    assert not [line for line in step if line.startswith(("if:", "continue-on-error"))]
+    # The pins (size and SHA-256) are the only input; nothing is passed to override them.
+    assert "--pins" not in "\n".join(step)
+    # Only the package job fetches; the other jobs never touch the network for it.
+    others = {"build": _build_job(), "sign": _sign_job(), "release": _release_job()}
+    for name, lines in others.items():
+        assert "fetch_source_archives" not in "\n".join(lines), name
+
+
+def test_release_source_archives_are_fetched_into_release_before_the_checksums() -> None:
+    package = _package_job()
+    fetch = step_index(package, "scripts/fetch_source_archives.py")
+    checksums = step_index(package, "make_release_zip.py package")
+    notes = step_index(package, "make_release_zip.py release-body")
+    upload = step_index(package, "uses: actions/upload-artifact@")
+    sync = step_index(package, "uv sync")
+    assert -1 not in (fetch, checksums, notes, upload, sync)
+    assert sync < fetch < checksums < notes < upload
+    # SHA256SUMS.txt has a single writer: the package command, which lists the archives.
+    zip_step = step_with(package, "make_release_zip.py package")
+    command = next(line for line in zip_step if "make_release_zip.py package" in line)
+    assert "--out-dir release" in command
+    assert command.endswith("--source-archives-dir release")
+    notes_step = step_with(package, "make_release_zip.py release-body")
+    notes_command = next(line for line in notes_step if "make_release_zip.py release-body" in line)
+    assert "--source-archives-dir release" in notes_command
+    assert notes_command.endswith("@signedFlag")
+
+
+def test_release_artifact_with_the_source_archives_is_stored_uncompressed() -> None:
+    package = _package_job()
+    upload = step_with(package, "uses: actions/upload-artifact@")
+    assert "name: cbrn-dashboard-release" in upload
+    assert "path: release" in upload
+    assert "compression-level: 0" in upload  # the .xz archives (about 460 MB) are compressed
+    assert "retention-days: 14" in upload
+    assert "if-no-files-found: error" in upload
+
+
+def test_release_job_attaches_the_source_archives_but_does_not_attest_them() -> None:
+    release = _release_job()
+    attest = step_with(release, "actions/attest-build-provenance@")
+    assert "release/*.zip" in attest
+    assert "release/*-setup.exe" in attest
+    assert "tar.xz" not in "\n".join(attest)  # Qt's files: attested by nobody here
+    create = step_with(release, "gh release create")
+    joined = "\n".join(create)
+    assert "-Filter '*.tar.xz'" in joined
+    assert "$sources" in joined
+    assert "$sources.Count -ne 2" in joined  # Qt and PySide6; fewer or more fails the release
+    assert "throw" in joined
+    assert "@($env:TAG, $zip, $setup[0].FullName) + $sources" in joined
+    # The archives are listed before the checksum files and the draft flags.
+    assert joined.index("$sources +") < joined.index("release/SHA256SUMS.txt")
+    assert "--draft" in joined
+
+
+def test_release_job_downloads_nothing_from_the_network_itself() -> None:
+    """The release job only receives the artifact: it fetches no archive and runs no code."""
+    joined = "\n".join(_release_job()).lower()
+    for forbidden in (
+        "download.qt.io",
+        "invoke-webrequest",
+        "invoke-restmethod",
+        "curl",
+        "wget",
+        "python",
+        "urllib",
+        "fetch_source_archives",
+        "source-archives.json",
+    ):
+        assert forbidden not in joined, forbidden
+    assert "gh release create" in joined
+    assert "gh release upload" not in joined  # nothing is added to a release by hand
+
+
+# --------------------------------------------------------------------------------------------
 # Release workflow: optional SignPath signing (skipped while SIGNPATH_ORGANIZATION_ID is empty)
 # --------------------------------------------------------------------------------------------
 

@@ -90,7 +90,7 @@ Top-level modules of `src/cbrn_dashboard/`:
 Folders outside the package: `tests/` (subfolders `tests/domain/`, `tests/storage/`,
 `tests/services/`, `tests/reports/`, `tests/ui/`, `tests/i18n/`, `tests/demo/`, `tests/scripts/`,
 `tests/packaging/`, `tests/meta/`, plus `tests/fixtures/` with fictitious data only), `scripts/`
-(`build_exe.py`, `collect_licenses.py`, `make_release_zip.py`, `i18n.py`,
+(`build_exe.py`, `collect_licenses.py`, `make_release_zip.py`, `fetch_source_archives.py`, `i18n.py`,
 `terminology_sheet.py`, `gen_countries.py`, `gen_icon.py`), `packaging/` (first-run notes, `portable.ini.example`, third-party licence texts),
 `docs/` and `.github/` (workflows, templates).
 
@@ -476,7 +476,19 @@ fictitious.
   the application never use the network for this.
 - `scripts/make_release_zip.py` writes the reproducible zip, `SHA256SUMS.txt` and
   `SHA256-FILES.txt` and fills the release-notes template. With `--installer` it also puts the
-  setup file into `SHA256SUMS.txt` and the "Installer" section into the notes.
+  setup file into `SHA256SUMS.txt` and the "Installer" section into the notes. With
+  `--source-archives-dir` it also verifies the Qt and PySide6 source archives (below), lists them
+  in `SHA256SUMS.txt` (this command is the only writer of that file) and adds the "Source code of
+  Qt and PySide6 (LGPL-3.0)" section to the notes.
+- `scripts/fetch_source_archives.py` downloads the source archives of the bundled Qt and PySide6
+  (LGPL-3.0 sources of the libraries in the bundle) from `download.qt.io`, on every release and
+  without a manual step. The pinned list is `packaging/source-archives.json` (name, version, URL,
+  size, SHA-256 of each archive). Each archive is streamed to a temporary file while its SHA-256
+  is computed, checked against the pinned size and hash and then renamed atomically; a network
+  error is retried up to three times, a mismatch fails the release with both values printed. A
+  test compares the pinned version and URLs with the installed PySide6 and with the URL formats of
+  `make_release_zip.py`, so upgrading PySide6 without updating the pins fails CI. The archives are
+  unmodified copies of Qt's files: they are attached to the release but not attested.
 - `scripts/build_installer.py` builds the per-user Windows installer with Inno Setup 6 from the
   tested bundle folder (`packaging/installer/cbrn-dashboard.iss`; `cbrn-readiness-dashboard-<version>-win-x64-setup.exe`).
   The installer needs no administrator rights (`PrivilegesRequired=lowest`; the setup dialog also
@@ -500,10 +512,15 @@ fictitious.
   the manual approval, checks the signature of `cbrn-dashboard.exe` and uploads the signed folder.
   Only `cbrn-dashboard.exe` is signed (`.signpath/artifact-configurations/release.xml`). The
   read-only `package` job zips the signed folder when `sign` ran and the tested folder otherwise,
-  builds and smoke-tests the installer from the same folder, writes the checksum files and the
-  release notes (`release-body --signed` only after signing).
+  builds and smoke-tests the installer from the same folder, downloads and verifies the pinned Qt
+  and PySide6 source archives (before the checksum step, into the same `release/` folder), writes
+  the checksum files and the release notes (`release-body --signed` only after signing). The
+  artefact is uploaded without compression (`compression-level: 0`; the `.xz` archives, about 460
+  MB, are compressed already).
   The `release` job, the only one with write permissions, attests the build provenance of the zip
-  and of the installer and creates a **draft** release with both. Signing needs the repository variables `SIGNPATH_ORGANIZATION_ID`,
+  and of the installer (not of the source archives) and creates a **draft** release with the zip,
+  the installer, the two source archives and the checksum files. It installs nothing and runs no
+  project code. Signing needs the repository variables `SIGNPATH_ORGANIZATION_ID`,
   `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG` (optionally
   `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`) and the secret `SIGNPATH_API_TOKEN`; it is not active
   until the project is accepted by SignPath. See [CODE-SIGNING-POLICY.md](../CODE-SIGNING-POLICY.md).

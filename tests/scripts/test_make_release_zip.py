@@ -1081,3 +1081,265 @@ def test_cli_release_body_with_an_installer(
     absent = str(tmp_path / "no.exe")
     assert script.main([*args, "--out", str(missing), "--installer", absent]) == 1
     assert not missing.exists()
+
+
+# --------------------------------------------------------------------------------------------
+# The Qt and PySide6 source archives (LGPL-3.0): checksum lines, release notes section
+# --------------------------------------------------------------------------------------------
+
+SOURCES_START = "<!-- source-archives:start -->"
+SOURCES_END = "<!-- source-archives:end -->"
+FAKE_ARCHIVE_CONTENT: dict[str, bytes] = {
+    "qt-everywhere-src-6.12.0.tar.xz": b"fake qt sources " * 50,
+    "pyside-setup-everywhere-src-6.12.0.tar.xz": b"fake pyside sources " * 20,
+}
+
+
+def _fake_archives(script: ModuleType) -> list[object]:
+    """Pins for the two fake archives (the real ones are 460 MB and are never downloaded here)."""
+    archive_type = script._fetch_script().SourceArchive
+    return [
+        archive_type(
+            name,
+            "6.12.0",
+            f"https://download.example.invalid/{filename}",
+            len(content),
+            hashlib.sha256(content).hexdigest(),
+        )
+        for name, (filename, content) in zip(
+            ("Qt", "PySide6"), FAKE_ARCHIVE_CONTENT.items(), strict=True
+        )
+    ]
+
+
+def _write_fake_archives(folder: Path) -> list[Path]:
+    folder.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for filename, content in FAKE_ARCHIVE_CONTENT.items():
+        path = folder / filename
+        path.write_bytes(content)
+        paths.append(path)
+    return paths
+
+
+def _use_fake_pins(script: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(script, "load_source_archives", lambda *_args: _fake_archives(script))
+
+
+def test_sha256sums_lists_zip_installer_and_then_the_source_archives(
+    script: ModuleType, bundle: Path, tmp_path: Path
+) -> None:
+    out = tmp_path / "out"
+    zip_path = script.make_zip(bundle, out, "0.1.0")
+    setup = _setup_file(out)
+    archives = _write_fake_archives(out)
+    sums = script.write_sha256sums(zip_path, out, setup, archives)
+    expected = [zip_path, setup, *archives]
+    lines = sums.read_bytes().decode("ascii").splitlines()
+    assert [line.split("  ")[1] for line in lines] == [path.name for path in expected]
+    assert [line.split("  ")[0] for line in lines] == [
+        hashlib.sha256(path.read_bytes()).hexdigest() for path in expected
+    ]
+    assert b"\r" not in sums.read_bytes()
+    with pytest.raises(ValueError, match="Not a file"):
+        script.write_sha256sums(zip_path, out, None, [out / "missing.tar.xz"])
+
+
+def test_cli_package_verifies_lists_and_places_the_source_archives(
+    script: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    bundle: Path,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    _use_fake_pins(script, monkeypatch)
+    fetched = _write_fake_archives(tmp_path / "fetched")
+    out = tmp_path / "release"
+    setup = _setup_file(tmp_path / "built")
+    args = ["package", "--bundle-dir", str(bundle), "--out-dir", str(out)]
+    args += ["--installer", str(setup), "--source-archives-dir", str(tmp_path / "fetched")]
+    assert script.main(args) == 0
+    printed = [Path(item).name for item in capsys.readouterr().out.splitlines()]
+    assert printed == [
+        "cbrn-readiness-dashboard-0.1.0-win-x64.zip",
+        "SHA256SUMS.txt",
+        "SHA256-FILES.txt",
+        SETUP_NAME,
+        *[path.name for path in fetched],
+    ]
+    for path in fetched:
+        assert (out / path.name).read_bytes() == path.read_bytes()
+    lines = (out / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()
+    assert [line.split("  ")[1] for line in lines] == [
+        "cbrn-readiness-dashboard-0.1.0-win-x64.zip",
+        SETUP_NAME,
+        *[path.name for path in fetched],
+    ]
+    # The archives are neither in the zip nor in the per-file manifest of the bundle.
+    assert "tar.xz" not in (out / "SHA256-FILES.txt").read_text(encoding="utf-8")
+    with zipfile.ZipFile(out / "cbrn-readiness-dashboard-0.1.0-win-x64.zip") as archive:
+        assert not [name for name in archive.namelist() if name.endswith(".tar.xz")]
+
+
+def test_cli_package_keeps_archives_that_are_already_in_the_out_dir(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, bundle: Path, tmp_path: Path
+) -> None:
+    """The workflow fetches into release/ and packages into release/: nothing is copied."""
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    _use_fake_pins(script, monkeypatch)
+    out = tmp_path / "release"
+    fetched = _write_fake_archives(out)
+    args = ["package", "--bundle-dir", str(bundle), "--out-dir", str(out)]
+    assert script.main([*args, "--source-archives-dir", str(out)]) == 0
+    assert [path.read_bytes() for path in fetched] == list(FAKE_ARCHIVE_CONTENT.values())
+    lines = (out / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 3
+
+
+def test_cli_package_refuses_missing_or_altered_source_archives(
+    script: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    bundle: Path,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    _use_fake_pins(script, monkeypatch)
+    folder = tmp_path / "fetched"
+    args = ["package", "--bundle-dir", str(bundle), "--out-dir", str(tmp_path / "release")]
+    args += ["--source-archives-dir", str(folder)]
+    folder.mkdir()
+    assert script.main(args) == 1
+    assert "missing" in capsys.readouterr().err
+    paths = _write_fake_archives(folder)
+    paths[0].write_bytes(b"Z" * len(paths[0].read_bytes()))
+    assert script.main(args) == 1
+    assert "SHA-256 mismatch" in capsys.readouterr().err
+    assert not (tmp_path / "release" / "SHA256SUMS.txt").exists()
+
+
+def test_cli_package_without_source_archives_is_unchanged(
+    script: ModuleType, monkeypatch: pytest.MonkeyPatch, bundle: Path, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+
+    def not_called(*_args: object) -> object:
+        raise AssertionError("the pins must not be read without --source-archives-dir")
+
+    monkeypatch.setattr(script, "load_source_archives", not_called)
+    out = tmp_path / "release"
+    assert script.main(["package", "--bundle-dir", str(bundle), "--out-dir", str(out)]) == 0
+    assert not list(out.glob("*.tar.xz"))
+
+
+def test_template_has_one_source_archives_section_with_its_token(template_text: str) -> None:
+    assert template_text.count(SOURCES_START) == 1
+    assert template_text.count(SOURCES_END) == 1
+    inner = template_text.split(SOURCES_START)[1].split(SOURCES_END)[0]
+    assert "## Source code of Qt and PySide6 (LGPL-3.0)" in inner
+    assert "{{source_archives}}" in inner
+    flat = " ".join(inner.split())
+    assert "attached to this release, next to the binary" in flat
+    assert "unmodified copies of the archives published at download.qt.io" in flat
+    assert "SHA-256 pinned in the repository" in flat
+    assert "licenses\\SOURCE-OFFER.md" in flat
+    assert "remains valid" in flat
+    assert "{{qt_version}}" in inner
+    assert "{{pyside_version}}" in inner
+    # Outside the installer and the signing sections, so that every kind of release has it.
+    assert template_text.index(INSTALLER_END) < template_text.index(SOURCES_START)
+    assert template_text.index(SOURCES_END) > template_text.index(END)
+
+
+def test_notes_with_source_archives_name_them_with_their_hashes(
+    script: ModuleType, template_text: str
+) -> None:
+    archives = _fake_archives(script)
+    body = script.render_release_body(
+        template_text, flagged_placeholders=["x"], source_archives=archives, **SAMPLE
+    )
+    assert "{{" not in body
+    assert "<!--" not in body
+    assert "## Source code of Qt and PySide6 (LGPL-3.0)" in body
+    for name, content in FAKE_ARCHIVE_CONTENT.items():
+        assert f"- `{name}`" in body
+        assert f"SHA-256: `{hashlib.sha256(content).hexdigest()}`" in body
+    assert "- `qt-everywhere-src-6.12.0.tar.xz` (Qt 6.12.0), SHA-256: `" in body
+    assert "(PySide6 6.12.0), SHA-256: `" in body
+    # A signed release keeps the section too.
+    signed = script.render_release_body(
+        template_text, flagged_placeholders=["x"], source_archives=archives, signed=True, **SAMPLE
+    )
+    assert "## Source code of Qt and PySide6 (LGPL-3.0)" in signed
+    assert "## The executable is signed" in signed
+
+
+def test_notes_without_source_archives_leave_the_section_out(
+    script: ModuleType, template_text: str
+) -> None:
+    body = _render(script, template_text)
+    assert "Source code of Qt and PySide6" not in body
+    assert "source-archives" not in body
+    assert "SHA-256: `" not in body
+    assert "## Source code and licences" in body
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        f"a\n{SOURCES_START}\nb\n",
+        f"a\n{SOURCES_END}\nb\n",
+        f"{SOURCES_END}\nb\n{SOURCES_START}\n",
+        f"{SOURCES_START}\n{SOURCES_START}\nb\n{SOURCES_END}\n",
+    ],
+)
+def test_broken_source_archives_markers_are_refused(script: ModuleType, template: str) -> None:
+    with pytest.raises(ValueError, match="source-archives"):
+        script.render_release_body(template, flagged_placeholders=[], **SAMPLE)
+
+
+def test_cli_release_body_lists_the_verified_source_archives(
+    script: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    bundle: Path,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(script, "read_version", lambda: "0.1.0")
+    monkeypatch.setattr(script, "read_qt_versions", lambda: ("6.12.0", "6.12.0"))
+    monkeypatch.setattr(script, "read_flagged_placeholders", lambda: ["demo_flag"])
+    _use_fake_pins(script, monkeypatch)
+    zip_path = script.make_zip(bundle, tmp_path / "release", "0.1.0")
+    folder = tmp_path / "fetched"
+    _write_fake_archives(folder)
+    out = tmp_path / "with.md"
+    args = ["release-body", "--template", str(TEMPLATE_PATH), "--zip", str(zip_path)]
+    assert script.main([*args, "--out", str(out), "--source-archives-dir", str(folder)]) == 0
+    body = out.read_text(encoding="utf-8")
+    for name, content in FAKE_ARCHIVE_CONTENT.items():
+        assert f"- `{name}`" in body
+        assert hashlib.sha256(content).hexdigest() in body
+    plain = tmp_path / "without.md"
+    assert script.main([*args, "--out", str(plain)]) == 0
+    assert "Source code of Qt and PySide6" not in plain.read_text(encoding="utf-8")
+    # The notes never name an archive that is not there or is not the pinned one.
+    (folder / "qt-everywhere-src-6.12.0.tar.xz").write_bytes(b"changed")
+    refused = tmp_path / "refused.md"
+    capsys.readouterr()
+    assert script.main([*args, "--out", str(refused), "--source-archives-dir", str(folder)]) == 1
+    assert "mismatch" in capsys.readouterr().err
+    assert not refused.exists()
+
+
+def test_the_real_pins_fill_the_real_template(script: ModuleType, template_text: str) -> None:
+    """The notes of a release carry the two real archive names and their pinned SHA-256."""
+    archives = script.load_source_archives()
+    body = script.render_release_body(
+        template_text, flagged_placeholders=[], source_archives=archives, **SAMPLE
+    )
+    assert "{{" not in body
+    for archive in archives:
+        assert f"`{archive.filename}`" in body
+        assert archive.sha256 in body
+    assert "98ff4f44bac6ec3e1e62ee2a4316ae0e3d15badb015d753cc0268a20db52f165" in body

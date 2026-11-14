@@ -18,11 +18,16 @@ name: Release
 #             from that very folder, so both are the bundle that was tested (and signed). The
 #             installer is built, smoke-tested (silent install, frozen self-test, silent uninstall
 #             that keeps the data) and checksummed on EVERY release, automatically; a failure of
-#             any of these steps fails the release. The zip, the installer, the checksum files and
-#             the release notes are uploaded as one workflow artefact.
+#             any of these steps fails the release. The same job downloads the source archives of
+#             Qt and PySide6 pinned in packaging/source-archives.json (LGPL-3.0 sources of the
+#             libraries in the bundle), verifies their size and SHA-256 and lists them in
+#             SHA256SUMS.txt and in the release notes, on EVERY release, automatically. The zip,
+#             the installer, the source archives, the checksum files and the release notes are
+#             uploaded as one workflow artefact.
 #   release - the only job with write permissions. It downloads that artefact, attests the build
-#             provenance of the zip and of the installer and creates a DRAFT release with both. It
-#             installs no dependency and runs no project code.
+#             provenance of the zip and of the installer (not of the source archives: they are
+#             Qt's files) and creates a DRAFT release with all of them. It installs no dependency
+#             and runs no project code.
 # Nothing is published here: a person publishes the draft after a manual smoke test of the zip on
 # a clean Windows machine.
 on:
@@ -203,12 +208,19 @@ jobs:
       - name: Build the installer from the bundle folder
         run: uv run python scripts/build_installer.py --bundle-dir bundle --out-dir release
 
+      # The LGPL-3.0 sources of the Qt and PySide6 in the bundle go with every release, with no
+      # manual step: the pinned archives (packaging/source-archives.json) are downloaded from
+      # download.qt.io into release/ and the step fails unless each has the pinned size and
+      # SHA-256. A test ties the pinned version to the PySide6 of uv.lock.
+      - name: Download the pinned Qt and PySide6 source archives
+        run: uv run python scripts/fetch_source_archives.py --out release
+
       - name: Zip the bundle and write the checksum files
         shell: pwsh
         run: |
           $setup = @(Get-ChildItem -Path release -Filter '*-setup.exe')
           if ($setup.Count -ne 1) { throw "expected exactly one setup file in release/, found $($setup.Count)" }
-          uv run python scripts/make_release_zip.py package --bundle-dir bundle --out-dir release --installer $setup[0].FullName
+          uv run python scripts/make_release_zip.py package --bundle-dir bundle --out-dir release --installer $setup[0].FullName --source-archives-dir release
           if ($LASTEXITCODE -ne 0) { throw "package failed" }
 
       # Silent install into a temporary folder, the frozen self-test of the installed program,
@@ -230,7 +242,7 @@ jobs:
           $setup = (Get-ChildItem -Path release -Filter '*-setup.exe').FullName
           $signedFlag = @()
           if ($env:SIGNED -eq 'true') { $signedFlag = @('--signed') }
-          uv run python scripts/make_release_zip.py release-body --template .github/release-body.template.md --out release/body.md --zip $zip --installer $setup @signedFlag
+          uv run python scripts/make_release_zip.py release-body --template .github/release-body.template.md --out release/body.md --zip $zip --installer $setup --source-archives-dir release @signedFlag
           if ($LASTEXITCODE -ne 0) { throw "release-body failed" }
           $pre = uv run python scripts/make_release_zip.py prerelease-flag
           if ($LASTEXITCODE -ne 0) { throw "prerelease-flag failed" }
@@ -242,6 +254,8 @@ jobs:
           path: release
           retention-days: 14
           if-no-files-found: error
+          # The .xz source archives (about 460 MB), the zip and the setup are compressed already.
+          compression-level: 0
 
   release:
     needs: package
@@ -282,7 +296,10 @@ jobs:
           $setup = @(Get-ChildItem -Path release -Filter '*-setup.exe')
           if ($setup.Count -ne 1) { throw "expected exactly one setup file in release/, found $($setup.Count)" }
           $pre = (Get-Content -Path release/prerelease.txt -Raw).Trim()
-          $arguments = @($env:TAG, $zip, $setup[0].FullName, 'release/SHA256SUMS.txt', 'release/SHA256-FILES.txt')
+          # The Qt and PySide6 source archives (not attested: they are Qt's files).
+          $sources = @(Get-ChildItem -Path release -Filter '*.tar.xz' | ForEach-Object { $_.FullName })
+          if ($sources.Count -ne 2) { throw "expected the two source archives (Qt, PySide6) in release/, found $($sources.Count)" }
+          $arguments = @($env:TAG, $zip, $setup[0].FullName) + $sources + @('release/SHA256SUMS.txt', 'release/SHA256-FILES.txt')
           $arguments += @('--draft', '--title', "CBRN Readiness Dashboard $env:TAG", '--notes-file', 'release/body.md')
           if ($pre) { $arguments += $pre }
           gh release create @arguments

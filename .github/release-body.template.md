@@ -92,6 +92,23 @@ still flagged in the code in this release:
 
 {{flagged_placeholders}}
 
+<!-- source-archives:start -->
+## Source code of Qt and PySide6 (LGPL-3.0)
+
+The program in this release bundles Qt {{qt_version}} and PySide6 {{pyside_version}}, which are
+licensed under LGPL-3.0-only. The source archives of exactly these versions are attached to this
+release, next to the binary:
+
+{{source_archives}}
+
+They are unmodified copies of the archives published at download.qt.io (the links are in the
+next section). The release workflow downloads them on every release and checks them against the
+size and the SHA-256 pinned in the repository (`packaging/source-archives.json`) before it
+attaches them; the same hashes are in `SHA256SUMS.txt`. They are Qt's files, not build outputs of
+this project, so they carry no build attestation. The written offer in `licenses\SOURCE-OFFER.md`
+(in the zip and in the installed program) remains valid.
+<!-- source-archives:end -->
+
 ## Source code and licences
 
 This project is licensed under GPL-3.0-or-later. The source code that matches this release is the
