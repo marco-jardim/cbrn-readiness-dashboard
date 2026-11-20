@@ -170,6 +170,42 @@ informação clínica.
    - Resultado esperado: "Adicionar lote", "Registrar movimentação" e as demais ações de edição estão
      desativadas; os filtros, as abas e "Abrir registro" continuam funcionando.
 
+## 4B. Página Infraestrutura: aba Estoque (lotes)
+
+A aba guarda apenas dados de gestão. Use somente dados fictícios, com códigos de lote como `TESTE-L10`;
+não insira dados reais nem qualquer informação clínica.
+
+1. Abra **Infraestrutura** e a aba "Estoque (lotes)". A outra aba é "Equipamentos e instalações
+   (unidades)".
+   - Resultado esperado: um resumo por tipo de item, a lista de lotes e a lista "Movimentações do lote
+     selecionado". Os lotes esgotados não aparecem.
+2. Abra o filtro "Tipo" e escolha o tipo "Luva".
+   - Resultado esperado: a janela mostra a aba "Estoque (lotes)" só com os lotes de luvas. Escolher
+     "Todos os tipos" mantém a aba atual, e trocar de aba à mão não muda o filtro.
+3. Use "Adicionar lote" para criar o lote fictício `TESTE-L10` do tipo "Cilindro de O2", sem validade,
+   com data de recebimento hoje e quantidade inicial 10.
+   - Resultado esperado: o lote aparece com 10 em estoque e a situação "Válido". Um lote de antídoto
+     sem validade é recusado com uma mensagem.
+4. Selecione o lote e use "Registrar movimentação" para uma saída (consumo) de 4 unidades.
+   - Resultado esperado: o estoque passa a 6, e a lista de movimentações mostra +10 e -4 com o saldo
+     após cada uma.
+5. Registre uma saída (consumo) de 20 unidades.
+   - Resultado esperado: a tela recusa com a mensagem de que a alteração deixaria o estoque do lote
+     abaixo de zero em alguma data; nada é gravado. Uma movimentação com data posterior a hoje também
+     é recusada, e um ajuste sem observação também.
+6. Registre um descarte de 6 unidades.
+   - Resultado esperado: o lote fica "Esgotado" e some da lista. Marque "Mostrar lotes esgotados":
+     o lote volta a aparecer. Com a data de referência anterior ao descarte, o lote mostra de novo 6
+     em estoque.
+7. Com o lote esgotado visível, selecione a entrada de +10 e use "Excluir movimentação".
+   - Resultado esperado: após a confirmação, a tela recusa, porque as saídas deixariam o lote abaixo de
+     zero; nada é gravado. A última movimentação de um lote nunca pode ser excluída: um lote que
+     existiu é encerrado com um descarte ou uma perda.
+8. No modo somente leitura (seção 15), abra a aba.
+   - Resultado esperado: "Adicionar lote", "Editar lote", "Excluir lote", "Registrar movimentação",
+     "Editar movimentação" e "Excluir movimentação" estão desativados; o resumo, as tabelas e o filtro
+     "Tipo" continuam funcionando.
+
 ## 5. Página Exercícios
 
 1. Abra **Exercícios**.
@@ -417,9 +453,11 @@ em uma pasta descartável:
    - Resultado esperado: abre-se o banco de demonstração com uma faixa de aviso do modo somente
      leitura ("Modo somente leitura: não é possível gravar no banco de dados, portanto nada pode ser
      alterado."). Nenhuma pergunta sobre recriar os dados de demonstração é feita.
-3. Percorra as páginas Pessoal, Infraestrutura, Exercícios e Orçamento.
+3. Percorra as páginas Pessoal, Infraestrutura (as duas abas, inclusive "Estoque (lotes)"), Antídotos e
+   descontaminantes, Exercícios e Orçamento.
    - Resultado esperado: as listas aparecem, mas toda ação que altera dados ("Adicionar ...",
-     "Editar ...", "Excluir ...") está desativada, e nada é gravado.
+     "Editar ...", "Excluir ...", "Registrar movimentação") está desativada, e nada é gravado; os
+     filtros, as abas e "Abrir registro" continuam funcionando.
 4. Na página **Relatórios**, verifique cada parte.
    - Resultado esperado: "Criar relatório...", "Exportar arquivos CSV..." e "Exportação de
      validação..." continuam disponíveis; a importação de CSV, "Gravar registro" e "Retirar

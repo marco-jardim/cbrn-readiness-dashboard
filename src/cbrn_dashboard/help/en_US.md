@@ -49,6 +49,35 @@ You can add, edit, retire and delete assets, change the status of an asset, reco
 
 The asset types and the availability rule, which decides whether degraded units count as available, are kept in Settings.
 
+### Stock (lots)
+<!-- topic: infrastructure_stock -->
+
+The page has two tabs. "Equipment and facilities (units)" holds the assets described above. "Stock (lots)" records what is kept in stock, by lot instead of unit by unit: antidotes, decontaminants, detectors, protective equipment and other items. A lot has no operational status and no maintenance. An item that needs both stock and unit-by-unit tracking is entered twice, once in each tab. The stock holds management data only: it has no fields for doses, indications or protocols, and the lot codes and notes must not contain clinical information.
+
+Lots. A lot belongs to an item type (17 types come with the program, and you can add your own in Settings) and has a lot code that is unique within the type, an expiry date, a unit price with its currency, and notes. The expiry date, the price and the notes are optional, except that lots of antidotes and decontaminants need an expiry date. Quantities are whole units. A lot is created together with its first receipt: the date, the quantity (at least 1) and a reference. "Add lot", "Edit lot" and "Delete lot" work on the selected lot; deleting a lot also deletes its movements and asks for confirmation first.
+
+Movements. Each movement has a date, a kind, a quantity above zero, a reference and a note. The kinds are Receipt, Issue (consumption), Disposal, Loss, Adjustment (increase) and Adjustment (decrease). A receipt and an increase add to the lot; the other kinds take away from it. An adjustment needs a note. "Record movement" adds a movement to the selected lot, and the movements of the selected lot are listed with the balance after each one. The last movement of a lot cannot be deleted: close a lot with a disposal or a loss.
+
+Quantity on a date. The quantity of a lot is never stored. It is calculated as the sum of its movements dated on or before the as-of date, so changing the as-of date shows the stock of that day. The balance of a lot can never be negative on any date: the program refuses a new, edited or deleted movement, and an imported row, that would leave the lot below zero on some date, even a backdated one. A movement cannot be dated after today.
+
+Status. Every lot shows one status, written as text with an icon and a colour:
+
+- Not yet received: no movement is dated on or before the as-of date.
+- Empty: nothing is on hand. Empty lots never raise an alert and are hidden unless you tick "Show empty lots".
+- Expired: the expiry date is before the as-of date and the lot still has stock.
+- Expiring soon: the lot expires within the warning period of the as-of date.
+- Valid: the lot has no expiry date, or its expiry date has not passed. A lot is still valid on its expiry date.
+
+The tab also shows a summary for each item type: the valid quantity, the quantity expired and still in stock, the quantity expiring soon, the minimum stock, whether the type is below it and the value of the valid stock. Values are shown per currency and are never added across currencies.
+
+Type filter. The Type filter above the tabs lists "All types", the asset types and the stock item types. An asset type shows the first tab, and a stock item type shows this tab with only the lots of that type. "All types" filters nothing and keeps the tab you are on. Changing the tab by hand never changes the filter.
+
+Settings. The minimum stock of each item type is set in the Settings section "Stock item types", and the warning period before an expiry is set in the Alerts settings. Both are placeholders until the committee confirms them.
+
+Alerts. An expired lot that still has stock is critical, a lot expiring soon is a warning, and an item type whose valid quantity is below its minimum is critical. A type with no minimum is never below it. The Dashboard also shows tiles for the valid stock, the lots expiring soon, the expired lots still in stock and the item types below the minimum stock.
+
+Adding, editing and deleting lots and movements change data, so they are switched off in read-only mode, while the tables stay readable.
+
 ## Antidotes and decontaminants
 <!-- topic: antidotes -->
 
@@ -91,6 +120,8 @@ Alerts are never stored; they are calculated each time from the data and the as-
 
 The status bar shows the alert counts. At start-up a banner can summarise the warning and critical alerts, with a button that opens this page. The number of days before a PPE qualification expires or a maintenance is due that raises an alert is set in Settings.
 
+Three kinds of alert come from the stock: a lot that has expired and still has stock (critical), a lot that expires within the warning period (warning) and an item type whose valid quantity is below its minimum stock (critical). "Open record" goes to the stock tab of Infrastructure, or to the Antidotes and decontaminants page for those item types. Empty lots never raise an alert.
+
 ## Reports
 <!-- topic: reports -->
 
@@ -111,7 +142,7 @@ The files that you export are ordinary files. They contain internal data and are
 
 "Import CSV file..." on the Reports page reads a CSV file of one kind of data, for example to enter past records. "Write templates..." writes empty files, with the header row only, into a folder that you choose; fill them in or edit an export.
 
-The file must be UTF-8, and the separator is a semicolon or a comma. Import one kind of data at a time, and import the lists that other records refer to first: the lists (courses, asset types, metrics and funding sources), then the staff, the PPE qualifications, training records and degrees, the assets, their status and maintenance events, the exercise editions with their countries and results, the budget entries and finally the budget executions.
+The file must be UTF-8, and the separator is a semicolon or a comma. Import one kind of data at a time, and import the lists that other records refer to first: the lists (courses, asset types, metrics, funding sources and stock item types), then the staff, the PPE qualifications, training records and degrees, the assets, their status and maintenance events, the exercise editions with their countries and results, the budget entries, the budget executions, then the stock lots and finally the stock movements. A stock lot file creates the lots without any quantity; the quantity comes from the movements, so import them next. Stock movements follow the same rules as on the screen: a row that would make the balance of a lot negative, or that is dated after today, is refused. Built-in stock item types are never imported.
 
 A file is imported completely or not at all. If any row has a problem, nothing is written and the problems are reported. The import dialog lets you check a file first. Import only adds records: an existing record is never changed or merged. Importing is switched off in read-only mode.
 
@@ -156,9 +187,10 @@ File, "Open data folder" shows the data folder in Windows Explorer. It only open
 The Settings page has one tab for each group of settings and a box for each section:
 
 - General: the language, an optional operator label that is recorded with each change, and the names of the institution and the unit.
-- Alerts: the number of days before an expiry or a due date that raises an alert.
+- Alerts: the number of days before an expiry or a due date that raises an alert. This includes the field "Stock lots: warning before expiry (days)", the warning period before a stock lot expires (placeholder P11, 90 days until the committee confirms it).
 - Targets: the indicator targets, which you can add, edit, enable or disable, and delete. Until a target is set, an indicator shows "No target".
 - Personnel, Infrastructure, Exercises and Budget: the lists and rules of each module, as described on their pages.
+- Infrastructure also holds the section "Stock item types": the 17 built-in item types and your own. For each type you can set the minimum stock, which is empty (no minimum) until you set it, and make the type active or inactive; a built-in type cannot be deleted, and the category of a type cannot change once it has lots. The minimum stock is placeholder P12: it carries the mark "Placeholder - to be confirmed" and a Confirm button, and it is kept only on this computer.
 - Backup, Reports and Snapshots: the settings of backups, of reports and of snapshots.
 
 Some values are placeholders that the committee still has to confirm. They carry the mark "Placeholder - to be confirmed" and a Confirm button.

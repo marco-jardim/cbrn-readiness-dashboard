@@ -88,7 +88,7 @@ Out of scope: malware or an administrator on the running machine, and forensic r
 | A lock on the data folder allows one running instance at a time. | 6 |
 | The demo database is separate (own file, own backups, a permanent banner); a restore refuses a backup whose demo flag differs from the open database. | 2 |
 | Logs hold event codes, exception types and frames only. | 2 |
-| Anonymised external reports (counts only, small counts suppressed). | 2, 5 |
+| Anonymised external reports (counts only, small counts suppressed). From version 1.1 they also omit the quantities, values and prices of the stock item types and the stock chart; only counts of stock lots and alerts remain (see "Stock data" below). | 2, 5 |
 
 ## Full-disk encryption
 
@@ -119,6 +119,28 @@ Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made
 decision of the competent authority; this is not legal advice. If the data is classified, this
 design (a plain SQLite database, plain automatic backups, commercial cryptography, an unsigned
 binary from a public repository) is probably unsuitable, and real data must not be entered.
+
+## Stock data
+
+From version 1.1 the application records the stock of antidotes, decontaminants, detectors,
+protective equipment and other items by lot: item types, lot codes, quantities, expiry dates, unit
+prices and movements. It is management data only; there is no field for a dose, an indication or a
+protocol, and lot codes and notes must not contain clinical information.
+
+* Stock data carries the same "sensitive" working label as the other data (see "Classification"): it
+  stays on the local machine and is covered by the same handling as the rest of the database: the
+  data folder, the automatic and encrypted backups, the CSV export and full-disk encryption. A list
+  of the lots that are short or expired shows readiness gaps, so keep exports and printed reports
+  where only the intended people can read them.
+* The **anonymised report omits** the quantities, values and unit prices of each item type and the
+  stock chart. It keeps counts only: lots expired, lots expiring, item types below the minimum
+  stock and stock alerts. The **internal report** shows the figures and lists the expired and
+  expiring lots that still have stock; it is for internal use only.
+* Whether per-type quantities, values and prices may ever appear in an anonymised report, who
+  receives the internal list of expired and expiring lots, and whether the counts themselves are
+  acceptable, is an open question (Q27). Until it is answered the anonymised report omits them.
+* Like the personnel data, the stock data in older backups persists until those backups are
+  deleted.
 
 ## Several people on one computer
 

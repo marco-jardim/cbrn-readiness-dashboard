@@ -26,7 +26,9 @@ today; the application asks the user before it does.
 :func:`generate` refuses a database whose ``app_meta.is_demo`` is not ``"1"``: demo targets and
 snapshots are never written into a real database.
 
-Module generators register with exactly one line each in :data:`GENERATORS`. The two cross-module
+Module generators register with exactly one line each in :data:`GENERATORS`: personnel,
+infrastructure, exercises, budget and stock (T11.16: lots and dated movements written through the
+stock service, registered after the budget and before the targets). The two cross-module
 generators of T10.1 come after them: ``targets`` (illustrative indicator targets, demo database
 only) and ``snapshots`` (retroactive snapshots before the demo editions).
 

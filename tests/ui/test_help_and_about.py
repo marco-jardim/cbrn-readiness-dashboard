@@ -146,6 +146,7 @@ def test_the_three_files_have_the_same_topics_in_the_same_order() -> None:
         "settings",
         "privacy",
         "preliminary",
+        "infrastructure_stock",
     }
     assert {key for key, _level in reference} == expected_keys
     for language in LANGUAGES:

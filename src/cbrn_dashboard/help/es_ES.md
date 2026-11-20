@@ -49,6 +49,35 @@ Se pueden añadir, editar, dar de baja y eliminar activos, cambiar el estado de 
 
 Los tipos de activo y la regla de disponibilidad, que decide si las unidades degradadas cuentan como disponibles, se mantienen en Ajustes.
 
+### Existencias (lotes)
+<!-- topic: infrastructure_stock -->
+
+La página tiene dos pestañas. "Equipos e instalaciones (unidades)" contiene los activos descritos arriba. "Existencias (lotes)" registra lo que se mantiene en existencias, por lote en lugar de unidad por unidad: antídotos, descontaminantes, detectores, equipos de protección y otros artículos. Un lote no tiene estado operativo ni mantenimiento. Un artículo que necesita existencias y también seguimiento unidad por unidad se registra dos veces, una en cada pestaña. Las existencias guardan solo datos de gestión: no hay campos para dosis, indicaciones ni protocolos, y los códigos de lote y las notas no deben contener información clínica.
+
+Lotes. Un lote pertenece a un tipo de artículo (17 tipos vienen con el programa, y usted puede añadir los suyos en Ajustes) y tiene un código de lote, único dentro del tipo, una fecha de caducidad, un precio unitario con su moneda y notas. La caducidad, el precio y las notas son opcionales, salvo que los lotes de antídotos y de descontaminantes necesitan fecha de caducidad. Las cantidades son unidades enteras. Un lote se crea junto con su primera entrada: la fecha, la cantidad (mínimo 1) y una referencia. "Añadir lote", "Editar lote" y "Eliminar lote" actúan sobre el lote seleccionado; eliminar un lote también elimina sus movimientos y pide confirmación antes.
+
+Movimientos. Cada movimiento tiene una fecha, un tipo, una cantidad mayor que cero, una referencia y una nota. Los tipos son Entrada (recepción), Salida (consumo), Eliminación, Pérdida, Ajuste (aumento) y Ajuste (disminución). Una entrada y un aumento suman al lote; los demás tipos le restan. Un ajuste necesita una nota. "Registrar movimiento" añade un movimiento al lote seleccionado, y los movimientos del lote seleccionado se listan con el saldo posterior a cada uno. El último movimiento de un lote no se puede eliminar: cierre un lote con una eliminación o una pérdida.
+
+Cantidad en una fecha. La cantidad de un lote nunca se almacena. Se calcula como la suma de sus movimientos fechados hasta la fecha de referencia, inclusive, por lo que cambiar la fecha de referencia muestra las existencias de ese día. El saldo de un lote nunca puede ser negativo en ninguna fecha: el programa rechaza un movimiento nuevo, editado o eliminado, y una fila importada, que dejaría el lote por debajo de cero en alguna fecha, aunque sea retroactivo. Un movimiento no puede tener fecha posterior a hoy.
+
+Estado. Todo lote muestra un estado, escrito en texto con icono y color:
+
+- Aún no recibido: ningún movimiento tiene fecha hasta la fecha de referencia.
+- Agotado: no hay nada en existencias. Los lotes agotados nunca generan alerta y quedan ocultos, salvo que marque "Mostrar lotes agotados".
+- Caducado: la fecha de caducidad es anterior a la fecha de referencia y el lote aún tiene existencias.
+- Próximo a caducar: el lote caduca dentro del plazo de aviso a partir de la fecha de referencia.
+- Válido: el lote no tiene fecha de caducidad, o su caducidad aún no ha pasado. Un lote sigue siendo válido el mismo día de su caducidad.
+
+La pestaña también muestra un resumen de cada tipo de artículo: la cantidad válida, la cantidad caducada que sigue en existencias, la cantidad próxima a caducar, las existencias mínimas, si el tipo está por debajo de ellas y el valor de las existencias válidas. Los valores se muestran por moneda y nunca se suman entre monedas.
+
+Filtro de tipo. El filtro Tipo sobre las pestañas enumera "Todos los tipos", los tipos de activo y los tipos de artículo de existencias. Un tipo de activo muestra la primera pestaña, y un tipo de artículo de existencias muestra esta pestaña solo con los lotes de ese tipo. "Todos los tipos" no filtra nada y mantiene la pestaña en la que está. Cambiar de pestaña a mano nunca cambia el filtro.
+
+Ajustes. Las existencias mínimas de cada tipo de artículo se definen en la sección "Tipos de artículo de existencias" de Ajustes, y el plazo de aviso antes de una caducidad se define en los ajustes de Alertas. Ambos son valores provisionales hasta que el comité los confirme.
+
+Alertas. Un lote caducado que aún tiene existencias es crítico, un lote próximo a caducar es una advertencia, y un tipo de artículo cuya cantidad válida está por debajo del mínimo es crítico. Un tipo sin mínimo nunca está por debajo. El Panel también muestra indicadores de las existencias válidas, de los lotes próximos a caducar, de los lotes caducados en existencias y de los artículos por debajo de las existencias mínimas.
+
+Añadir, editar y eliminar lotes y movimientos modifica datos, por lo que queda desactivado en el modo de solo lectura, mientras que las tablas siguen siendo legibles.
+
 ## Antídotos y descontaminantes
 <!-- topic: antidotes -->
 
@@ -91,6 +120,8 @@ Las alertas nunca se almacenan; se calculan cada vez a partir de los datos y de 
 
 La barra de estado muestra los recuentos de alertas. Al iniciar, un aviso puede resumir las alertas de advertencia y críticas, con un botón que abre esta página. Cuántos días antes del vencimiento de una habilitación de EPP o de un mantenimiento se genera una alerta se define en Ajustes.
 
+Tres tipos de alerta proceden de las existencias: un lote caducado que aún tiene existencias (crítica), un lote que caduca dentro del plazo de aviso (advertencia) y un tipo de artículo cuya cantidad válida está por debajo de las existencias mínimas (crítica). "Abrir registro" va a la pestaña de existencias de Infraestructura o, para esos tipos de artículo, a la página Antídotos y descontaminantes. Los lotes agotados nunca generan alerta.
+
 ## Informes
 <!-- topic: reports -->
 
@@ -111,7 +142,7 @@ Los archivos que usted exporta son archivos normales. Contienen datos internos y
 
 "Importar archivo CSV..." en la página Informes lee un archivo CSV de un tipo de datos, por ejemplo para introducir registros del pasado. "Escribir plantillas..." escribe archivos vacíos, solo con la fila de encabezado, en una carpeta que usted elige; rellénelos o edite una exportación.
 
-El archivo debe ser UTF-8 y el separador es un punto y coma o una coma. Importe un tipo de datos cada vez e importe primero las listas a las que se refieren los demás registros: las listas (cursos, tipos de activo, métricas y fuentes de financiación), después el personal, las habilitaciones de EPP, registros de formación y títulos, los activos, sus eventos de estado y de mantenimiento, las ediciones de ejercicios con sus países y resultados, las entradas de presupuesto y, por último, las ejecuciones presupuestarias.
+El archivo debe ser UTF-8 y el separador es un punto y coma o una coma. Importe un tipo de datos cada vez e importe primero las listas a las que se refieren los demás registros: las listas (cursos, tipos de activo, métricas, fuentes de financiación y tipos de artículo de existencias), después el personal, las habilitaciones de EPP, registros de formación y títulos, los activos, sus eventos de estado y de mantenimiento, las ediciones de ejercicios con sus países y resultados, las entradas de presupuesto, las ejecuciones presupuestarias, después los lotes de existencias y, por último, los movimientos de existencias. Un archivo de lotes crea los lotes sin ninguna cantidad; la cantidad procede de los movimientos, por lo que impórtelos a continuación. Los movimientos de existencias siguen las mismas reglas que en la pantalla: se rechaza una fila que dejaría el saldo de un lote en negativo, o que tenga fecha posterior a hoy. Los tipos de artículo de existencias integrados nunca se importan.
 
 Un archivo se importa por completo o no se importa. Si alguna fila tiene un problema, no se escribe nada y se informa de los problemas. La ventana de importación permite comprobar un archivo antes. La importación solo añade registros: un registro existente nunca se modifica ni se fusiona. La importación queda desactivada en el modo de solo lectura.
 
@@ -156,9 +187,10 @@ Archivo, "Abrir carpeta de datos" muestra la carpeta de datos en el Explorador d
 La página Ajustes tiene una pestaña por cada grupo de ajustes y un recuadro por cada sección:
 
 - General: el idioma, una etiqueta de operador opcional que se registra con cada cambio y los nombres de la institución y de la unidad.
-- Alertas: cuántos días antes de un vencimiento o de una fecha prevista se genera una alerta.
+- Alertas: cuántos días antes de un vencimiento o de una fecha prevista se genera una alerta. Esto incluye el campo "Lotes de existencias: antelación del aviso de caducidad (días)", el plazo de aviso antes de la caducidad de un lote de existencias (valor provisional P11, 90 días hasta que el comité lo confirme).
 - Metas: las metas de los indicadores, que se pueden añadir, editar, activar o desactivar y eliminar. Mientras no se defina una meta, el indicador muestra "Sin meta".
 - Personal, Infraestructura, Ejercicios y Presupuesto: las listas y reglas de cada módulo, como se describe en sus páginas.
+- Infraestructura también tiene la sección "Tipos de artículo de existencias": los 17 tipos de artículo integrados y los suyos. Para cada tipo se pueden definir las existencias mínimas, que quedan vacías (sin mínimo) hasta que usted las define, y dejar el tipo activo o inactivo; un tipo integrado no se puede eliminar, y la categoría de un tipo no cambia una vez que tiene lotes. Las existencias mínimas son el valor provisional P12: llevan la marca "Valor provisional - por confirmar" y un botón Confirmar, y se guardan solo en este equipo.
 - Copia de seguridad, Informes e Instantáneas: los ajustes de las copias de seguridad, de los informes y de las instantáneas.
 
 Algunos valores son provisionales y el comité todavía debe confirmarlos. Llevan la marca "Valor provisional - por confirmar" y un botón Confirmar.

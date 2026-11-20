@@ -63,15 +63,15 @@ Top-level packages of `src/cbrn_dashboard/`:
 
 | Package | Role |
 |---|---|
-| `domain/` | pure rules and indicator definitions: `config.py` (readiness configuration and the placeholder registry), `dates.py`, `indicators.py` (framework), `registry.py` (composition of the indicator registry), `personnel.py`, `infrastructure.py`, `exercises.py`, `budget.py`, `alerts.py` |
-| `storage/` | `db.py` (the single place that opens connections), `migrate.py` and `migrations/`, `repository.py` (writes with the change log), one repository per area, `settings_repo.py`, `targets_repo.py`, `snapshots_repo.py`, `app_meta.py`, `backup.py` (plain copies and rotation), `crypto_backup.py` (the `.cbrnbak` container), `csv_io.py` |
-| `services/` | use cases over storage and domain: `personnel.py`, `infrastructure.py`, `exercises.py`, `budget.py`, `indicators.py`, `alerts.py`, `dashboard.py`, `config.py`, `snapshots.py`, `validation_export.py`, `backup.py`, `restore.py`, `export.py`, `importer.py`, `countries.py`, `errors.py` |
+| `domain/` | pure rules and indicator definitions: `config.py` (readiness configuration and the placeholder registry), `dates.py`, `indicators.py` (framework), `registry.py` (composition of the indicator registry), `personnel.py`, `infrastructure.py`, `exercises.py`, `budget.py`, `stock.py` (lots, movements, statuses and the stock indicators and alerts), `alerts.py` |
+| `storage/` | `db.py` (the single place that opens connections), `migrate.py` and `migrations/`, `repository.py` (writes with the change log), one repository per area (`stock_repo.py` for the stock tables), `settings_repo.py`, `targets_repo.py`, `snapshots_repo.py`, `app_meta.py`, `backup.py` (plain copies and rotation), `crypto_backup.py` (the `.cbrnbak` container), `csv_io.py` |
+| `services/` | use cases over storage and domain: `personnel.py`, `infrastructure.py`, `exercises.py`, `budget.py`, `stock.py`, `indicators.py`, `alerts.py`, `dashboard.py`, `config.py`, `snapshots.py`, `validation_export.py`, `backup.py`, `restore.py`, `export.py`, `importer.py`, `countries.py`, `errors.py` |
 | `reports/` | `model.py` (report content as codes and numbers), `anonymise.py` (small-count suppression), `message_keys.py` (code-to-message-key map) and `labels.py` (texts in the language chosen for the report), `pdf.py` (Qt rendering) |
-| `ui/` | one sub-package per area: `ui/shell/` (main window, registry, context, prompts, banners, charts, formatting, translators, first-run notice, instance lock, the in-app help viewer `help.py` and the About dialog `about.py`), `ui/personnel/`, `ui/infrastructure/`, `ui/exercises/`, `ui/budget/`, `ui/stock/`, `ui/antidotes/`, `ui/dashboard/`, `ui/alerts/`, `ui/settings/`, `ui/backup/`, `ui/reports/` |
+| `ui/` | one sub-package per area: `ui/shell/` (main window, registry, context, prompts, banners, charts, formatting, translators, first-run notice, instance lock, the in-app help viewer `help.py` and the About dialog `about.py`), `ui/personnel/`, `ui/infrastructure/`, `ui/exercises/`, `ui/budget/`, `ui/stock/` (the shared stock UI: labels, models, dialogs, `panel.py` and the settings section), `ui/antidotes/` (the antidotes and decontaminants page), `ui/dashboard/`, `ui/alerts/`, `ui/settings/`, `ui/backup/`, `ui/reports/` |
 | `i18n/` | the languages, the area-to-source map and the Qt Linguist catalogues `<area>_<lang>.ts` |
 | `resources/` | `app.ico`, `countries.json` and `THIRD_PARTY_DATA.md` |
 | `help/` | the in-app help, one Markdown file per language (`pt_BR.md`, `en_US.md`, `es_ES.md`); package data, shown by `ui/shell/help.py` |
-| `demo/` | the deterministic generators of the fictitious demo database |
+| `demo/` | the deterministic generators of the fictitious demo database: personnel, infrastructure, exercises, budget, `stock.py` (lots and movements written through the stock service), the illustrative targets and the retroactive snapshots |
 
 Top-level modules of `src/cbrn_dashboard/`:
 
@@ -333,6 +333,56 @@ built on the first request. The About dialog shows the version, the GPL-3.0-or-l
 source URL as plain text, the preliminary notice and one line per entry of `licenses\index.json`,
 which the bundle ships beside the executable; running from source there is no such index and the
 dialog says so. Neither dialog makes a network connection or opens a link.
+
+### Stock (Phase 11)
+
+Stock by lot (owner request, PLAN.md O01-O04 and D32-D38) is separate from the per-unit assets of
+`infrastructure`. It is management data only (types, lots, quantities, expiry dates, prices,
+movements): no column or field holds a dose, an indication or a protocol (D38).
+
+- **Tables** (migration `0009_stock.sql`, written only through `storage/stock_repo.py` and the
+  helpers of `storage/repository.py`): `stock_item_type` (17 built-in types with a fixed category
+  and the user-defined ones; the minimum stock is the column `minimum_quantity`, empty by default),
+  `stock_lot` (type, lot code unique within the type, optional expiry date, optional unit price in
+  minor units with its currency, notes) and `stock_movement` (lot, date, kind, positive quantity,
+  reference, note). The quantity of a lot is never stored.
+- **Balance rule** (D33). A movement has one of six kinds (receipt, issue, disposal, loss,
+  adjustment in, adjustment out) and a positive quantity; the sign comes from the kind. The quantity
+  of a lot on a date is the sum of its movements dated on or before that date
+  (`domain/stock.py`). The end-of-day balance of a lot is never negative: `services/stock.py`
+  applies every insert, update and delete, backdated ones included, and every import row in memory
+  first, and refuses it with `BALANCE_NEGATIVE` when `first_negative_day` finds a negative day. A
+  movement dated after today is `DATE_IN_FUTURE`; an adjustment needs a note.
+- **Statuses** (D34), in this order: not received, empty, expired, expiring, valid. A lot is valid
+  on a date when its expiry date is empty or not before that date. "Expiring" uses the warning
+  window of placeholder P11 (default 90 days). The expiry date is required for antidotes and
+  decontaminants. A status is always shown as text plus icon plus colour (D23).
+- **Indicators and alerts.** `domain/stock.py` registers `STOCK_VALID_QTY`, `STOCK_LOTS_EXPIRING`,
+  `STOCK_LOTS_EXPIRED` and `STOCK_TYPES_BELOW_MIN` under `Module.STOCK` (dimension keys `category`
+  and `item`), and the alerts `LOT_EXPIRED` and `LOW_STOCK` (critical) and `LOT_EXPIRING`
+  (warning), with the subject kinds `LOT` and `ITEM_TYPE`. An empty lot never raises an alert. The
+  minimum stock is not an indicator target (D35): a type is below it when its valid quantity is
+  strictly less, and a type with no minimum is never below it. It is placeholder P12 and is
+  local-only (no code default).
+- **Shared panel.** `ui/stock/panel.py` holds one `StockPanel` (summary per type, lots, movements of
+  the selected lot) used twice: as the tab "Estoque (lotes)" of the `infrastructure` page, with
+  every category and a Tipo filter that also lists the asset types, and as the first tab of the
+  `antidotes` page, limited to the antidote and decontaminant categories (D38). Writes go through
+  `StockService` and are disabled in read-only mode.
+- **Antidotes page.** `ui/antidotes/page.py` has three tabs: lots and movements (the panel), the
+  expiry schedule ("Aprazamento de vencimentos", by month over a horizon of 6, 12 or 24 months) and
+  the stock alerts of its categories. The Dashboard has a navigation shortcut to it that stays
+  enabled in read-only mode.
+- **CSV.** `stock_item_type`, `stock_lot` and `stock_movement` are entities of `storage/csv_io.py`
+  (order in [import-templates.md](import-templates.md)). The importer applies the movements of a
+  lot by date through the same balance rule.
+- **Anonymised report** (D37, Q27). The cells of per-type stock quantities, values and prices, the
+  stock chart and the list of expired and expiring lots are marked `internal_only` in
+  `reports/model.py`; `reports/anonymise.py` drops them. The anonymised report keeps counts only
+  (lots expired, lots expiring, types below the minimum, stock alerts). Until Q27 is answered the
+  anonymised report shows no quantity, value or price of any stock type.
+- **Demo.** `demo/stock.py` writes fictitious lots through `StockService` with dates relative to
+  the day the demo is made and none after it. Its minimums exist only in the demo database.
 
 ## 10. Registries of the shell
 

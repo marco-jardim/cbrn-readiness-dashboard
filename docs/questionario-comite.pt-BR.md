@@ -37,7 +37,8 @@ campo "Decisão registrada em" e guarde o conteúdo da resposta no documento pri
 
 Os códigos entre parênteses (por exemplo, P01, A02) são as hipóteses e os valores provisórios da
 seção 3.5 do [PLAN.md](../PLAN.md). As perguntas Q18 e Q20 a Q24 são técnicas ou do responsável pelo
-projeto e **não** fazem parte deste questionário: o responsável pelo projeto cuida delas.
+projeto e **não** fazem parte deste questionário: o responsável pelo projeto cuida delas. As
+perguntas Q25 a Q29, sobre o estoque, fazem parte deste questionário (seção 4).
 
 ---
 
@@ -430,13 +431,133 @@ Decisão registrada em: ____ / ____ / ________  por: ___________________________
 
 ---
 
-## 4. Terminologia
+## 4. Estoque de antídotos, descontaminantes e outros itens
+
+O estoque guarda apenas dados de gestão (tipos de item, lotes, quantidades, validades, preços e
+movimentações). Não há campos para doses, indicações ou protocolos.
+
+### Q25 - Classificação dos itens de estoque e acompanhamento por unidade
+
+**Pergunta.** As categorias dadas aos 17 tipos de item de estoque que já vêm no aplicativo
+(antídoto, descontaminante, detector, EPI e outro) são as corretas? Algum item precisa também de
+acompanhamento por unidade, com situação ou manutenção - por exemplo, a calibração de detectores, o
+teste hidrostático do cilindro de oxigênio, a maca bolha ou a inspeção da máscara fullface? Em caso
+afirmativo, ele deve ser registrado também como ativo, além do estoque?
+
+**Como o aplicativo funciona hoje.** O estoque é registrado só por lote, separado dos ativos
+acompanhados unidade por unidade (D32). Cada um dos 17 tipos tem uma categoria fixa (A16), que não
+muda depois que o tipo tem lotes. Um lote não tem situação operacional nem manutenção; um item que
+precise de estoque e de acompanhamento por unidade é registrado duas vezes, uma em cada aba.
+
+**Quem responde.** O comitê.
+
+**Resposta:**
+
+_______________________________________________________________________________
+
+_______________________________________________________________________________
+
+Decisão registrada em: ____ / ____ / ________  por: ______________________________
+
+### Q26 - Unidades de fornecimento e estoque mínimo
+
+**Pergunta.** Qual é a unidade de fornecimento de cada tipo de item (unidade, caixa, kit)? A
+quantidade pode ser fracionada? Qual é o estoque mínimo de cada tipo? É preciso um mínimo por local
+de armazenamento?
+
+**Como o aplicativo funciona hoje.** As quantidades são números inteiros de unidades de fornecimento
+por tipo de item; não há coluna de unidade nem quantidade fracionada (A15). O estoque mínimo fica
+vazio para todos os tipos: é um valor provisório (P12), digitado só no próprio computador e nunca
+guardado no repositório. Sem mínimo, nenhum tipo gera o alerta de estoque abaixo do mínimo. Não há
+mínimo por local.
+
+**Quem responde.** O comitê.
+
+**Resposta:**
+
+_______________________________________________________________________________
+
+_______________________________________________________________________________
+
+Decisão registrada em: ____ / ____ / ________  por: ______________________________
+
+### Q27 - Sensibilidade dos dados de estoque nos relatórios
+
+**Pergunta.** As quantidades, os valores e os preços do estoque por tipo podem aparecer no relatório
+anonimizado, ou devem ficar só nos relatórios internos? Quem recebe a lista interna de lotes vencidos
+e a vencer? As contagens de lotes e de tipos abaixo do mínimo são aceitáveis no relatório
+anonimizado?
+
+**Como o aplicativo funciona hoje.** Os dados de estoque levam o rótulo de trabalho "sensível". O
+relatório anonimizado omite as quantidades, os valores e os preços por tipo e o gráfico de estoque, e
+mantém só contagens (lotes vencidos, lotes a vencer, tipos abaixo do mínimo e alertas de estoque)
+(D37). O relatório interno traz os números e a lista de lotes vencidos e a vencer, e serve só para uso
+interno.
+
+**Quem responde.** O comitê.
+
+**Resposta:**
+
+_______________________________________________________________________________
+
+_______________________________________________________________________________
+
+Decisão registrada em: ____ / ____ / ________  por: ______________________________
+
+### Q28 - Regras de validade
+
+**Pergunta.** O prazo de aviso de 90 dias antes do vencimento está certo, e ele pode variar por
+categoria? Se a fonte informar só o mês e o ano da validade, vale o último dia do mês? A data de
+validade deve ser obrigatória também para as outras categorias (detector, EPI e outro)? Um lote
+vencido que ainda está em estoque é um alerta crítico?
+
+**Como o aplicativo funciona hoje.** O prazo de aviso é de 90 dias (P11), igual para todas as
+categorias e alterável em Configurações. Um lote é válido até o dia da validade, inclusive (D34). A
+validade é obrigatória só para antídotos e descontaminantes; a data é sempre completa (dia, mês e
+ano). Um lote vencido que ainda tem estoque gera um alerta crítico; um lote esgotado nunca gera
+alerta.
+
+**Quem responde.** O comitê.
+
+**Resposta:**
+
+_______________________________________________________________________________
+
+_______________________________________________________________________________
+
+Decisão registrada em: ____ / ____ / ________  por: ______________________________
+
+### Q29 - Movimentações e locais
+
+**Pergunta.** Os seis tipos de movimentação (entrada, saída, descarte, perda, ajuste de acréscimo e
+ajuste de redução) bastam? São necessárias transferências entre locais, um local de armazenamento por
+lote ou uma contagem absoluta (um inventário que define a quantidade)?
+
+**Como o aplicativo funciona hoje.** Há seis tipos de movimentação, com quantidade positiva; o sinal
+vem do tipo (D33). A quantidade em uma data é a soma das movimentações até essa data, o saldo de um
+lote nunca fica negativo e nenhuma movimentação tem data posterior a hoje. Um ajuste exige uma
+observação. Não há local de armazenamento, transferência nem contagem absoluta.
+
+**Quem responde.** O comitê.
+
+**Resposta:**
+
+_______________________________________________________________________________
+
+_______________________________________________________________________________
+
+Decisão registrada em: ____ / ____ / ________  por: ______________________________
+
+---
+
+## 5. Terminologia
 
 ### Q14 - Revisão da terminologia
 
 **Pergunta.** O comitê pode revisar os termos da interface em pt-BR, en-US e es-ES - por exemplo, os
-nomes dos níveis de EPI, "baia", "reciclagem" e os equivalentes em espanhol e em inglês de
-"prontidão"? A lista de termos para revisar está em
+nomes dos níveis de EPI, "baia", "reciclagem", "aprazamento" (como em "Aprazamento de vencimentos"),
+os nomes dos 17 tipos de item de estoque, que estão em maiúsculas e minúsculas como o proprietário os
+escreveu, e os equivalentes em espanhol e em inglês de "prontidão"? A lista de termos para revisar está em
 [revisao-terminologia.pt-BR.md](revisao-terminologia.pt-BR.md).
 
 **Como o aplicativo funciona hoje.** São usadas traduções provisórias (rascunhos, marcadas como

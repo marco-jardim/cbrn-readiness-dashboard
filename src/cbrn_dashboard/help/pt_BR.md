@@ -49,6 +49,35 @@ A página Infraestrutura lista os ativos por tipo e etiqueta com sua situação 
 
 Os tipos de ativo e a regra de disponibilidade, que decide se unidades degradadas contam como disponíveis, ficam em Configurações.
 
+### Estoque (lotes)
+<!-- topic: infrastructure_stock -->
+
+A página tem duas abas. "Equipamentos e instalações (unidades)" guarda os ativos descritos acima. "Estoque (lotes)" registra o que é mantido em estoque, por lote em vez de unidade por unidade: antídotos, descontaminantes, detectores, equipamentos de proteção e outros itens. Um lote não tem situação operacional nem manutenção. Um item que precisa de estoque e também de acompanhamento unidade por unidade é registrado duas vezes, uma em cada aba. O estoque guarda apenas dados de gestão: não há campos para doses, indicações ou protocolos, e os códigos de lote e as observações não devem conter informações clínicas.
+
+Lotes. Um lote pertence a um tipo de item (17 tipos já vêm com o programa, e você pode adicionar os seus em Configurações) e tem um código de lote, único dentro do tipo, uma data de validade, um preço unitário com sua moeda e observações. A validade, o preço e as observações são opcionais, exceto que os lotes de antídotos e de descontaminantes precisam de data de validade. As quantidades são unidades inteiras. Um lote é criado junto com sua primeira entrada: a data, a quantidade (mínimo 1) e uma referência. "Adicionar lote", "Editar lote" e "Excluir lote" atuam sobre o lote selecionado; excluir um lote também exclui suas movimentações e pede confirmação antes.
+
+Movimentações. Cada movimentação tem uma data, um tipo, uma quantidade maior que zero, uma referência e uma observação. Os tipos são Entrada (recebimento), Saída (consumo), Descarte, Perda, Ajuste (acréscimo) e Ajuste (redução). Uma entrada e um acréscimo somam ao lote; os demais tipos retiram dele. Um ajuste precisa de uma observação. "Registrar movimentação" acrescenta uma movimentação ao lote selecionado, e as movimentações do lote selecionado são listadas com o saldo após cada uma. A última movimentação de um lote não pode ser excluída: encerre um lote com um descarte ou uma perda.
+
+Quantidade em uma data. A quantidade de um lote nunca é armazenada. Ela é calculada como a soma das movimentações datadas até a data de referência, inclusive, por isso mudar a data de referência mostra o estoque daquele dia. O saldo de um lote nunca pode ficar negativo em nenhuma data: o programa recusa uma movimentação nova, editada ou excluída, e uma linha importada, que deixaria o lote abaixo de zero em alguma data, mesmo que seja retroativa. Uma movimentação não pode ter data posterior a hoje.
+
+Situação. Todo lote mostra uma situação, escrita em texto com ícone e cor:
+
+- Ainda não recebido: nenhuma movimentação tem data até a data de referência.
+- Esgotado: não há nada em estoque. Lotes esgotados nunca geram alerta e ficam ocultos, a menos que você marque "Mostrar lotes esgotados".
+- Vencido: a validade é anterior à data de referência e o lote ainda tem estoque.
+- A vencer: o lote vence dentro do prazo de aviso a partir da data de referência.
+- Válido: o lote não tem data de validade, ou a validade ainda não passou. Um lote ainda é válido no próprio dia da validade.
+
+A aba também mostra um resumo de cada tipo de item: a quantidade válida, a quantidade vencida ainda em estoque, a quantidade a vencer, o estoque mínimo, se o tipo está abaixo dele e o valor do estoque válido. Os valores aparecem por moeda e nunca são somados entre moedas.
+
+Filtro de tipo. O filtro Tipo acima das abas lista "Todos os tipos", os tipos de ativo e os tipos de item de estoque. Um tipo de ativo mostra a primeira aba, e um tipo de item de estoque mostra esta aba apenas com os lotes desse tipo. "Todos os tipos" não filtra nada e mantém a aba em que você está. Trocar de aba manualmente nunca muda o filtro.
+
+Configurações. O estoque mínimo de cada tipo de item é definido na seção "Tipos de item de estoque" das Configurações, e o prazo de aviso antes de um vencimento é definido nas configurações de Alertas. Ambos são valores provisórios até que o comitê os confirme.
+
+Alertas. Um lote vencido que ainda tem estoque é crítico, um lote a vencer é um aviso, e um tipo de item cuja quantidade válida está abaixo do mínimo é crítico. Um tipo sem mínimo nunca está abaixo dele. O Painel também mostra indicadores do estoque válido, dos lotes a vencer, dos lotes vencidos em estoque e dos itens abaixo do estoque mínimo.
+
+Adicionar, editar e excluir lotes e movimentações altera dados, por isso fica desativado no modo somente leitura, enquanto as tabelas continuam legíveis.
+
 ## Antídotos e descontaminantes
 <!-- topic: antidotes -->
 
@@ -91,6 +120,8 @@ Os alertas nunca são armazenados; eles são calculados a cada vez a partir dos 
 
 A barra de status mostra as contagens de alertas. Ao iniciar, um aviso pode resumir os alertas de aviso e críticos, com um botão que abre esta página. Quantos dias antes do vencimento de uma habilitação de EPI ou de uma manutenção um alerta é gerado é definido em Configurações.
 
+Três tipos de alerta vêm do estoque: um lote vencido que ainda tem estoque (crítico), um lote que vence dentro do prazo de aviso (aviso) e um tipo de item cuja quantidade válida está abaixo do estoque mínimo (crítico). "Abrir registro" vai para a aba de estoque da Infraestrutura ou, para esses tipos de item, para a página Antídotos e descontaminantes. Lotes esgotados nunca geram alerta.
+
 ## Relatórios
 <!-- topic: reports -->
 
@@ -111,7 +142,7 @@ Os arquivos que você exporta são arquivos comuns. Eles contêm dados internos 
 
 "Importar arquivo CSV..." na página Relatórios lê um arquivo CSV de um tipo de dado, por exemplo para registrar dados do passado. "Gravar modelos..." grava arquivos vazios, apenas com a linha de cabeçalho, em uma pasta que você escolhe; preencha-os ou edite uma exportação.
 
-O arquivo deve ser UTF-8, e o separador é ponto e vírgula ou vírgula. Importe um tipo de dado por vez e importe primeiro as listas a que os outros registros se referem: as listas (cursos, tipos de ativo, métricas e fontes de recursos), depois o pessoal, as habilitações de EPI, registros de treinamento e títulos, os ativos, seus eventos de situação e de manutenção, as edições de exercícios com seus países e resultados, as entradas de orçamento e, por fim, as execuções orçamentárias.
+O arquivo deve ser UTF-8, e o separador é ponto e vírgula ou vírgula. Importe um tipo de dado por vez e importe primeiro as listas a que os outros registros se referem: as listas (cursos, tipos de ativo, métricas, fontes de recursos e tipos de item de estoque), depois o pessoal, as habilitações de EPI, registros de treinamento e títulos, os ativos, seus eventos de situação e de manutenção, as edições de exercícios com seus países e resultados, as entradas de orçamento, as execuções orçamentárias, depois os lotes de estoque e, por fim, as movimentações de estoque. Um arquivo de lotes cria os lotes sem nenhuma quantidade; a quantidade vem das movimentações, por isso importe-as em seguida. As movimentações de estoque seguem as mesmas regras da tela: uma linha que deixaria o saldo de um lote negativo, ou que tenha data posterior a hoje, é recusada. Tipos de item de estoque padrão nunca são importados.
 
 Um arquivo é importado por inteiro ou não é importado. Se alguma linha tiver problema, nada é gravado e os problemas são informados. A janela de importação permite verificar um arquivo antes. A importação apenas adiciona registros: um registro existente nunca é alterado nem mesclado. A importação fica desativada no modo somente leitura.
 
@@ -156,9 +187,10 @@ Arquivo, "Abrir pasta de dados" mostra a pasta de dados no Explorador de Arquivo
 A página Configurações tem uma aba para cada grupo de configurações e uma caixa para cada seção:
 
 - Geral: o idioma, um rótulo de operador opcional registrado em cada alteração e os nomes da instituição e da unidade.
-- Alertas: quantos dias antes de um vencimento ou de uma data prevista um alerta é gerado.
+- Alertas: quantos dias antes de um vencimento ou de uma data prevista um alerta é gerado. Isso inclui o campo "Lotes de estoque: antecedência do alerta de vencimento (dias)", o prazo de aviso antes do vencimento de um lote de estoque (valor provisório P11, 90 dias até que o comitê o confirme).
 - Metas: as metas dos indicadores, que podem ser adicionadas, editadas, ativadas ou desativadas e excluídas. Enquanto uma meta não for definida, o indicador mostra "Sem meta".
 - Pessoal, Infraestrutura, Exercícios e Orçamento: as listas e as regras de cada módulo, como descrito em suas páginas.
+- Infraestrutura também tem a seção "Tipos de item de estoque": os 17 tipos de item padrão e os seus próprios. Para cada tipo é possível definir o estoque mínimo, que fica vazio (sem mínimo) até você defini-lo, e deixar o tipo ativo ou inativo; um tipo padrão não pode ser excluído, e a categoria de um tipo não muda depois que ele tem lotes. O estoque mínimo é o valor provisório P12: traz a marca "Valor provisório - a confirmar" e um botão Confirmar, e é guardado apenas neste computador.
 - Backup, Relatórios e Instantâneos: as configurações de backups, de relatórios e de instantâneos.
 
 Alguns valores são provisórios e ainda precisam ser confirmados pelo comitê. Eles trazem a marca "Valor provisório - a confirmar" e um botão Confirmar.
