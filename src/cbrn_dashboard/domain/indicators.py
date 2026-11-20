@@ -120,6 +120,7 @@ class Module(StrEnum):
     INFRASTRUCTURE = "INFRASTRUCTURE"
     EXERCISES = "EXERCISES"
     BUDGET = "BUDGET"
+    STOCK = "STOCK"
 
 
 # --------------------------------------------------------------------------------------------

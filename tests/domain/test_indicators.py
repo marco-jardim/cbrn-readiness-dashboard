@@ -117,7 +117,13 @@ def test_enum_codes_are_stable() -> None:
     ]
     assert [d.value for d in Direction] == ["HIGHER_IS_BETTER", "LOWER_IS_BETTER"]
     assert [u.value for u in UnitKind] == ["COUNT", "RATIO", "CURRENCY", "DAYS"]
-    assert [m.value for m in Module] == ["PERSONNEL", "INFRASTRUCTURE", "EXERCISES", "BUDGET"]
+    assert [m.value for m in Module] == [
+        "PERSONNEL",
+        "INFRASTRUCTURE",
+        "EXERCISES",
+        "BUDGET",
+        "STOCK",
+    ]
 
 
 # --------------------------------------------------------------------------------------------

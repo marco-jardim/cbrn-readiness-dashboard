@@ -67,7 +67,7 @@ Top-level packages of `src/cbrn_dashboard/`:
 | `storage/` | `db.py` (the single place that opens connections), `migrate.py` and `migrations/`, `repository.py` (writes with the change log), one repository per area, `settings_repo.py`, `targets_repo.py`, `snapshots_repo.py`, `app_meta.py`, `backup.py` (plain copies and rotation), `crypto_backup.py` (the `.cbrnbak` container), `csv_io.py` |
 | `services/` | use cases over storage and domain: `personnel.py`, `infrastructure.py`, `exercises.py`, `budget.py`, `indicators.py`, `alerts.py`, `dashboard.py`, `config.py`, `snapshots.py`, `validation_export.py`, `backup.py`, `restore.py`, `export.py`, `importer.py`, `countries.py`, `errors.py` |
 | `reports/` | `model.py` (report content as codes and numbers), `anonymise.py` (small-count suppression), `message_keys.py` (code-to-message-key map) and `labels.py` (texts in the language chosen for the report), `pdf.py` (Qt rendering) |
-| `ui/` | one sub-package per area: `ui/shell/` (main window, registry, context, prompts, banners, charts, formatting, translators, first-run notice, instance lock, the in-app help viewer `help.py` and the About dialog `about.py`), `ui/personnel/`, `ui/infrastructure/`, `ui/exercises/`, `ui/budget/`, `ui/dashboard/`, `ui/alerts/`, `ui/settings/`, `ui/backup/`, `ui/reports/` |
+| `ui/` | one sub-package per area: `ui/shell/` (main window, registry, context, prompts, banners, charts, formatting, translators, first-run notice, instance lock, the in-app help viewer `help.py` and the About dialog `about.py`), `ui/personnel/`, `ui/infrastructure/`, `ui/exercises/`, `ui/budget/`, `ui/stock/`, `ui/dashboard/`, `ui/alerts/`, `ui/settings/`, `ui/backup/`, `ui/reports/` |
 | `i18n/` | the languages, the area-to-source map and the Qt Linguist catalogues `<area>_<lang>.ts` |
 | `resources/` | `app.ico`, `countries.json` and `THIRD_PARTY_DATA.md` |
 | `help/` | the in-app help, one Markdown file per language (`pt_BR.md`, `en_US.md`, `es_ES.md`); package data, shown by `ui/shell/help.py` |
@@ -370,10 +370,10 @@ English and Spanish (Spain), written `pt_BR`, `en_US` and `es_ES` in file names 
   return codes; each UI area's `labels.py` maps codes to translated strings.
 - **One catalogue per area and language**, `<area>_<lang>.ts` in `src/cbrn_dashboard/i18n/`. The
   areas, and the source folders they cover, are the dictionary `AREAS` in `i18n/__init__.py`:
-  `shell`, `personnel`, `infrastructure`, `exercises`, `budget`, `alerts`, `dashboard`, `settings`,
-  `backup`, `reports` (the Qt-free report package and its PDF renderer) and `reports_ui` (the
-  reports page, `ui/reports/`). One catalogue per area lets people work in parallel without editing
-  the same file.
+  `shell`, `personnel`, `infrastructure`, `exercises`, `budget`, `stock` (the shared stock UI,
+  `ui/stock/`, context `Stock`), `alerts`, `dashboard`, `settings`, `backup`, `reports` (the
+  Qt-free report package and its PDF renderer) and `reports_ui` (the reports page, `ui/reports/`).
+  One catalogue per area lets people work in parallel without editing the same file.
 - **Workflow.** After you add or change a string, run `python scripts/i18n.py update` (it runs
   `lupdate` with `-locations none`, so the files do not churn). Fill in the pt-BR and es-ES
   translations; `en_US` is a real catalogue too. `python scripts/i18n.py compile` runs `lrelease`

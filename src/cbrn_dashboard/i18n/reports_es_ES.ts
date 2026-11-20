@@ -21,6 +21,10 @@
         <translation type="unfinished">Presupuesto</translation>
     </message>
     <message>
+        <source>Stock</source>
+        <translation type="unfinished">Existencias</translation>
+    </message>
+    <message>
         <source>On target</source>
         <translation type="unfinished">Dentro del objetivo</translation>
     </message>
@@ -86,6 +90,22 @@
         <translation type="unfinished">Tasa de ejecución presupuestaria</translation>
     </message>
     <message>
+        <source>Valid stock</source>
+        <translation type="unfinished">Existencias válidas</translation>
+    </message>
+    <message>
+        <source>Lots expiring soon</source>
+        <translation type="unfinished">Lotes próximos a caducar</translation>
+    </message>
+    <message>
+        <source>Expired lots still in stock</source>
+        <translation type="unfinished">Lotes caducados en existencias</translation>
+    </message>
+    <message>
+        <source>Item types below the minimum stock</source>
+        <translation type="unfinished">Artículos por debajo de las existencias mínimas</translation>
+    </message>
+    <message>
         <source>Level</source>
         <translation type="unfinished">Nivel</translation>
     </message>
@@ -114,6 +134,14 @@
         <translation type="unfinished">Ejercicio fiscal</translation>
     </message>
     <message>
+        <source>Category</source>
+        <translation type="unfinished">Categoría</translation>
+    </message>
+    <message>
+        <source>Stock item</source>
+        <translation type="unfinished">Artículo de existencias</translation>
+    </message>
+    <message>
         <source>Available</source>
         <translation type="unfinished">Disponible</translation>
     </message>
@@ -136,6 +164,10 @@
     <message>
         <source>Executed</source>
         <translation type="unfinished">Ejecutado</translation>
+    </message>
+    <message>
+        <source>Minimum stock</source>
+        <translation type="unfinished">Existencias mínimas</translation>
     </message>
     <message>
         <source>Level %1</source>
@@ -344,6 +376,10 @@
     <message>
         <source>Valid qualifications by protection level</source>
         <translation type="unfinished">Habilitaciones válidas por nivel de protección</translation>
+    </message>
+    <message>
+        <source>Valid stock and minimum of antidotes and decontaminants</source>
+        <translation type="unfinished">Existencias válidas y mínimas de antídotos y descontaminantes</translation>
     </message>
     <message>
         <source>%1, %2</source>

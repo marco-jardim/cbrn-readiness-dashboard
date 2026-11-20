@@ -172,6 +172,42 @@
         <translation type="unfinished">Disponibles</translation>
     </message>
     <message>
+        <source>Antidote</source>
+        <translation type="unfinished">Antídoto</translation>
+    </message>
+    <message>
+        <source>Decontaminant</source>
+        <translation type="unfinished">Descontaminante</translation>
+    </message>
+    <message>
+        <source>Detector</source>
+        <translation type="unfinished">Detección</translation>
+    </message>
+    <message>
+        <source>PPE</source>
+        <translation type="unfinished">EPP</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation type="unfinished">Otro</translation>
+    </message>
+    <message>
+        <source>Valid stock</source>
+        <translation type="unfinished">Existencias válidas</translation>
+    </message>
+    <message>
+        <source>Lots expiring soon</source>
+        <translation type="unfinished">Lotes próximos a caducar</translation>
+    </message>
+    <message>
+        <source>Expired lots still in stock</source>
+        <translation type="unfinished">Lotes caducados en existencias</translation>
+    </message>
+    <message>
+        <source>Item types below the minimum stock</source>
+        <translation type="unfinished">Artículos por debajo de las existencias mínimas</translation>
+    </message>
+    <message>
         <source>person</source>
         <translation type="unfinished">persona</translation>
     </message>
@@ -186,6 +222,14 @@
     <message>
         <source>units</source>
         <translation type="unfinished">unidades</translation>
+    </message>
+    <message>
+        <source>lot</source>
+        <translation type="unfinished">lote</translation>
+    </message>
+    <message>
+        <source>lots</source>
+        <translation type="unfinished">lotes</translation>
     </message>
     <message>
         <source>qualification</source>
@@ -224,6 +268,34 @@
         <translation type="unfinished">día</translation>
     </message>
     <message>
+        <source>item type</source>
+        <translation type="unfinished">tipo de artículo</translation>
+    </message>
+    <message>
+        <source>item types</source>
+        <translation type="unfinished">tipos de artículo</translation>
+    </message>
+    <message>
+        <source>Stock</source>
+        <translation type="unfinished">Existencias</translation>
+    </message>
+    <message>
+        <source>minimum %1</source>
+        <translation type="unfinished">mínimo %1</translation>
+    </message>
+    <message>
+        <source>minimum not set</source>
+        <translation type="unfinished">mínimo no definido</translation>
+    </message>
+    <message>
+        <source>Category %1</source>
+        <translation type="unfinished">Categoría %1</translation>
+    </message>
+    <message>
+        <source>Item %1</source>
+        <translation type="unfinished">Artículo %1</translation>
+    </message>
+    <message>
         <source>In service</source>
         <translation type="unfinished">En servicio</translation>
     </message>
@@ -244,12 +316,20 @@
         <translation type="unfinished">Ejecutado</translation>
     </message>
     <message>
+        <source>Minimum stock</source>
+        <translation type="unfinished">Existencias mínimas</translation>
+    </message>
+    <message>
         <source>Availability by asset type</source>
         <translation type="unfinished">Disponibilidad por tipo de activo</translation>
     </message>
     <message>
         <source>Participants and countries by edition</source>
         <translation type="unfinished">Participantes y países por edición</translation>
+    </message>
+    <message>
+        <source>Valid stock and minimum of antidotes and decontaminants</source>
+        <translation type="unfinished">Existencias válidas y mínimas de antídotos y descontaminantes</translation>
     </message>
     <message>
         <source>Allocated and executed by funding source, %1, fiscal year %2</source>
@@ -266,6 +346,10 @@
     <message>
         <source>Edition</source>
         <translation type="unfinished">Edición</translation>
+    </message>
+    <message>
+        <source>Item type</source>
+        <translation type="unfinished">Tipo de artículo</translation>
     </message>
     <message>
         <source>Funding source</source>

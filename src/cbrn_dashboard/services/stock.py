@@ -46,6 +46,7 @@ from cbrn_dashboard.domain import stock as rules
 from cbrn_dashboard.domain.budget import is_valid_currency
 from cbrn_dashboard.domain.config import ConfigError, ReadinessConfig
 from cbrn_dashboard.domain.dates import InvalidDateError, format_iso_date, parse_iso_date
+from cbrn_dashboard.domain.indicators import IndicatorValue
 from cbrn_dashboard.domain.stock import (
     EXPIRY_REQUIRED_CATEGORIES,
     SIGN,
@@ -1035,6 +1036,15 @@ class StockService:
         """Every type, lot and movement as domain records, for the alert and indicator services."""
         types, lots, movements = self._domain_inputs()
         return tuple(types), tuple(lots), tuple(movements)
+
+    def indicator_values(self, as_of: date) -> list[IndicatorValue]:
+        """The stock indicator values on ``as_of`` (input of the indicators, D35, D36).
+
+        The emission rule lives in ``domain/stock.py``: no value for a type that is neither in use
+        on the date nor has a minimum, so a database without stock gives an empty list.
+        """
+        types, lots, movements = self._domain_inputs()
+        return rules.indicator_values(types, lots, movements, as_of, self._rules())
 
     def lot_rows(
         self, as_of: date, categories: Iterable[StockCategory | str] | None = None

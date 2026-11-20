@@ -63,6 +63,7 @@ _MODULE_LABELS: dict[str, Callable[[], str]] = {
     Module.INFRASTRUCTURE.value: lambda: QCoreApplication.translate("Alerts", "Infrastructure"),
     Module.EXERCISES.value: lambda: QCoreApplication.translate("Alerts", "Exercises"),
     Module.BUDGET.value: lambda: QCoreApplication.translate("Alerts", "Budget"),
+    Module.STOCK.value: lambda: QCoreApplication.translate("Alerts", "Stock"),
 }
 
 #: Every severity, module and alert-kind code (for the completeness tests).

@@ -21,6 +21,10 @@
         <translation type="unfinished">Orçamento</translation>
     </message>
     <message>
+        <source>Stock</source>
+        <translation type="unfinished">Estoque</translation>
+    </message>
+    <message>
         <source>On target</source>
         <translation type="unfinished">Dentro da meta</translation>
     </message>
@@ -86,6 +90,22 @@
         <translation type="unfinished">Taxa de execução orçamentária</translation>
     </message>
     <message>
+        <source>Valid stock</source>
+        <translation type="unfinished">Estoque válido</translation>
+    </message>
+    <message>
+        <source>Lots expiring soon</source>
+        <translation type="unfinished">Lotes a vencer</translation>
+    </message>
+    <message>
+        <source>Expired lots still in stock</source>
+        <translation type="unfinished">Lotes vencidos em estoque</translation>
+    </message>
+    <message>
+        <source>Item types below the minimum stock</source>
+        <translation type="unfinished">Itens abaixo do estoque mínimo</translation>
+    </message>
+    <message>
         <source>Level</source>
         <translation type="unfinished">Nível</translation>
     </message>
@@ -114,6 +134,14 @@
         <translation type="unfinished">Exercício fiscal</translation>
     </message>
     <message>
+        <source>Category</source>
+        <translation type="unfinished">Categoria</translation>
+    </message>
+    <message>
+        <source>Stock item</source>
+        <translation type="unfinished">Item de estoque</translation>
+    </message>
+    <message>
         <source>Available</source>
         <translation type="unfinished">Disponível</translation>
     </message>
@@ -136,6 +164,10 @@
     <message>
         <source>Executed</source>
         <translation type="unfinished">Executado</translation>
+    </message>
+    <message>
+        <source>Minimum stock</source>
+        <translation type="unfinished">Estoque mínimo</translation>
     </message>
     <message>
         <source>Level %1</source>
@@ -344,6 +376,10 @@
     <message>
         <source>Valid qualifications by protection level</source>
         <translation type="unfinished">Habilitações válidas por nível de proteção</translation>
+    </message>
+    <message>
+        <source>Valid stock and minimum of antidotes and decontaminants</source>
+        <translation type="unfinished">Estoque válido e mínimo de antídotos e descontaminantes</translation>
     </message>
     <message>
         <source>%1, %2</source>

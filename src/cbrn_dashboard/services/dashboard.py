@@ -16,8 +16,10 @@ The result is codes and numbers only; the UI turns codes into words:
   it to the chart adapter's data and offers the same numbers as a table.
 
 Charts, in this fixed order: ``personnel_valid_by_level``, ``infrastructure_availability``,
-``exercises_by_edition`` and then one ``budget_<CUR>`` chart per currency that has an entry in the
-fiscal year of the as-of date. Currencies are never mixed in one chart (D15). Budget amounts in a
+``exercises_by_edition``, then one ``budget_<CUR>`` chart per currency that has an entry in the
+fiscal year of the as-of date, and last ``stock_antidotes_by_item`` (only when a stock service is
+wired and at least one antidote or decontaminant type has a value). Currencies are never mixed in
+one chart (D15). Budget amounts in a
 chart are MAJOR units as floats for display only; the exact integers stay in the tiles' context and
 on the budget page. A chart without data is still present, with empty categories.
 """
@@ -40,18 +42,21 @@ from cbrn_dashboard.domain.indicators import (
     decode_dimension,
 )
 from cbrn_dashboard.domain.personnel import PpeLevel, is_active
+from cbrn_dashboard.domain.stock import ANTIDOTE_PAGE_CATEGORIES
 from cbrn_dashboard.services.alerts import AlertService
 from cbrn_dashboard.services.budget import BudgetService
 from cbrn_dashboard.services.exercises import ExercisesService
 from cbrn_dashboard.services.indicators import IndicatorService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
+from cbrn_dashboard.services.stock import StockService
 
 __all__ = [
     "CHART_BUDGET_PREFIX",
     "CHART_EXERCISES",
     "CHART_INFRASTRUCTURE",
     "CHART_PERSONNEL",
+    "CHART_STOCK",
     "MAX_EDITIONS",
     "ChartSpec",
     "DashboardData",
@@ -66,11 +71,15 @@ CHART_INFRASTRUCTURE = "infrastructure_availability"
 CHART_EXERCISES = "exercises_by_edition"
 #: The budget chart of currency ``CUR`` has the key ``budget_CUR``.
 CHART_BUDGET_PREFIX = "budget_"
+#: Valid stock and minimum per antidote and decontaminant type (series ``stock_valid`` and
+#: ``stock_minimum``); present only when at least one such type has a value (D36).
+CHART_STOCK = "stock_antidotes_by_item"
 
 #: The exercises chart shows at most this many of the most recent finished editions.
 MAX_EDITIONS = 12
 
 _VALID_CERTIFICATES = "PERS_CERT_VALID"
+_STOCK_VALID_QTY = "STOCK_VALID_QTY"
 _EMPTY: Mapping[str, float] = MappingProxyType({})
 
 
@@ -141,6 +150,7 @@ class DashboardService:
         infrastructure: InfrastructureService,
         exercises: ExercisesService,
         budget: BudgetService,
+        stock: StockService | None = None,
     ) -> None:
         self._indicators = indicators
         self._alerts = alerts
@@ -148,6 +158,7 @@ class DashboardService:
         self._infrastructure = infrastructure
         self._exercises = exercises
         self._budget = budget
+        self._stock = stock
 
     # ----- the public view
 
@@ -165,6 +176,7 @@ class DashboardService:
                 self._infrastructure_chart(as_of),
                 self._exercises_chart(as_of),
                 *self._budget_charts(as_of),
+                *self._stock_charts(tiles),
             ),
         )
 
@@ -246,6 +258,44 @@ class DashboardService:
             ),
             unit=UnitKind.COUNT,
             parameters=_read_only({}),
+        )
+
+    def _stock_charts(self, tiles: tuple[Tile, ...]) -> tuple[ChartSpec, ...]:
+        """Valid quantity and minimum per antidote or decontaminant type that has a value.
+
+        Taken from the ``STOCK_VALID_QTY`` tiles, so the chart follows the emission rule (a type
+        in use on the date or with a minimum). Without such a tile (or without a stock service)
+        there is no stock chart at all: a fresh database shows no stock (D36, K22). The minimum
+        is ``None`` (not recorded, D30) for a type without one. The series keys are
+        ``stock_valid`` and ``stock_minimum``, never ``valid`` (that is the personnel series).
+        """
+        if self._stock is None:
+            return ()
+        wanted = {category.value for category in ANTIDOTE_PAGE_CATEGORIES}
+        rows = [
+            tile
+            for tile in tiles
+            if tile.code == _STOCK_VALID_QTY
+            and tile.dimension_parts.get("category") in wanted
+            and "item" in tile.dimension_parts
+        ]
+        if not rows:
+            return ()
+        minimum_of: list[float | None] = []
+        for tile in rows:
+            minimum = tile.context.get("minimum")
+            minimum_of.append(None if minimum is None else float(minimum))
+        return (
+            ChartSpec(
+                key=CHART_STOCK,
+                categories=tuple(tile.dimension_parts["item"] for tile in rows),
+                series=(
+                    SeriesSpec("stock_valid", tuple(tile.value for tile in rows)),
+                    SeriesSpec("stock_minimum", tuple(minimum_of)),
+                ),
+                unit=UnitKind.COUNT,
+                parameters=_read_only({}),
+            ),
         )
 
     def _budget_charts(self, as_of: date) -> tuple[ChartSpec, ...]:

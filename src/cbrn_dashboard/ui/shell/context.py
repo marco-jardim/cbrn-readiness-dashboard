@@ -80,6 +80,7 @@ def build_services(
     infrastructure = InfrastructureService(conn, clock, operator)
     exercises = ExercisesService(conn, clock, operator)
     budget = BudgetService(conn, clock, operator)
+    stock = StockService(conn, clock, operator)
     indicators = IndicatorService(
         conn,
         clock,
@@ -88,6 +89,7 @@ def build_services(
         infrastructure=infrastructure,
         exercises=exercises,
         budget=budget,
+        stock=stock,
     )
     alerts = AlertService(personnel=personnel, infrastructure=infrastructure, indicators=indicators)
     dashboard = DashboardService(
@@ -97,9 +99,10 @@ def build_services(
         infrastructure=infrastructure,
         exercises=exercises,
         budget=budget,
+        stock=stock,
     )
     snapshots = SnapshotService(
-        conn, clock, operator, indicators=indicators, infrastructure=infrastructure
+        conn, clock, operator, indicators=indicators, infrastructure=infrastructure, stock=stock
     )
     validation_export = ValidationExportService(
         conn, clock, snapshots=snapshots, exercises=exercises, indicators=indicators
@@ -115,7 +118,7 @@ def build_services(
         dashboard=dashboard,
         snapshots=snapshots,
         validation_export=validation_export,
-        stock=StockService(conn, clock, operator),
+        stock=stock,
     )
 
 

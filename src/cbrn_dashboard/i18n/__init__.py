@@ -26,6 +26,7 @@ AREAS: dict[str, tuple[str, ...]] = {
     "infrastructure": ("ui/infrastructure",),
     "exercises": ("ui/exercises",),
     "budget": ("ui/budget",),
+    "stock": ("ui/stock",),
     "alerts": ("ui/alerts",),
     "dashboard": ("ui/dashboard",),
     "settings": ("ui/settings",),

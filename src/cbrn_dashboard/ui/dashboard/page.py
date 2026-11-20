@@ -41,6 +41,7 @@ from cbrn_dashboard.services.dashboard import ChartSpec, DashboardData, Tile
 from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.services.infrastructure import AssetTypeView
 from cbrn_dashboard.services.snapshots import SnapshotOrigin, SnapshotService, SnapshotView
+from cbrn_dashboard.services.stock import StockTypeView
 from cbrn_dashboard.ui.dashboard.labels import (
     STATUS_COLOURS,
     DisplayNames,
@@ -272,6 +273,7 @@ class DashboardPage(QWidget):
         self._problem: str | None = None
         self._types: dict[str, AssetTypeView] = {}
         self._sources: dict[str, SourceView] = {}
+        self._stock_types: dict[str, StockTypeView] = {}
 
         self.as_of_label = _plain(QLabel(self))
         self.as_of_label.setObjectName("as_of_label")
@@ -359,7 +361,7 @@ class DashboardPage(QWidget):
         if self.context.services.dashboard is None:
             self._data = None
             self._problem = None
-            self._types, self._sources = {}, {}
+            self._types, self._sources, self._stock_types = {}, {}, {}
         self._render()
 
     def _language_changed(self, _code: str) -> None:
@@ -381,17 +383,23 @@ class DashboardPage(QWidget):
     def _as_of_changed(self, _value: object) -> None:
         self.refresh()
 
-    def _lookups(self) -> tuple[dict[str, AssetTypeView], dict[str, SourceView]]:
-        """The user-defined asset types and funding sources, for the display names."""
+    def _lookups(
+        self,
+    ) -> tuple[dict[str, AssetTypeView], dict[str, SourceView], dict[str, StockTypeView]]:
+        """The user-defined asset types, funding sources and stock types, for the display names."""
         infrastructure = self.context.services.infrastructure
         budget = self.context.services.budget
+        stock = self.context.services.stock
         types: dict[str, AssetTypeView] = {}
         if infrastructure is not None:
             types = {t.code: t for t in infrastructure.list_types(include_inactive=True)}
         sources: dict[str, SourceView] = {}
         if budget is not None:
             sources = {s.code: s for s in budget.list_sources(include_inactive=True)}
-        return types, sources
+        stock_types: dict[str, StockTypeView] = {}
+        if stock is not None:
+            stock_types = {t.code: t for t in stock.list_types(include_inactive=True)}
+        return types, sources, stock_types
 
     def refresh(self) -> None:
         """Read the dashboard for the as-of date again and rebuild what is shown.
@@ -402,14 +410,14 @@ class DashboardPage(QWidget):
         service = self.context.services.dashboard
         self._data = None
         self._problem = None
-        self._types, self._sources = {}, {}
+        self._types, self._sources, self._stock_types = {}, {}, {}
         if service is not None:
             try:
                 self._data = service.data(self.context.as_of)
-                self._types, self._sources = self._lookups()
+                self._types, self._sources, self._stock_types = self._lookups()
             except ServiceError as error:
                 self._data = None
-                self._types, self._sources = {}, {}
+                self._types, self._sources, self._stock_types = {}, {}, {}
                 self._problem = error.code
         self._render()
 
@@ -432,7 +440,7 @@ class DashboardPage(QWidget):
                 self.alert_labels[severity].setText("")
             self._show_charts((), DisplayNames(lang))
         else:
-            names = DisplayNames(lang, self._types, self._sources)
+            names = DisplayNames(lang, self._types, self._sources, self._stock_types)
             self._show_tiles(data.tiles, names)
             for severity in Severity:
                 text = alert_text(severity.value, data.alert_counts.get(severity, 0), lang)

@@ -26,6 +26,7 @@ from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPixmap, QPolygonF
 from cbrn_dashboard.domain.alerts import Severity
 from cbrn_dashboard.domain.budget import is_valid_currency
 from cbrn_dashboard.domain.indicators import IndicatorStatus, Module, UnitKind
+from cbrn_dashboard.reports.message_keys import stock_type_key
 from cbrn_dashboard.services.budget import SourceView
 from cbrn_dashboard.services.config import CORRUPT_SETTING
 from cbrn_dashboard.services.dashboard import (
@@ -33,12 +34,14 @@ from cbrn_dashboard.services.dashboard import (
     CHART_EXERCISES,
     CHART_INFRASTRUCTURE,
     CHART_PERSONNEL,
+    CHART_STOCK,
     ChartSpec,
     Tile,
 )
 from cbrn_dashboard.services.errors import INVALID_DATE, NOT_FOUND, READ_ONLY
 from cbrn_dashboard.services.infrastructure import AssetTypeView
 from cbrn_dashboard.services.snapshots import AS_OF_IN_FUTURE, ORIGIN_NOT_ALLOWED
+from cbrn_dashboard.services.stock import StockTypeView, stock_type_label
 from cbrn_dashboard.ui.budget.labels import fill_placeholders, source_name
 from cbrn_dashboard.ui.budget.models import money_text, rate_text
 from cbrn_dashboard.ui.dashboard.models import NOT_RECORDED, count_text
@@ -52,6 +55,7 @@ from cbrn_dashboard.ui.personnel.labels import (
 from cbrn_dashboard.ui.shell.charts import PALETTE, ChartData, ChartKind, ChartSeries
 from cbrn_dashboard.ui.shell.formatting import format_date
 from cbrn_dashboard.ui.shell.widgets import device_pixel_ratio, label_for
+from cbrn_dashboard.ui.stock.labels import code_label as stock_code_label
 
 __all__ = [
     "ALL_ERROR_CODES",
@@ -92,6 +96,35 @@ class DisplayNames:
     lang: str
     types: Mapping[str, AssetTypeView] = field(default_factory=dict)
     sources: Mapping[str, SourceView] = field(default_factory=dict)
+    stock_types: Mapping[str, StockTypeView] = field(default_factory=dict)
+
+
+# The built-in stock type names are catalogued by the stock labels (context ``Stock``); the key
+# table of the reports holds their source texts, so they are looked up through the class (this is
+# not a literal translate call for the extraction guard, the texts are extracted elsewhere).
+
+_STOCK_CATEGORIES: dict[str, Callable[[], str]] = {
+    "antidote": lambda: QCoreApplication.translate("Dashboard", "Antidote"),
+    "decontaminant": lambda: QCoreApplication.translate("Dashboard", "Decontaminant"),
+    "detector": lambda: QCoreApplication.translate("Dashboard", "Detector"),
+    "ppe": lambda: QCoreApplication.translate("Dashboard", "PPE"),
+    "other": lambda: QCoreApplication.translate("Dashboard", "Other"),
+}
+
+
+def _stock_category_name(code: str) -> str:
+    """The name of a stock category (the code itself when unknown)."""
+    return label_for(_STOCK_CATEGORIES, code)
+
+
+def _stock_type_name(code: str, names: DisplayNames) -> str:
+    """The name of a stock item type: built-in ones are named by the UI, user-defined ones by
+    their own labels with the usual fallback (the code when unknown)."""
+    key = stock_type_key(code)
+    view = names.stock_types.get(code)
+    if key is not None and (view is None or view.built_in):
+        return stock_code_label(code)
+    return code if view is None else stock_type_label(view, names.lang)
 
 
 def _type_name(code: str, names: DisplayNames) -> str:
@@ -135,6 +168,14 @@ _INDICATOR_NAMES: dict[str, Callable[[], str]] = {
         "Dashboard", "Days since the latest exercise"
     ),
     "BUD_EXEC_RATE": lambda: QCoreApplication.translate("Dashboard", "Budget execution rate"),
+    "STOCK_VALID_QTY": lambda: QCoreApplication.translate("Dashboard", "Valid stock"),
+    "STOCK_LOTS_EXPIRING": lambda: QCoreApplication.translate("Dashboard", "Lots expiring soon"),
+    "STOCK_LOTS_EXPIRED": lambda: QCoreApplication.translate(
+        "Dashboard", "Expired lots still in stock"
+    ),
+    "STOCK_TYPES_BELOW_MIN": lambda: QCoreApplication.translate(
+        "Dashboard", "Item types below the minimum stock"
+    ),
 }
 
 # The indicator codes that have a name (for the completeness test).
@@ -147,6 +188,10 @@ _PERSON = (
 _UNIT = (
     lambda: QCoreApplication.translate("Dashboard", "unit"),
     lambda: QCoreApplication.translate("Dashboard", "units"),
+)
+_LOT = (
+    lambda: QCoreApplication.translate("Dashboard", "lot"),
+    lambda: QCoreApplication.translate("Dashboard", "lots"),
 )
 
 # The unit noun of a tile: (singular, plural). The number itself stays in the value label, so the
@@ -182,6 +227,13 @@ _INDICATOR_UNITS: dict[str, tuple[Callable[[], str], Callable[[], str]]] = {
         lambda: QCoreApplication.translate("Dashboard", "of the allocation"),
         lambda: QCoreApplication.translate("Dashboard", "of the allocation"),
     ),
+    "STOCK_VALID_QTY": _UNIT,
+    "STOCK_LOTS_EXPIRING": _LOT,
+    "STOCK_LOTS_EXPIRED": _LOT,
+    "STOCK_TYPES_BELOW_MIN": (
+        lambda: QCoreApplication.translate("Dashboard", "item type"),
+        lambda: QCoreApplication.translate("Dashboard", "item types"),
+    ),
 }
 
 _UNIT_KIND_LABELS: dict[str, Callable[[], str]] = {
@@ -196,6 +248,7 @@ _MODULE_TITLES: dict[str, Callable[[], str]] = {
     Module.INFRASTRUCTURE.value: lambda: QCoreApplication.translate("Dashboard", "Infrastructure"),
     Module.EXERCISES.value: lambda: QCoreApplication.translate("Dashboard", "Exercises"),
     Module.BUDGET.value: lambda: QCoreApplication.translate("Dashboard", "Budget"),
+    Module.STOCK.value: lambda: QCoreApplication.translate("Dashboard", "Stock"),
 }
 
 _STATUS_LABELS: dict[str, Callable[[], str]] = {
@@ -278,6 +331,12 @@ def context_text(tile: Tile, lang: str) -> str:
         return QCoreApplication.translate("Dashboard", "of %1 in service").replace(
             "%1", count_text(context["in_service"], lang)
         )
+    if tile.code == "STOCK_VALID_QTY":
+        if "minimum" in context:
+            return QCoreApplication.translate("Dashboard", "minimum %1").replace(
+                "%1", count_text(context["minimum"], lang)
+            )
+        return QCoreApplication.translate("Dashboard", "minimum not set")
     if tile.code == "BUD_EXEC_RATE" and {"allocated_minor", "executed_minor"} <= set(context):
         currency = tile.dimension_parts.get("currency", "")
         if is_valid_currency(currency):
@@ -305,6 +364,14 @@ def _part_text(code: str, key: str, value: str, names: DisplayNames) -> str:
         )
     if key == "kind":
         return QCoreApplication.translate("Dashboard", "Kind %1").replace("%1", kind_label(value))
+    if key == "category":
+        return QCoreApplication.translate("Dashboard", "Category %1").replace(
+            "%1", _stock_category_name(value)
+        )
+    if key == "item":
+        return QCoreApplication.translate("Dashboard", "Item %1").replace(
+            "%1", _stock_type_name(value, names)
+        )
     if key == "currency":
         return QCoreApplication.translate("Dashboard", "Currency %1").replace("%1", value)
     if key == "source":
@@ -327,8 +394,14 @@ def join_texts(texts: Sequence[str]) -> str:
 
 
 def dimension_text(code: str, parts: Mapping[str, str], names: DisplayNames) -> str:
-    """The dimension of a tile as words (empty for an indicator without a dimension)."""
-    return join_texts([_part_text(code, key, value, names) for key, value in parts.items()])
+    """The dimension of a tile as words (empty for an indicator without a dimension).
+
+    The category of a stock tile is left out when the item is there: the item names its own type.
+    """
+    shown = [
+        (key, value) for key, value in parts.items() if not (key == "category" and "item" in parts)
+    ]
+    return join_texts([_part_text(code, key, value, names) for key, value in shown])
 
 
 def as_of_text(as_of: date, lang: str) -> str:
@@ -429,6 +502,8 @@ _SERIES_LABELS: dict[str, Callable[[], str]] = {
     "countries": lambda: QCoreApplication.translate("Dashboard", "Countries"),
     "allocated": lambda: QCoreApplication.translate("Dashboard", "Allocated"),
     "executed": lambda: QCoreApplication.translate("Dashboard", "Executed"),
+    "stock_valid": lambda: QCoreApplication.translate("Dashboard", "Valid stock"),
+    "stock_minimum": lambda: QCoreApplication.translate("Dashboard", "Minimum stock"),
 }
 
 
@@ -447,6 +522,10 @@ def chart_title(spec: ChartSpec) -> str:
         return QCoreApplication.translate("Dashboard", "Availability by asset type")
     if spec.key == CHART_EXERCISES:
         return QCoreApplication.translate("Dashboard", "Participants and countries by edition")
+    if spec.key == CHART_STOCK:
+        return QCoreApplication.translate(
+            "Dashboard", "Valid stock and minimum of antidotes and decontaminants"
+        )
     if spec.key.startswith(CHART_BUDGET_PREFIX):
         currency = spec.parameters.get("currency", spec.key[len(CHART_BUDGET_PREFIX) :])
         return (
@@ -467,6 +546,8 @@ def category_header(chart_key: str) -> str:
         return QCoreApplication.translate("Dashboard", "Asset type")
     if chart_key == CHART_EXERCISES:
         return QCoreApplication.translate("Dashboard", "Edition")
+    if chart_key == CHART_STOCK:
+        return QCoreApplication.translate("Dashboard", "Item type")
     if chart_key.startswith(CHART_BUDGET_PREFIX):
         return QCoreApplication.translate("Dashboard", "Funding source")
     return ""
@@ -476,6 +557,8 @@ def category_label(chart_key: str, code: str, names: DisplayNames) -> str:
     """The display name of a chart category; PPE levels and edition codes are shown as is."""
     if chart_key == CHART_INFRASTRUCTURE:
         return _type_name(code, names)
+    if chart_key == CHART_STOCK:
+        return _stock_type_name(code, names)
     if chart_key.startswith(CHART_BUDGET_PREFIX):
         return _source_name(code, names)
     if chart_key == CHART_PERSONNEL:

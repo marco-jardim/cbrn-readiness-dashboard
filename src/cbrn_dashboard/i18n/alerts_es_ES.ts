@@ -32,6 +32,10 @@
         <source>Budget</source>
         <translation type="unfinished">Presupuesto</translation>
     </message>
+    <message>
+        <source>Stock</source>
+        <translation type="unfinished">Existencias</translation>
+    </message>
     <message numerus="yes">
         <source>The level %1 PPE qualification of %2 expired %n day(s) ago.</source>
         <translation type="unfinished">

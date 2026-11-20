@@ -10,7 +10,8 @@ code and the name of the offending field; the UI maps codes to texts.
 Evaluation (D13, D14)
 ---------------------
 :meth:`IndicatorService.evaluate` evaluates EVERY registered indicator for an as-of date: it asks
-the four module services for their ``indicator_values(as_of)``, loads the stored targets and calls
+the four module services (and the stock service, when one is wired) for their
+``indicator_values(as_of)``, loads the stored targets and calls
 the domain ``evaluate`` per value, in registry order and then by dimension. Nothing is cached, so a
 past date gives that date's readings from the records as known today. A value whose code is not
 registered raises :class:`~cbrn_dashboard.domain.indicators.UnknownIndicatorError` (never silently
@@ -74,6 +75,7 @@ from cbrn_dashboard.services.errors import (
 from cbrn_dashboard.services.exercises import ExercisesService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
+from cbrn_dashboard.services.stock import StockService
 from cbrn_dashboard.storage import settings_repo
 from cbrn_dashboard.storage import targets_repo as repo
 from cbrn_dashboard.storage.db import DatabaseConnection, ReadOnlyDatabaseError, transaction
@@ -177,6 +179,7 @@ class IndicatorService:
         exercises: ExercisesService,
         budget: BudgetService,
         registry: IndicatorRegistry | None = None,
+        stock: StockService | None = None,
     ) -> None:
         self._conn = conn
         self._clock = clock
@@ -185,6 +188,7 @@ class IndicatorService:
         self._infrastructure = infrastructure
         self._exercises = exercises
         self._budget = budget
+        self._stock = stock
         self._registry = build_registry() if registry is None else registry
 
     # ----- plumbing
@@ -219,6 +223,8 @@ class IndicatorService:
         values.extend(self._infrastructure.indicator_values(as_of))
         values.extend(self._exercises.indicator_values(as_of))
         values.extend(self._budget.indicator_values(as_of))
+        if self._stock is not None:
+            values.extend(self._stock.indicator_values(as_of))
         return values
 
     def _ordered_values(self, as_of: date) -> list[IndicatorValue]:

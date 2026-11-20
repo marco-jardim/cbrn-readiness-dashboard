@@ -172,6 +172,42 @@
         <translation>Available</translation>
     </message>
     <message>
+        <source>Antidote</source>
+        <translation>Antidote</translation>
+    </message>
+    <message>
+        <source>Decontaminant</source>
+        <translation>Decontaminant</translation>
+    </message>
+    <message>
+        <source>Detector</source>
+        <translation>Detector</translation>
+    </message>
+    <message>
+        <source>PPE</source>
+        <translation>PPE</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Other</translation>
+    </message>
+    <message>
+        <source>Valid stock</source>
+        <translation>Valid stock</translation>
+    </message>
+    <message>
+        <source>Lots expiring soon</source>
+        <translation>Lots expiring soon</translation>
+    </message>
+    <message>
+        <source>Expired lots still in stock</source>
+        <translation>Expired lots still in stock</translation>
+    </message>
+    <message>
+        <source>Item types below the minimum stock</source>
+        <translation>Item types below the minimum stock</translation>
+    </message>
+    <message>
         <source>person</source>
         <translation>person</translation>
     </message>
@@ -186,6 +222,14 @@
     <message>
         <source>units</source>
         <translation>units</translation>
+    </message>
+    <message>
+        <source>lot</source>
+        <translation>lot</translation>
+    </message>
+    <message>
+        <source>lots</source>
+        <translation>lots</translation>
     </message>
     <message>
         <source>qualification</source>
@@ -224,6 +268,34 @@
         <translation>day</translation>
     </message>
     <message>
+        <source>item type</source>
+        <translation>item type</translation>
+    </message>
+    <message>
+        <source>item types</source>
+        <translation>item types</translation>
+    </message>
+    <message>
+        <source>Stock</source>
+        <translation>Stock</translation>
+    </message>
+    <message>
+        <source>minimum %1</source>
+        <translation>minimum %1</translation>
+    </message>
+    <message>
+        <source>minimum not set</source>
+        <translation>minimum not set</translation>
+    </message>
+    <message>
+        <source>Category %1</source>
+        <translation>Category %1</translation>
+    </message>
+    <message>
+        <source>Item %1</source>
+        <translation>Item %1</translation>
+    </message>
+    <message>
         <source>In service</source>
         <translation>In service</translation>
     </message>
@@ -244,12 +316,20 @@
         <translation>Executed</translation>
     </message>
     <message>
+        <source>Minimum stock</source>
+        <translation>Minimum stock</translation>
+    </message>
+    <message>
         <source>Availability by asset type</source>
         <translation>Availability by asset type</translation>
     </message>
     <message>
         <source>Participants and countries by edition</source>
         <translation>Participants and countries by edition</translation>
+    </message>
+    <message>
+        <source>Valid stock and minimum of antidotes and decontaminants</source>
+        <translation>Valid stock and minimum of antidotes and decontaminants</translation>
     </message>
     <message>
         <source>Allocated and executed by funding source, %1, fiscal year %2</source>
@@ -266,6 +346,10 @@
     <message>
         <source>Edition</source>
         <translation>Edition</translation>
+    </message>
+    <message>
+        <source>Item type</source>
+        <translation>Item type</translation>
     </message>
     <message>
         <source>Funding source</source>

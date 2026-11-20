@@ -21,8 +21,10 @@ __all__ = [
     "FUNDING_SOURCE_KEYS",
     "PRELIMINARY_KEY",
     "SHARED_AREAS",
+    "STOCK_TYPE_KEYS",
     "MessageKey",
     "all_shared_keys",
+    "stock_type_key",
 ]
 
 type MessageKey = tuple[str, str]
@@ -34,6 +36,7 @@ SHARED_AREAS: Final[tuple[str, ...]] = (
     "infrastructure",
     "exercises",
     "budget",
+    "stock",
 )
 
 #: The preliminary-version notice (I06, P07), as the shell banner words it (an em dash).
@@ -82,6 +85,33 @@ FUNDING_SOURCE_KEYS: Final[dict[str, MessageKey]] = {
     "COMAER": ("Budget", "Air Force Command"),
 }
 
+#: The 17 built-in stock item types (migration 0009); a user-defined type is named by its own
+#: stored labels. The source texts are the ones of ``ui/stock/labels.py`` (context ``Stock``).
+STOCK_TYPE_KEYS: Final[dict[str, MessageKey]] = {
+    "ANTIDOTE_CHEMICAL": ("Stock", "Chemical antidote"),
+    "ANTIDOTE_RAD_NUCLEAR": ("Stock", "Radiological and nuclear antidote"),
+    "ANTIDOTE_BIOLOGICAL": ("Stock", "Biological antidote"),
+    "DECONTAMINANT": ("Stock", "Decontaminant"),
+    "DETECTOR_CHEMICAL": ("Stock", "Chemical detector"),
+    "DETECTOR_RAD_NUCLEAR": ("Stock", "Radiological and nuclear detector"),
+    "DETECTOR_BIOLOGICAL": ("Stock", "Biological detector"),
+    "MASK_FULL_FACE": ("Stock", "Full-face mask"),
+    "FILTER_CBRN": ("Stock", "CBRN filter"),
+    "PPE_LEVEL_A": ("Stock", "Level A PPE"),
+    "PPE_LEVEL_B": ("Stock", "Level B PPE"),
+    "PPE_LEVEL_C": ("Stock", "Level C PPE"),
+    "GLOVE": ("Stock", "Glove"),
+    "BOOT": ("Stock", "Boot"),
+    "APRON": ("Stock", "Apron"),
+    "OXYGEN_CYLINDER": ("Stock", "Oxygen cylinder (O2)"),
+    "ISOLATION_STRETCHER": ("Stock", "Bubble stretcher (isolation transport capsule)"),
+}
+
+
+def stock_type_key(code: str) -> MessageKey | None:
+    """The message key of a built-in stock item type, or ``None`` for any other code."""
+    return STOCK_TYPE_KEYS.get(code)
+
 
 def all_shared_keys() -> tuple[MessageKey, ...]:
     """Every shared message key (for the catalogue check)."""
@@ -92,6 +122,7 @@ def all_shared_keys() -> tuple[MessageKey, ...]:
         EXERCISE_KIND_KEYS,
         ASSET_TYPE_KEYS,
         FUNDING_SOURCE_KEYS,
+        STOCK_TYPE_KEYS,
     )
     keys = [PRELIMINARY_KEY]
     for table in tables:

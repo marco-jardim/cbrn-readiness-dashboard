@@ -90,6 +90,7 @@ class ReportsWorkflow(QObject):
                 infrastructure=infrastructure,
                 config_loader=config.load,
                 budget=services.budget,
+                stock=services.stock,
             )
         return self._builder
 

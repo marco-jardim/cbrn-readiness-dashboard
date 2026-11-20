@@ -48,6 +48,7 @@ from cbrn_dashboard.services.snapshots import (
     SnapshotView,
     monthly_snapshot_startup,
 )
+from cbrn_dashboard.services.stock import InitialReceipt, LotInput, StockService, StockTypeInput
 from cbrn_dashboard.storage import snapshots_repo
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.storage.repository import WriteContext
@@ -64,6 +65,8 @@ TYPE_DIM = "type=DEMO-TYPE"
 BUDGET = "BUD_EXEC_RATE"
 BUDGET_DIM = "currency=BRL;source=DIRSA"
 INTERVALS = "asset_type_default_maintenance_interval_days"
+MINIMUMS = "stock_item_type_minimum_quantity"
+CHEMICAL = "ANTIDOTE_CHEMICAL"
 
 #: The fields the hash covers, written out here on purpose (the contract of T8.1).
 EXPECTED_KEYS = {
@@ -78,6 +81,8 @@ EXPECTED_KEYS = {
     "ppe_validity_months",
     "degraded_counts_as_available",
     INTERVALS,
+    "stock_expiry_warning_days",
+    MINIMUMS,
 }
 
 MANUAL = SnapshotOrigin.MANUAL
@@ -96,6 +101,7 @@ class Stack:
     budget: BudgetService
     indicators: IndicatorService
     snapshots: SnapshotService
+    stock: StockService
 
 
 def _stack(conn: DatabaseConnection, clock: FixedClock) -> Stack:
@@ -106,6 +112,7 @@ def _stack(conn: DatabaseConnection, clock: FixedClock) -> Stack:
     infrastructure = InfrastructureService(conn, clock, operator)
     exercises = ExercisesService(conn, clock, operator)
     budget = BudgetService(conn, clock, operator)
+    stock = StockService(conn, clock, operator)
     indicators = IndicatorService(
         conn,
         clock,
@@ -114,11 +121,12 @@ def _stack(conn: DatabaseConnection, clock: FixedClock) -> Stack:
         infrastructure=infrastructure,
         exercises=exercises,
         budget=budget,
+        stock=stock,
     )
     snapshots = SnapshotService(
-        conn, clock, operator, indicators=indicators, infrastructure=infrastructure
+        conn, clock, operator, indicators=indicators, infrastructure=infrastructure, stock=stock
     )
-    return Stack(personnel, infrastructure, exercises, budget, indicators, snapshots)
+    return Stack(personnel, infrastructure, exercises, budget, indicators, snapshots, stock)
 
 
 def _seed(stack: Stack, conn: DatabaseConnection) -> None:
@@ -293,6 +301,11 @@ def test_config_json_holds_exactly_the_hashed_fields(stack: Stack) -> None:
         "enabled": True,
     }
     assert structure[INTERVALS]["DEMO-TYPE"] is None
+    # P11 default and P12: every stock type is listed, none has a minimum on a fresh database
+    assert structure["stock_expiry_warning_days"] == 90
+    assert len(structure[MINIMUMS]) == 17
+    assert set(structure[MINIMUMS].values()) == {None}
+    assert CHEMICAL in structure[MINIMUMS]
 
 
 def test_inactive_asset_types_are_part_of_the_configuration(stack: Stack) -> None:
@@ -310,6 +323,33 @@ def test_the_hash_is_stable_when_nothing_changes(stack: Stack) -> None:
     assert first.id != second.id
     assert first.config_hash == second.config_hash
     assert stack.snapshots.get(first.id).config_json == stack.snapshots.get(second.id).config_json
+
+
+def test_a_snapshot_holds_the_stock_rows_and_none_without_stock(stack: Stack) -> None:
+    def stock_values(snapshot_id: int) -> list[str]:
+        values = stack.snapshots.get(snapshot_id).values
+        return [v.indicator_code for v in values if v.indicator_code.startswith("STOCK_")]
+
+    before = stack.snapshots.record(AS_OF, origin=MANUAL)
+    assert stock_values(before.id) == []
+
+    stack.stock.create_lot(
+        LotInput(type_id=_stock_type_id(stack), lot_code="DEMO-L001", expires_on="2027-01-01"),
+        InitialReceipt(moved_on="2026-01-10", quantity=5),
+    )
+    after = stack.snapshots.record(AS_OF, origin=MANUAL)
+    rows = {
+        (v.indicator_code, v.dimension): v.value
+        for v in stack.snapshots.get(after.id).values
+        if v.indicator_code.startswith("STOCK_")
+    }
+    assert rows == {
+        ("STOCK_VALID_QTY", f"category=antidote;item={CHEMICAL}"): 5.0,
+        ("STOCK_LOTS_EXPIRING", "category=antidote"): 0.0,
+        ("STOCK_LOTS_EXPIRED", "category=antidote"): 0.0,
+    }
+    # the earlier snapshot is not rewritten: its stock rows are missing, not zero (K21)
+    assert stock_values(before.id) == []
 
 
 # --------------------------------------------------------------------------- the hash
@@ -359,6 +399,23 @@ def _new_type(stack: Stack, conn: DatabaseConnection, clock: FixedClock) -> None
     stack.infrastructure.create_type(AssetTypeInput("DEMO-NEW", "Tipo novo"))
 
 
+def _stock_type_id(stack: Stack, code: str = CHEMICAL) -> int:
+    found = stack.stock.get_type_by_code(code)
+    assert found is not None
+    return found.id
+
+
+def _stock_minimum(value: int | None) -> Mutator:
+    def apply(stack: Stack, conn: DatabaseConnection, clock: FixedClock) -> None:
+        stack.stock.set_minimum(_stock_type_id(stack), value)
+
+    return apply
+
+
+def _new_stock_type(stack: Stack, conn: DatabaseConnection, clock: FixedClock) -> None:
+    stack.stock.create_type(StockTypeInput("DEMO-ITEM", "other", "Item demo"))
+
+
 HASHED_CHANGES = [
     pytest.param(_config(cert_warning_days=60), id="P01-cert-warning-days"),
     pytest.param(_config(maintenance_warning_days=15), id="P02-maintenance-warning-days"),
@@ -378,6 +435,9 @@ HASHED_CHANGES = [
     pytest.param(_config(degraded_counts_as_available=True), id="A05-degraded-counts"),
     pytest.param(_interval(180), id="A06-default-interval-changed"),
     pytest.param(_new_type, id="A06-asset-type-added"),
+    pytest.param(_config(stock_expiry_warning_days=60), id="P11-stock-expiry-warning-days"),
+    pytest.param(_stock_minimum(20), id="P12-stock-minimum-set"),
+    pytest.param(_new_stock_type, id="P12-stock-type-added"),
 ]
 
 UNHASHED_CHANGES = [

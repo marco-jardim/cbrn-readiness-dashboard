@@ -17,8 +17,12 @@ P01 ``cert_warning_days``, P02 ``maintenance_warning_days``, P03 every stored ta
 ``enabled`` flag), P04 ``snapshot_monthly`` and ``snapshot_on_report``, P08
 ``budget_prorate_target``,
 A02 ``ppe_hierarchy_enabled`` and ``ppe_hierarchy``, A04 ``ppe_validity_months``, A05
-``degraded_counts_as_available`` and A06 the default maintenance interval of every asset type
-(inactive types included). Nothing else is hashed: not the operator label, the institution and unit
+``degraded_counts_as_available``, A06 the default maintenance interval of every asset type
+(inactive types included), P11 ``stock_expiry_warning_days`` and P12
+``stock_item_type_minimum_quantity`` (the minimum of every stock item type, by type code; ``null``
+when none is set). The two stock fields were added in 1.1.0, so the hash changes once on upgrade
+(K21); a snapshot taken before then has no ``STOCK_*`` value, which reads as "no data", never as
+zero. Nothing else is hashed: not the operator label, the institution and unit
 names, the handling notice, P05, P06, P09, the default currency or the small-count threshold.
 ``config_json`` is that structure serialised by :func:`canonical_json` and ``config_hash`` is the
 SHA-256 hex digest of that exact text, so the hash can always be re-derived from the stored JSON.
@@ -72,6 +76,7 @@ from cbrn_dashboard.services.errors import (
 )
 from cbrn_dashboard.services.indicators import IndicatorService, TargetView
 from cbrn_dashboard.services.infrastructure import AssetTypeView, InfrastructureService
+from cbrn_dashboard.services.stock import StockService, StockTypeView
 from cbrn_dashboard.storage import snapshots_repo as repo
 from cbrn_dashboard.storage.db import DatabaseConnection, ReadOnlyDatabaseError, transaction
 from cbrn_dashboard.storage.repository import RowNotFoundError, WriteContext
@@ -119,6 +124,8 @@ HASHED_FIELDS: tuple[str, ...] = (
     "ppe_validity_months",
     "snapshot_monthly",
     "snapshot_on_report",
+    "stock_expiry_warning_days",
+    "stock_item_type_minimum_quantity",
     "targets",
 )
 
@@ -139,12 +146,13 @@ def hashed_config(
     config: ReadinessConfig,
     targets: Iterable[TargetView],
     asset_types: Iterable[AssetTypeView],
+    stock_types: Iterable[StockTypeView] = (),
 ) -> dict[str, object]:
     """The canonical structure that is hashed: exactly the fields of the module docstring.
 
     Targets are sorted by code and then dimension, the ``ppe_hierarchy`` lists are sorted, and the
-    asset-type intervals are keyed by type code. Key order is made canonical by
-    :func:`canonical_json`.
+    asset-type intervals and the stock minimums are keyed by type code (``None`` = no minimum).
+    Key order is made canonical by :func:`canonical_json`.
     """
     return {
         "cert_warning_days": config.cert_warning_days,
@@ -171,6 +179,10 @@ def hashed_config(
         "asset_type_default_maintenance_interval_days": {
             asset_type.code: asset_type.default_maintenance_interval_days
             for asset_type in sorted(asset_types, key=lambda t: t.code)
+        },
+        "stock_expiry_warning_days": config.stock_expiry_warning_days,
+        "stock_item_type_minimum_quantity": {
+            item.code: item.minimum_quantity for item in sorted(stock_types, key=lambda t: t.code)
         },
     }
 
@@ -275,12 +287,14 @@ class SnapshotService:
         indicators: IndicatorService,
         infrastructure: InfrastructureService,
         app_version: str | None = None,
+        stock: StockService | None = None,
     ) -> None:
         self._conn = conn
         self._clock = clock
         self._operator = operator
         self._indicators = indicators
         self._infrastructure = infrastructure
+        self._stock = stock
         self._app_version = __version__ if app_version is None else app_version
 
     # ----- plumbing
@@ -305,6 +319,9 @@ class SnapshotService:
             load_config(self._conn),
             self._indicators.list_targets(),
             self._infrastructure.list_types(include_inactive=True),
+            stock_types=(
+                () if self._stock is None else self._stock.list_types(include_inactive=True)
+            ),
         )
         text = canonical_json(structure)
         return text, config_hash(text)
@@ -451,6 +468,9 @@ class _ServicesLike(Protocol):
     @property
     def infrastructure(self) -> InfrastructureService | None: ...
 
+    # ``stock`` is read with ``getattr``: a services object without it (older callers, fakes)
+    # still works and then hashes no stock minimums.
+
 
 class StartupContext(Protocol):
     """The part of the application context the hook reads (``ui.shell.context.AppContext``)."""
@@ -480,6 +500,8 @@ def monthly_snapshot_startup(context: StartupContext) -> None:
     infrastructure = services.infrastructure
     if indicators is None or infrastructure is None:
         return
+    # A hook run must hash the same configuration as a manual snapshot: stock included (T11.7).
+    stock: StockService | None = getattr(services, "stock", None)
     SnapshotService(
-        conn, context.clock, indicators=indicators, infrastructure=infrastructure
+        conn, context.clock, indicators=indicators, infrastructure=infrastructure, stock=stock
     ).record_monthly_if_due()

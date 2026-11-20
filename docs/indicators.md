@@ -241,6 +241,70 @@ by default). A target entered for this indicator is a year-end target: the store
 changed, and the reading records the scaled thresholds it used. Without pro-rating a year-end target
 would read `CRITICAL` every January.
 
+### `STOCK_VALID_QTY`
+
+- Module: `STOCK`
+- Unit: `COUNT`
+- Direction: `HIGHER_IS_BETTER`
+- Dimension keys: `category`, `item`
+- Source: `O01, O02, O04`
+- Appendix line: none (owner request 2026-11-20)
+- Proposal: none
+- Default target: none (P03)
+- Definition: per stock item type (the dimension `item` is the type code, `category` its category:
+  `antidote`, `decontaminant`, `detector`, `ppe` or `other`), the quantity on hand on the date in
+  the lots that are valid on the date. The quantity of a lot is the signed sum of its movements
+  dated on or before the date; a lot is valid when it has no expiry date or its expiry date is not
+  before the date, so a lot expiring on the date is still valid. Lots that are expiring soon count
+  as valid. The quantity on hand of all lots, the quantity of the expired lots, the quantity of the
+  expiring lots and, when one is set, the minimum of the type (P12) are carried beside the value as
+  context. A value exists only for an active type that is in use on the date (it has a lot with a
+  movement on or before the date) or has a minimum, and for an inactive type that still has stock
+  on hand; a fresh database therefore has no stock value. The minimum is not a target: a target
+  on this indicator is entered in Settings like any other and is the only thing that gives it a
+  status.
+
+### `STOCK_LOTS_EXPIRING`
+
+- Module: `STOCK`
+- Unit: `COUNT`
+- Direction: `LOWER_IS_BETTER`
+- Dimension keys: `category`
+- Source: `O03, P11`
+- Appendix line: none (owner request 2026-11-20)
+- Proposal: none
+- Default target: none (P03)
+- Definition: per category that has a `STOCK_VALID_QTY` value, the number of lots with stock on
+  hand whose expiry date falls from the date up to the date plus the warning window (P11, 90 days
+  by default), both ends included.
+
+### `STOCK_LOTS_EXPIRED`
+
+- Module: `STOCK`
+- Unit: `COUNT`
+- Direction: `LOWER_IS_BETTER`
+- Dimension keys: `category`
+- Source: `O03`
+- Appendix line: none (owner request 2026-11-20)
+- Proposal: none
+- Default target: none (P03)
+- Definition: per category that has a `STOCK_VALID_QTY` value, the number of lots with stock on
+  hand whose expiry date is before the date. A lot with nothing on hand is empty, never expired.
+
+### `STOCK_TYPES_BELOW_MIN`
+
+- Module: `STOCK`
+- Unit: `COUNT`
+- Direction: `LOWER_IS_BETTER`
+- Dimension keys: `category`
+- Source: `O04, P12`
+- Appendix line: none (owner request 2026-11-20)
+- Proposal: none
+- Default target: none (P03)
+- Definition: per category with at least one active type that has a minimum, the number of those
+  active types whose valid quantity on the date is strictly below the minimum. A type with no
+  minimum is never counted, and a minimum of 0 is never reached from below.
+
 ## Alerts that read the indicators
 
 Alerts are computed when needed and never stored. They are sorted by severity, then by due date.

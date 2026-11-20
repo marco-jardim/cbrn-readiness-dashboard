@@ -38,6 +38,7 @@ from cbrn_dashboard.services.personnel import (
     TrainingInput,
 )
 from cbrn_dashboard.services.snapshots import SnapshotOrigin, SnapshotService
+from cbrn_dashboard.services.stock import InitialReceipt, LotInput
 from cbrn_dashboard.ui.dashboard import labels
 from cbrn_dashboard.ui.dashboard.models import count_text, major_money_text
 from cbrn_dashboard.ui.dashboard.page import (
@@ -432,12 +433,21 @@ def test_tiles_are_grouped_by_module_and_no_score_is_shown(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
     _seed(app_context)
+    # one antidote lot, so that the stock module has tiles too (a fresh database has none, D36)
+    stock = _need(app_context.services.stock)
+    antidote = stock.get_type_by_code("ANTIDOTE_CHEMICAL")
+    assert antidote is not None
+    stock.create_lot(
+        LotInput(type_id=antidote.id, lot_code="DEMO-L001", expires_on="2027-01-01"),
+        InitialReceipt(moved_on="2026-01-10", quantity=5),
+    )
     page = _page(app_context, qtbot)
     titles = {
         "module_personnel": "Personnel",
         "module_infrastructure": "Infrastructure",
         "module_exercises": "Exercises",
         "module_budget": "Budget",
+        "module_stock": "Stock",
     }
     for name, title in titles.items():
         box = page.findChild(QGroupBox, name)
@@ -1041,6 +1051,10 @@ INDICATORS = {
     "EX_LAST_COUNTRIES",
     "EX_DAYS_SINCE_LAST",
     "BUD_EXEC_RATE",
+    "STOCK_VALID_QTY",
+    "STOCK_LOTS_EXPIRING",
+    "STOCK_LOTS_EXPIRED",
+    "STOCK_TYPES_BELOW_MIN",
 }
 SERIES_KEYS = (
     "valid",
@@ -1050,12 +1064,15 @@ SERIES_KEYS = (
     "countries",
     "allocated",
     "executed",
+    "stock_valid",
+    "stock_minimum",
 )
 CHART_KEYS = (
     "personnel_valid_by_level",
     "infrastructure_availability",
     "exercises_by_edition",
     "budget_BRL",
+    "stock_antidotes_by_item",
 )
 
 
@@ -1137,6 +1154,10 @@ def test_the_unit_of_a_tile_agrees_in_number_with_its_value(app_context: AppCont
         "EX_LAST_PARTICIPANTS": ("participant", "participants"),
         "EX_LAST_COUNTRIES": ("country", "countries"),
         "EX_DAYS_SINCE_LAST": ("day", "days"),
+        "STOCK_VALID_QTY": ("unit", "units"),
+        "STOCK_LOTS_EXPIRING": ("lot", "lots"),
+        "STOCK_LOTS_EXPIRED": ("lot", "lots"),
+        "STOCK_TYPES_BELOW_MIN": ("item type", "item types"),
     }
     for code, (singular, plural) in expected.items():
         assert labels.unit_label(code, "COUNT", 1.0) == singular, code
@@ -1177,6 +1198,25 @@ def test_an_unknown_code_is_shown_as_itself(app_context: AppContext) -> None:
     assert labels.dimension_text("X", {"type": "no_such_type"}, names) == "Type no_such_type"
     assert labels.dimension_text("X", {"source": "NO_SUCH"}, names) == "Source NO_SUCH"
     assert labels.dimension_text("X", {}, names) == ""
+    assert labels.dimension_text("X", {"item": "NO_SUCH_ITEM"}, names) == "Item NO_SUCH_ITEM"
+    assert labels.category_label("stock_antidotes_by_item", "NO_SUCH_ITEM", names) == "NO_SUCH_ITEM"
+
+
+def test_the_stock_dimension_names_the_item_and_leaves_the_category_out(
+    app_context: AppContext,
+) -> None:
+    app_context.translator_manager.set_language("en_US")
+    names = labels.DisplayNames("en_US")
+    both = {"category": "antidote", "item": "ANTIDOTE_CHEMICAL"}
+    assert labels.dimension_text("STOCK_VALID_QTY", both, names) == (
+        "Item " + labels.category_label("stock_antidotes_by_item", "ANTIDOTE_CHEMICAL", names)
+    )
+    assert labels.dimension_text("STOCK_LOTS_EXPIRED", {"category": "ppe"}, names) == (
+        "Category PPE"
+    )
+    assert labels.dimension_text("STOCK_LOTS_EXPIRED", {"category": "nope"}, names) == (
+        "Category nope"
+    )
     assert QCoreApplication.translate("Dashboard", "Dashboard") == "Dashboard"
 
 

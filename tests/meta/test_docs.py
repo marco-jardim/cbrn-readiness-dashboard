@@ -294,7 +294,12 @@ def test_indicator_entry_matches_the_registry(code: str) -> None:
     else:
         assert keys == "none"
     assert _ticks(_field(lines, "Source")) == [definition.source]
-    assert re.fullmatch(r"L\d+(, L\d+)*", _field(lines, "Appendix line")) is not None
+    appendix = _field(lines, "Appendix line")
+    if re.search(r"\bO\d\d\b", definition.source):
+        # an owner-request indicator (O01-O04) is not in Appendix A: it has no Lnn reference
+        assert appendix == "none (owner request 2026-11-20)"
+    else:
+        assert re.fullmatch(r"L\d+(, L\d+)*", appendix) is not None
     proposal = _field(lines, "Proposal")
     if definition.proposal:
         assert _ticks(proposal)[:1] == [definition.proposal]

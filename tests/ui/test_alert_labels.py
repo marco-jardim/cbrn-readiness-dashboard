@@ -231,7 +231,7 @@ def test_the_subject_is_the_reference_and_for_indicators_also_the_dimension() ->
 def test_severity_and_module_codes_are_the_ones_of_the_rules() -> None:
     assert ALL_SEVERITY_CODES == ("CRITICAL", "WARNING", "INFO")
     assert set(ALL_SEVERITY_CODES) == {severity.value for severity in Severity}
-    assert ALL_MODULE_CODES == ("PERSONNEL", "INFRASTRUCTURE", "EXERCISES", "BUDGET")
+    assert ALL_MODULE_CODES == ("PERSONNEL", "INFRASTRUCTURE", "EXERCISES", "BUDGET", "STOCK")
     assert set(ALL_MODULE_CODES) == {module.value for module in Module}
 
 
@@ -241,17 +241,17 @@ def test_severity_and_module_codes_are_the_ones_of_the_rules() -> None:
         (
             "en_US",
             ["Critical", "Warning", "Information"],
-            ["Personnel", "Infrastructure", "Exercises", "Budget"],
+            ["Personnel", "Infrastructure", "Exercises", "Budget", "Stock"],
         ),
         (
             "pt_BR",
             ["Crítico", "Aviso", "Informação"],
-            ["Pessoal", "Infraestrutura", "Exercícios", "Orçamento"],
+            ["Pessoal", "Infraestrutura", "Exercícios", "Orçamento", "Estoque"],
         ),
         (
             "es_ES",
             ["Crítico", "Advertencia", "Información"],
-            ["Personal", "Infraestructura", "Ejercicios", "Presupuesto"],
+            ["Personal", "Infraestructura", "Ejercicios", "Presupuesto", "Existencias"],
         ),
     ],
 )

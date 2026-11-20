@@ -29,6 +29,7 @@ from cbrn_dashboard.ui.settings import page as settings_page
 from cbrn_dashboard.ui.shell import about as about_dialog
 from cbrn_dashboard.ui.shell import help as help_viewer
 from cbrn_dashboard.ui.shell.context import AppContext
+from cbrn_dashboard.ui.stock import dialogs as stock_dialogs
 
 __all__ = [
     "DIALOGS",
@@ -201,6 +202,9 @@ DIALOGS: tuple[DialogSpec, ...] = (
     DialogSpec("budget.entry", budget_page.demo_entry_dialog),
     DialogSpec("budget.execution", budget_page.demo_execution_dialog),
     DialogSpec("budget.source", budget_page.demo_source_dialog),
+    DialogSpec("stock.lot", stock_dialogs.demo_lot_dialog),
+    DialogSpec("stock.movement", stock_dialogs.demo_movement_dialog),
+    DialogSpec("stock.type", stock_dialogs.demo_type_dialog),
     DialogSpec("settings.target", settings_page.demo_target_dialog),
     DialogSpec("backup.passphrase_backup", backup_page.demo_backup_dialog),
     DialogSpec("backup.passphrase_restore", backup_page.demo_restore_dialog),

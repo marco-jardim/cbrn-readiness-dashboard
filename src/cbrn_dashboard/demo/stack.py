@@ -19,6 +19,7 @@ from cbrn_dashboard.services.exercises import ExercisesService
 from cbrn_dashboard.services.indicators import IndicatorService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
+from cbrn_dashboard.services.stock import StockService
 
 if TYPE_CHECKING:
     from cbrn_dashboard.demo import DemoContext
@@ -36,6 +37,7 @@ class DemoServices:
     infrastructure: InfrastructureService
     budget: BudgetService
     indicators: IndicatorService
+    stock: StockService | None = None
 
 
 def _operator() -> str:
@@ -48,6 +50,7 @@ def build_services(ctx: DemoContext) -> DemoServices:
     infrastructure = InfrastructureService(ctx.conn, ctx.clock, _operator)
     exercises = ExercisesService(ctx.conn, ctx.clock, _operator)
     budget = BudgetService(ctx.conn, ctx.clock, _operator)
+    stock = StockService(ctx.conn, ctx.clock, _operator)
     indicators = IndicatorService(
         ctx.conn,
         ctx.clock,
@@ -56,5 +59,8 @@ def build_services(ctx: DemoContext) -> DemoServices:
         infrastructure=infrastructure,
         exercises=exercises,
         budget=budget,
+        stock=stock,
     )
-    return DemoServices(infrastructure=infrastructure, budget=budget, indicators=indicators)
+    return DemoServices(
+        infrastructure=infrastructure, budget=budget, indicators=indicators, stock=stock
+    )

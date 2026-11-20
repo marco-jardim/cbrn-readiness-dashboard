@@ -38,6 +38,12 @@
   figure and indicator row) declare ``expiring`` and ``expired`` of their level, so a hidden
   expired count cannot be recovered as retraining minus expiring.
 
+* INTERNAL-ONLY CONTENT (D37). A cell with ``internal_only=True`` (the per-type stock quantities
+  and values), an indicator row whose value cell is internal-only and a chart marked internal-only
+  are dropped, not suppressed: no value, key, category or label of them remains. The stock lot
+  counts, below-minimum counts and stock alert counts are kept. No ``total_of`` may name an
+  internal-only cell (a test checks it).
+
 Covered: every staff-derived count that appears in a declared sum; the tests check that every
 visible total has only visible parts and that no hidden personnel cell is part of a visible total.
 
@@ -46,7 +52,9 @@ In particular ``active_staff - valid:<level>`` is the number of people without a
 at that level (expired, no renewal or none), so where every active person holds the level it is
 the hidden expired count; this relation is NOT declared and not prevented. DIFFERENCING between
 successive reports (the same population read at two dates) is NOT prevented. The operator-entered
-codes (funding-source, asset-type and edition codes) are printed as they are.
+codes (funding-source, asset-type and edition codes) are printed as they are. The sensitivity of
+stock data in reports is open (Q27, D37): until it is answered the per-type stock quantities,
+values and prices stay out of this variant, but the counts of lots and types do appear.
 """
 
 from __future__ import annotations
@@ -161,15 +169,22 @@ def anonymise(document: ReportDocument) -> ReportDocument:
         is_demo=document.is_demo,
         small_count_threshold=document.small_count_threshold,
         key_figures=tuple(
-            KeyFigureGroup(group.module, tuple(state[cell.key] for cell in group.cells))
+            KeyFigureGroup(
+                group.module,
+                tuple(state[cell.key] for cell in group.cells if not cell.internal_only),
+            )
             for group in document.key_figures
         ),
-        indicators=tuple(_indicator(row, state[row.value.key]) for row in document.indicators),
+        indicators=tuple(
+            _indicator(row, state[row.value.key])
+            for row in document.indicators
+            if not row.value.internal_only
+        ),
         alert_summary=tuple(
             AlertCountRow(alert.severity, state[alert.cell.key], alert.source)
             for alert in document.alert_summary
         ),
-        charts=tuple(_chart(chart, state) for chart in document.charts),
+        charts=tuple(_chart(chart, state) for chart in document.charts if not chart.internal_only),
         retraining=(),
         overdue_assets=(),
         preliminary_notice_code=document.preliminary_notice_code,

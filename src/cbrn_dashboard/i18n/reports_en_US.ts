@@ -21,6 +21,10 @@
         <translation>Budget</translation>
     </message>
     <message>
+        <source>Stock</source>
+        <translation>Stock</translation>
+    </message>
+    <message>
         <source>On target</source>
         <translation>On target</translation>
     </message>
@@ -86,6 +90,22 @@
         <translation>Budget execution rate</translation>
     </message>
     <message>
+        <source>Valid stock</source>
+        <translation>Valid stock</translation>
+    </message>
+    <message>
+        <source>Lots expiring soon</source>
+        <translation>Lots expiring soon</translation>
+    </message>
+    <message>
+        <source>Expired lots still in stock</source>
+        <translation>Expired lots still in stock</translation>
+    </message>
+    <message>
+        <source>Item types below the minimum stock</source>
+        <translation>Item types below the minimum stock</translation>
+    </message>
+    <message>
         <source>Level</source>
         <translation>Level</translation>
     </message>
@@ -114,6 +134,14 @@
         <translation>Fiscal year</translation>
     </message>
     <message>
+        <source>Category</source>
+        <translation>Category</translation>
+    </message>
+    <message>
+        <source>Stock item</source>
+        <translation>Stock item</translation>
+    </message>
+    <message>
         <source>Available</source>
         <translation>Available</translation>
     </message>
@@ -136,6 +164,10 @@
     <message>
         <source>Executed</source>
         <translation>Executed</translation>
+    </message>
+    <message>
+        <source>Minimum stock</source>
+        <translation>Minimum stock</translation>
     </message>
     <message>
         <source>Level %1</source>
@@ -344,6 +376,10 @@
     <message>
         <source>Valid qualifications by protection level</source>
         <translation>Valid qualifications by protection level</translation>
+    </message>
+    <message>
+        <source>Valid stock and minimum of antidotes and decontaminants</source>
+        <translation>Valid stock and minimum of antidotes and decontaminants</translation>
     </message>
     <message>
         <source>%1, %2</source>

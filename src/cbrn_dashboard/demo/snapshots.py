@@ -46,6 +46,7 @@ def generate(ctx: DemoContext) -> None:
         lambda: OPERATOR,
         indicators=services.indicators,
         infrastructure=services.infrastructure,
+        stock=services.stock,
     )
     for edition in exercises.list_editions():
         if edition.start_on > ctx.today:

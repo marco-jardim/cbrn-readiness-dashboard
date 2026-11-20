@@ -63,6 +63,7 @@ from cbrn_dashboard.services.budget import BudgetService
 from cbrn_dashboard.services.dashboard import (
     CHART_BUDGET_PREFIX,
     CHART_PERSONNEL,
+    CHART_STOCK,
     ChartSpec,
     DashboardData,
     DashboardService,
@@ -70,6 +71,7 @@ from cbrn_dashboard.services.dashboard import (
 )
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
+from cbrn_dashboard.services.stock import StockService
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import DatabaseConnection
 
@@ -100,6 +102,7 @@ _PERS_DEGREE = "PERS_DEGREE"
 _EX_DAYS = "EX_DAYS_SINCE_LAST"
 _EX_PARTICIPANTS = "EX_LAST_PARTICIPANTS"
 _EX_COUNTRIES = "EX_LAST_COUNTRIES"
+_STOCK_VALID_QTY = "STOCK_VALID_QTY"
 _DEFAULT_CURRENCY_DECIMALS = 2
 _EXPIRING_KEYS = tuple(f"kf:PERSONNEL:expiring:{level.value}" for level in PpeLevel)
 
@@ -127,6 +130,9 @@ class Cell:
     is_count: bool = True
     suppressed: bool = False
     total_of: tuple[str, ...] = ()
+    #: Internal report only (D37): the anonymised variant drops the cell, and the row or chart
+    #: that holds it, instead of suppressing it. No ``total_of`` may name such a cell.
+    internal_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -200,6 +206,8 @@ class ReportChart:
     series: tuple[ReportSeries, ...]
     unit: UnitKind
     parameters: tuple[tuple[str, str], ...]
+    #: Internal report only (D37): the anonymised variant leaves the whole chart out.
+    internal_only: bool = False
 
 
 @dataclass(frozen=True)
@@ -269,6 +277,8 @@ def _indicator_cell(tile: Tile) -> Cell:
         personnel_derived=tile.module is Module.PERSONNEL,
         is_count=tile.unit is UnitKind.COUNT,
         total_of=_retraining_parts(level) if declared and level is not None else (),
+        # per-type stock quantities stay out of the anonymised report until Q27 (D37)
+        internal_only=tile.code == _STOCK_VALID_QTY,
     )
 
 
@@ -485,6 +495,7 @@ def _alert_summary(
 def _chart(spec: ChartSpec, indicator_cells: dict[str, Cell]) -> ReportChart:
     """A report chart whose cells are the document's cells (new ones only for chart-only data)."""
     series: list[ReportSeries] = []
+    stock = spec.key == CHART_STOCK
     for source in spec.series:
         cells: list[Cell] = []
         for category, value in zip(spec.categories, source.values, strict=True):
@@ -499,6 +510,7 @@ def _chart(spec: ChartSpec, indicator_cells: dict[str, Cell]) -> ReportChart:
                     value=value,
                     personnel_derived=spec.key == CHART_PERSONNEL,
                     is_count=spec.unit is UnitKind.COUNT,
+                    internal_only=stock,
                 )
             )
         series.append(ReportSeries(source.key, tuple(cells)))
@@ -508,6 +520,7 @@ def _chart(spec: ChartSpec, indicator_cells: dict[str, Cell]) -> ReportChart:
         series=tuple(series),
         unit=spec.unit,
         parameters=tuple(sorted(spec.parameters.items())),
+        internal_only=stock,
     )
 
 
@@ -525,8 +538,10 @@ class ReportBuilder:
         config_loader: Callable[[], ReadinessConfig],
         app_version: str | None = None,
         budget: BudgetService | None = None,
+        stock: StockService | None = None,
     ) -> None:
         self._budget = budget
+        self._stock = stock
         self._conn = conn
         self._clock = clock
         self._dashboard = dashboard

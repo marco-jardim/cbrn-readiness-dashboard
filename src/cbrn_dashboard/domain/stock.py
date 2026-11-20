@@ -32,6 +32,14 @@ from enum import StrEnum
 from types import MappingProxyType
 
 from cbrn_dashboard.domain.dates import add_months, days_between, month_start
+from cbrn_dashboard.domain.indicators import (
+    Direction,
+    IndicatorDefinition,
+    IndicatorValue,
+    Module,
+    UnitKind,
+    encode_dimension,
+)
 
 __all__ = [
     "ANTIDOTE_PAGE_CATEGORIES",
@@ -56,6 +64,8 @@ __all__ = [
     "TypeSummary",
     "expiry_schedule",
     "first_negative_day",
+    "indicator_definitions",
+    "indicator_values",
     "lot_rows",
     "lot_status",
     "quantity_on",
@@ -585,3 +595,143 @@ def expiry_schedule(
     buckets.append(_bucket(ScheduleBucketKind.LATER, None, later))
     buckets.append(_bucket(ScheduleBucketKind.NO_EXPIRY, None, no_expiry))
     return tuple(buckets)
+
+
+# --------------------------------------------------------------------------------------------
+# Indicators (PLAN 5.4, D35, D36)
+# --------------------------------------------------------------------------------------------
+
+_CATEGORY_KEY = "category"
+_ITEM_KEY = "item"
+
+
+def indicator_definitions() -> tuple[IndicatorDefinition, ...]:
+    """The stock indicators (PLAN 5.4): valid quantity per type, lot and type counts per category.
+
+    The dimension keys are ``category`` and ``item`` (never ``type``, which belongs to the asset
+    types). The minimum of a type is not a target (D35): it only appears as context and as the
+    input of ``STOCK_TYPES_BELOW_MIN``.
+    """
+    return (
+        IndicatorDefinition(
+            code="STOCK_VALID_QTY",
+            module=Module.STOCK,
+            unit=UnitKind.COUNT,
+            direction=Direction.HIGHER_IS_BETTER,
+            dimension_keys=(_CATEGORY_KEY, _ITEM_KEY),
+            source="O01, O02, O04",
+        ),
+        IndicatorDefinition(
+            code="STOCK_LOTS_EXPIRING",
+            module=Module.STOCK,
+            unit=UnitKind.COUNT,
+            direction=Direction.LOWER_IS_BETTER,
+            dimension_keys=(_CATEGORY_KEY,),
+            source="O03, P11",
+        ),
+        IndicatorDefinition(
+            code="STOCK_LOTS_EXPIRED",
+            module=Module.STOCK,
+            unit=UnitKind.COUNT,
+            direction=Direction.LOWER_IS_BETTER,
+            dimension_keys=(_CATEGORY_KEY,),
+            source="O03",
+        ),
+        IndicatorDefinition(
+            code="STOCK_TYPES_BELOW_MIN",
+            module=Module.STOCK,
+            unit=UnitKind.COUNT,
+            direction=Direction.LOWER_IS_BETTER,
+            dimension_keys=(_CATEGORY_KEY,),
+            source="O04, P12",
+        ),
+    )
+
+
+def _has_valid_qty_value(summary: TypeSummary) -> bool:
+    """The emission rule of ``STOCK_VALID_QTY`` (D36, K22).
+
+    An active type that is in use on the date or has a minimum, or an inactive type that still has
+    stock on hand (deactivating a type only stops NEW lots). Anything else gives no value, so a
+    database without stock shows no stock tile.
+    """
+    if summary.active:
+        return summary.in_use or summary.minimum is not None
+    return summary.on_hand > 0
+
+
+def indicator_values(
+    types: Iterable[StockType],
+    lots: Iterable[Lot],
+    movements: Iterable[Movement],
+    d: date,
+    rules: StockRules,
+) -> list[IndicatorValue]:
+    """The stock indicator values on ``d``.
+
+    * ``STOCK_VALID_QTY``: one per type that passes :func:`_has_valid_qty_value`; the value is the
+      valid quantity and the context holds ``on_hand``, ``expired``, ``expiring`` and, when the
+      type has a minimum, ``minimum``.
+    * ``STOCK_LOTS_EXPIRING`` and ``STOCK_LOTS_EXPIRED``: one per category that has a
+      ``STOCK_VALID_QTY`` value, counting the lots with stock in that status.
+    * ``STOCK_TYPES_BELOW_MIN``: one per category with at least one ACTIVE type that has a minimum,
+      counting the active types whose valid quantity is below it.
+
+    Order: every ``STOCK_VALID_QTY`` (category order, then type code), then the three category
+    indicators in the order above (category order). Nothing is produced for an empty stock.
+    """
+    summaries = type_summaries(types, lots, movements, d, rules)
+    valid_qty: list[IndicatorValue] = []
+    categories_with_value: set[StockCategory] = set()
+    for summary in summaries:
+        if not _has_valid_qty_value(summary):
+            continue
+        categories_with_value.add(summary.category)
+        context = {
+            "on_hand": float(summary.on_hand),
+            "expired": float(summary.expired_qty),
+            "expiring": float(summary.expiring_qty),
+        }
+        if summary.minimum is not None:
+            context["minimum"] = float(summary.minimum)
+        valid_qty.append(
+            IndicatorValue(
+                code="STOCK_VALID_QTY",
+                value=float(summary.valid),
+                dimension=encode_dimension(
+                    {_CATEGORY_KEY: summary.category.value, _ITEM_KEY: summary.type_code}
+                ),
+                context=context,
+            )
+        )
+    expiring: list[IndicatorValue] = []
+    expired: list[IndicatorValue] = []
+    below: list[IndicatorValue] = []
+    for category in CATEGORY_ORDER:
+        mine = [summary for summary in summaries if summary.category is category]
+        dimension = encode_dimension({_CATEGORY_KEY: category.value})
+        if category in categories_with_value:
+            expiring.append(
+                IndicatorValue(
+                    code="STOCK_LOTS_EXPIRING",
+                    value=float(sum(item.lots_expiring for item in mine)),
+                    dimension=dimension,
+                )
+            )
+            expired.append(
+                IndicatorValue(
+                    code="STOCK_LOTS_EXPIRED",
+                    value=float(sum(item.lots_expired for item in mine)),
+                    dimension=dimension,
+                )
+            )
+        with_minimum = [item for item in mine if item.active and item.minimum is not None]
+        if with_minimum:
+            below.append(
+                IndicatorValue(
+                    code="STOCK_TYPES_BELOW_MIN",
+                    value=float(sum(1 for item in with_minimum if item.below_minimum)),
+                    dimension=dimension,
+                )
+            )
+    return valid_qty + expiring + expired + below

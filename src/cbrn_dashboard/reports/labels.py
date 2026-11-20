@@ -31,6 +31,7 @@ from cbrn_dashboard.reports.message_keys import (
     PRELIMINARY_KEY,
     SHARED_AREAS,
     MessageKey,
+    stock_type_key,
 )
 
 __all__ = [
@@ -58,6 +59,10 @@ INDICATOR_CODES: Final[tuple[str, ...]] = (
     "EX_LAST_COUNTRIES",
     "EX_DAYS_SINCE_LAST",
     "BUD_EXEC_RATE",
+    "STOCK_VALID_QTY",
+    "STOCK_LOTS_EXPIRING",
+    "STOCK_LOTS_EXPIRED",
+    "STOCK_TYPES_BELOW_MIN",
 )
 
 #: The keys of the fixed charts (a budget chart is ``budget_<currency>``).
@@ -65,6 +70,7 @@ CHART_KEYS: Final[tuple[str, ...]] = (
     "personnel_valid_by_level",
     "infrastructure_availability",
     "exercises_by_edition",
+    "stock_antidotes_by_item",
 )
 
 #: The series keys of the charts.
@@ -76,6 +82,8 @@ CHART_SERIES_KEYS: Final[tuple[str, ...]] = (
     "countries",
     "allocated",
     "executed",
+    "stock_valid",
+    "stock_minimum",
 )
 
 #: The names of the dimension parts of an indicator row.
@@ -87,6 +95,8 @@ DIMENSION_KEYS: Final[tuple[str, ...]] = (
     "source",
     "currency",
     "fiscal_year",
+    "category",
+    "item",
 )
 
 _BUDGET_CHART_PREFIX = "budget_"
@@ -172,6 +182,7 @@ class ReportTexts:
             "INFRASTRUCTURE": self.translate("Reports", "Infrastructure"),
             "EXERCISES": self.translate("Reports", "Exercises"),
             "BUDGET": self.translate("Reports", "Budget"),
+            "STOCK": self.translate("Reports", "Stock"),
         }
 
     def _build_statuses(self) -> dict[str, str]:
@@ -202,6 +213,12 @@ class ReportTexts:
             "EX_LAST_COUNTRIES": self.translate("Reports", "Countries in the last exercise"),
             "EX_DAYS_SINCE_LAST": self.translate("Reports", "Days since the last exercise"),
             "BUD_EXEC_RATE": self.translate("Reports", "Budget execution rate"),
+            "STOCK_VALID_QTY": self.translate("Reports", "Valid stock"),
+            "STOCK_LOTS_EXPIRING": self.translate("Reports", "Lots expiring soon"),
+            "STOCK_LOTS_EXPIRED": self.translate("Reports", "Expired lots still in stock"),
+            "STOCK_TYPES_BELOW_MIN": self.translate(
+                "Reports", "Item types below the minimum stock"
+            ),
         }
 
     def _build_dimensions(self) -> dict[str, str]:
@@ -213,6 +230,8 @@ class ReportTexts:
             "source": self.translate("Reports", "Funding source"),
             "currency": self.translate("Reports", "Currency"),
             "fiscal_year": self.translate("Reports", "Fiscal year"),
+            "category": self.translate("Reports", "Category"),
+            "item": self.translate("Reports", "Stock item"),
         }
 
     def _build_series(self) -> dict[str, str]:
@@ -224,6 +243,8 @@ class ReportTexts:
             "countries": self.translate("Reports", "Countries"),
             "allocated": self.translate("Reports", "Allocated"),
             "executed": self.translate("Reports", "Executed"),
+            "stock_valid": self.translate("Reports", "Valid stock"),
+            "stock_minimum": self.translate("Reports", "Minimum stock"),
         }
 
     # ------------------------------------------------------------------ codes
@@ -280,7 +301,7 @@ class ReportTexts:
         """The label of the source of an alert count (``AlertSource`` value)."""
         if code == "ALL":
             return self.translate("Reports", "All sources")
-        if code in {"PERSONNEL", "INFRASTRUCTURE"}:
+        if code in {"PERSONNEL", "INFRASTRUCTURE", "STOCK"}:
             return self.module(code)
         if code == "INDICATORS":
             return self.translate("Reports", "Indicators")
@@ -294,6 +315,11 @@ class ReportTexts:
     def funding_source(self, code: str) -> str:
         """The name of a funding source; ``DIRSA`` and user-defined codes are shown as they are."""
         key = FUNDING_SOURCE_KEYS.get(code)
+        return code if key is None else self.lookup(key)
+
+    def stock_type(self, code: str) -> str:
+        """The name of a built-in stock item type; any other code is shown as itself."""
+        key = stock_type_key(code)
         return code if key is None else self.lookup(key)
 
     def preliminary_notice(self, code: str) -> str:
@@ -325,6 +351,13 @@ class ReportTexts:
                 return self.translate("Reports", "Countries in the last exercise")
         elif module == "BUDGET" and argument:
             return fill(self.translate("Reports", "%1 (%2)"), self.series_name(name), argument)
+        elif module == "STOCK":
+            if name == "lots_expired":
+                return self.indicator("STOCK_LOTS_EXPIRED")
+            if name == "lots_expiring":
+                return self.indicator("STOCK_LOTS_EXPIRING")
+            if name == "types_below_min":
+                return self.indicator("STOCK_TYPES_BELOW_MIN")
         return key
 
     def _personnel_cell(self, key: str, name: str, argument: str) -> str:
@@ -354,6 +387,10 @@ class ReportTexts:
             return self.translate("Reports", "Assets available and in service by type")
         if key == "exercises_by_edition":
             return self.translate("Reports", "Participants and countries by edition")
+        if key == "stock_antidotes_by_item":
+            return self.translate(
+                "Reports", "Valid stock and minimum of antidotes and decontaminants"
+            )
         if key.startswith(_BUDGET_CHART_PREFIX):
             currency = parameters.get("currency", key.removeprefix(_BUDGET_CHART_PREFIX))
             year = parameters.get("fiscal_year", "")
@@ -367,6 +404,8 @@ class ReportTexts:
             return self.level(category)
         if chart_key == "infrastructure_availability":
             return self.asset_type(category)
+        if chart_key == "stock_antidotes_by_item":
+            return self.stock_type(category)
         if chart_key.startswith(_BUDGET_CHART_PREFIX):
             return self.funding_source(category)
         return category
