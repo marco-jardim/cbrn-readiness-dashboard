@@ -412,7 +412,8 @@ def _sources(db: DatabaseConnection) -> list[tuple[object, ...]]:
 
 def _migrate_to_latest(db: DatabaseConnection) -> None:
     result = migrate(db)
-    assert result.applied == (8,)
+    latest = max(m.number for m in load_migrations())
+    assert result.applied == tuple(range(8, latest + 1))
 
 
 def test_before_0008_the_trust_fund_is_a_built_in_source(at_seven: DatabaseConnection) -> None:

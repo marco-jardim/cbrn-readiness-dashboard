@@ -264,6 +264,7 @@ The schema is a sequence of numbered SQL files in `storage/migrations/`, loaded 
 | `0006_indicator_targets.sql` | indicator targets |
 | `0007_snapshots.sql` | readiness snapshots |
 | `0008_budget_sources_r24.sql` | built-in funding sources of the revised R24: COMAER and DIRSA; the OPCW Trust Fund source is no longer built in |
+| `0009_stock.sql` | stock by lot (types, lots, dated movements) and the 17 built-in stock types |
 
 The rules (from `storage/migrate.py` and `storage/migrations/README.md`):
 
