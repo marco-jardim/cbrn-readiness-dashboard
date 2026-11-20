@@ -19,6 +19,7 @@ phrases, and the manual test script for the committee names every registered pag
 
 from __future__ import annotations
 
+import hashlib
 import re
 import tomllib
 import xml.etree.ElementTree as ET
@@ -53,6 +54,14 @@ LANGUAGES = ("pt-BR", "en-US", "es-ES")
 #: may be newer and not published yet; the documents then name both.
 LAST_PUBLISHED = "1.0.2"
 LAST_PUBLISHED_DATE = "2026-11-14"
+
+#: SHA-256 of the text of every published (dated) changelog entry, by version. The text of a
+#: published entry never changes (P11-01): the values are filled by the person who publishes, from
+#: the failure message of ``test_every_dated_changelog_entry_is_published_text_that_never_changes``.
+PUBLISHED_ENTRY_SHA256: dict[str, str] = {
+    "1.0.2": "2c9dc0a05101c08c0666339f983781c1df2d5c953ca56f514e325e402d0eec89",
+    "1.0.1": "a2e13f62bdb05372f4d1f01becea3167d07ec1e4b40444ba569d7c891a45f9aa",
+}
 
 #: The questions of PLAN.md section 12 that the changelog lists: Q1 to Q29.
 QUESTION_NUMBERS = range(1, 30)
@@ -249,6 +258,43 @@ def test_the_changelog_entry_states_its_publication_status() -> None:
         assert f"releases/tag/v{__version__}" in text
         assert "status of this entry: published" in text
         assert "not been executed yet" in text or "was executed on" in text
+
+
+def _dated_versions() -> list[str]:
+    """The versions whose changelog heading carries a date (``## [x.y.z] - YYYY-MM-DD``)."""
+    return re.findall(
+        r"^## \[(\d+\.\d+\.\d+)\] - \d{4}-\d{2}-\d{2}\s*$", _read(CHANGELOG), re.MULTILINE
+    )
+
+
+def _entry_sha256(version: str) -> str:
+    """SHA-256 (hex) of the entry text: heading to the line before the next ``## `` heading.
+
+    Line endings are normalised to LF and trailing blank lines are dropped; the text is encoded as
+    UTF-8. This is the exact recipe to compute a value for ``PUBLISHED_ENTRY_SHA256``.
+    """
+    text = _entry(version).replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def test_every_dated_changelog_entry_is_published_text_that_never_changes() -> None:
+    dated = _dated_versions()
+    assert LAST_PUBLISHED in dated, "the last published version has no dated entry"
+    for version in dated:
+        pinned = PUBLISHED_ENTRY_SHA256.get(version, "")
+        actual = _entry_sha256(version)
+        assert pinned, (
+            f"the dated entry [{version}] is not pinned: put '{version}': '{actual}' in "
+            "PUBLISHED_ENTRY_SHA256 (only after checking that the entry is the published text)"
+        )
+        assert actual == pinned, (
+            f"the published entry [{version}] was edited (sha256 {actual}, pinned {pinned}); "
+            "a published entry is history: put the correction in the current entry instead"
+        )
+
+
+def test_every_pinned_entry_is_still_a_dated_entry() -> None:
+    assert set(PUBLISHED_ENTRY_SHA256) <= set(_dated_versions())
 
 
 def test_the_changelog_lists_exactly_the_flagged_placeholders() -> None:

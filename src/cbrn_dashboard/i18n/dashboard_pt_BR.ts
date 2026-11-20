@@ -181,7 +181,7 @@
     </message>
     <message>
         <source>Detector</source>
-        <translation type="unfinished">Detecção</translation>
+        <translation type="unfinished">Detector</translation>
     </message>
     <message>
         <source>PPE</source>

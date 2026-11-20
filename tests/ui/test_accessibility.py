@@ -596,14 +596,18 @@ def test_the_asset_history_shows_an_icon_with_each_status_event(qapp: QApplicati
 
 
 def test_the_demo_status_tables_have_rows_to_check(walk: Walk) -> None:
-    rows = {
-        type(model).__name__: model.rowCount()
-        for root in walk.of_kind("page")
-        for model in table_models(root.widget)
-    }
+    rows: dict[str, int] = {}
+    for root in walk.of_kind("page"):
+        for model in table_models(root.widget):
+            name = type(model).__name__
+            rows[name] = max(rows.get(name, 0), model.rowCount())  # two pages hold a stock panel
     assert rows["AlertsModel"] >= 7
     assert rows["AssetsModel"] >= 7
     assert rows["StaffModel"] >= 5
+    # the demo has stock: the status icons of the lots, the schedule and the summary are checked
+    assert rows["LotsModel"] >= 3
+    assert rows["ScheduleModel"] >= 1
+    assert rows["SummaryModel"] >= 2
 
 
 # --------------------------------------------------------------------------- banner contrast
@@ -803,6 +807,8 @@ def test_every_page_and_dialog_opens_at_scale_factor_2_without_a_qt_warning(
     report = json.loads(done.stdout.strip().splitlines()[-1])
     assert report["pages"] == len(registry.pages())
     assert report["dialogs"] == len(registry.dialogs())
+    assert report["tabs"] >= len(registry.pages())  # every tab of every page was made current
+    assert report["settings_groups"] >= 1
     assert report["ratio"] == 2.0  # the offscreen screen applies QT_SCALE_FACTOR
     unexpected = [
         message

@@ -34,6 +34,7 @@ from cbrn_dashboard.services.errors import (
     NOT_FOUND,
     READ_ONLY,
     REQUIRED,
+    ServiceError,
 )
 from cbrn_dashboard.services.stock import (
     BALANCE_NEGATIVE,
@@ -735,6 +736,73 @@ def test_a_lot_is_edited_through_the_service_without_a_second_receipt(
     assert (lot.lot_code, lot.unit_price_minor, lot.currency) == ("L1-B", None, None)
     assert lot.notes == "Management note"
     assert len(_service(app_context).movements(lot_id)) == 1
+
+
+def test_the_expiry_field_starts_blank_and_an_antidote_lot_without_a_date_is_refused(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
+) -> None:
+    dialog = LotDialog(app_context, type_code="ANTIDOTE_CHEMICAL")
+    qtbot.addWidget(dialog)
+    assert dialog.expires_edit.date() == dialog.expires_edit.minimumDate()
+    assert dialog.expires_edit.text().strip() == ""
+    dialog.lot_code_edit.setText("A-1")
+    dialog.accept()
+    assert _warnings(fake_prompts) == [error_label("EXPIRY_REQUIRED")]
+    assert dialog.saved_lot_id is None
+    assert _service(app_context).list_lots() == []
+
+    dialog.expires_edit.setDate(QDate(2027, 1, 31))
+    dialog.accept()
+    (lot,) = _service(app_context).list_lots()
+    assert lot.expires_on == date(2027, 1, 31)
+    assert len(_warnings(fake_prompts)) == 1
+
+
+def test_a_blank_expiry_is_read_as_no_date_for_a_type_that_allows_none(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    dialog = LotDialog(app_context, type_code="GLOVE")
+    qtbot.addWidget(dialog)
+    dialog.no_expiry_check.setChecked(False)
+    assert dialog.expires_edit.date() == dialog.expires_edit.minimumDate()
+    dialog.lot_code_edit.setText("G-1")
+    dialog.accept()
+    (lot,) = _service(app_context).list_lots()
+    assert lot.expires_on is None
+
+
+def test_editing_a_lot_shows_its_expiry_and_cannot_change_its_type(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    lot_id = _add_lot(app_context)
+    dialog = LotDialog(app_context, None, _lot_view(app_context, lot_id))
+    qtbot.addWidget(dialog)
+    assert dialog.expires_edit.date() == QDate(2026, 4, 1)
+    assert not dialog.type_combo.isEnabled()
+    selected = dialog.selected_type()
+    assert selected is not None
+    assert selected.code == "ANTIDOTE_CHEMICAL"
+    dialog.notes_edit.setPlainText("Management note")
+    dialog.accept()
+    lot = _lot_view(app_context, lot_id)
+    assert (lot.type_code, lot.notes) == ("ANTIDOTE_CHEMICAL", "Management note")
+
+    adding = LotDialog(app_context)
+    qtbot.addWidget(adding)
+    assert adding.type_combo.isEnabled()
+
+
+def test_the_service_refuses_a_type_change_the_dialog_cannot_make(
+    app_context: AppContext,
+) -> None:
+    lot_id = _add_lot(app_context)
+    other = _type_id(app_context, "DECONTAMINANT")
+    with pytest.raises(ServiceError) as info:
+        _service(app_context).update_lot(
+            lot_id, LotInput(type_id=other, lot_code="L1", expires_on=date(2026, 4, 1))
+        )
+    assert info.value.code == stock_module.TYPE_IMMUTABLE
+    assert error_label(stock_module.TYPE_IMMUTABLE) != stock_module.TYPE_IMMUTABLE
 
 
 def test_the_lot_dialog_carries_the_no_clinical_information_hint(

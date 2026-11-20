@@ -40,6 +40,7 @@ from cbrn_dashboard.storage.csv_io import (
     CellError,
     EntitySpec,
     ImportFile,
+    ImportRow,
     entity_spec,
     read_entity,
     read_import_file,
@@ -1057,6 +1058,93 @@ def test_a_balance_violation_is_reported_on_its_own_line_and_nothing_is_written(
     assert _counts(db) == before
     assert change_log_rows(db) == log_before
     assert stock_repo.list_movements(db) == []
+
+
+def _movement_file(tmp_path: Path, name: str, rows: list[str]) -> Path:
+    return _write(tmp_path, name, "\n".join([STOCK_MOVEMENT_HEADER, *rows]) + "\n")
+
+
+def _database_with_receipt_and_issue(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    """The lot DEMO-L001 holds a receipt of 10 on day 1 and an issue of 10 on day 10."""
+    _import_lots(importer)
+    first = _movement_file(
+        tmp_path,
+        "database.csv",
+        [
+            "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-01;receipt;10;;",
+            "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-10;issue;10;;",
+        ],
+    )
+    assert importer.import_file("stock_movement", first).imported == 2
+    assert len(stock_repo.list_movements(db)) == 2
+
+
+def test_every_inflow_of_a_lot_is_applied_before_its_outflows_whatever_the_dates(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    _database_with_receipt_and_issue(importer, db, tmp_path)
+    second = _movement_file(
+        tmp_path,
+        "file.csv",
+        [
+            "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-03;issue;5;;",  # day 3, above the receipt of day 5
+            "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-05;receipt;5;;",
+        ],
+    )
+
+    for run in (importer.dry_run, importer.import_file):
+        report = run("stock_movement", second)
+        assert (report.errors, report.total_rows) == ((), 2)
+
+    assert report.imported == 2
+    assert len(stock_repo.list_movements(db)) == 4
+
+
+def test_a_balance_violation_still_lands_on_the_outflow_line_when_inflows_come_first(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    _database_with_receipt_and_issue(importer, db, tmp_path)
+    second = _movement_file(
+        tmp_path,
+        "file.csv",
+        [
+            "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-05;receipt;5;;",
+            "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-03;issue;20;;",  # more than all the inflows
+        ],
+    )
+
+    report = importer.import_file("stock_movement", second)
+
+    assert report.errors == (_issue(3, "quantity", "BALANCE_NEGATIVE"),)
+    assert report.imported == 0
+    assert len(stock_repo.list_movements(db)) == 2
+
+
+def test_the_movements_of_a_lot_are_applied_inflows_first_then_outflows_by_date_and_line() -> None:
+    def row(line: int, kind: str, moved_on: str, lot: str = "L1") -> ImportRow:
+        values: dict[str, object] = {
+            "type_code": "T",
+            "lot_code": lot,
+            "moved_on": moved_on,
+            "kind": kind,
+        }
+        return ImportRow(line=line, values=values)
+
+    rows = [
+        row(2, "issue", "2026-01-03"),
+        row(3, "receipt", "2026-01-05"),
+        row(4, "adjustment_in", "2026-01-04"),
+        row(5, "loss", "2026-01-03"),
+        row(6, "receipt", "2026-01-01", lot="L0"),
+        row(7, "disposal", "2026-01-02"),
+    ]
+
+    ordered = sorted(rows, key=importer_module._movement_order)
+
+    # lot L0 first; in L1 the inflows by date (4, 3), then the outflows by date and line (7, 2, 5)
+    assert [item.line for item in ordered] == [6, 4, 3, 7, 2, 5]
 
 
 def test_a_movement_in_the_future_is_reported_on_its_line_and_nothing_is_written(

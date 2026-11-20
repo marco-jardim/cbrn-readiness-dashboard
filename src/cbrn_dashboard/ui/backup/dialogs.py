@@ -11,7 +11,9 @@ into a title, tooltip, accessible name or message, and both edits are emptied af
 and when the dialog closes. The dialog is opened without blocking (``open_dialog``).
 """
 
+import weakref
 from collections.abc import Callable
+from functools import partial
 
 from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QWidget
@@ -43,12 +45,15 @@ def open_dialog(dialog: QDialog) -> None:
     dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
     if dialog.parent() is None:
         _kept.append(dialog)
-        dialog.finished.connect(lambda _result: _forget(dialog))
+        # A weak reference, never a closure holding the dialog (it deletes itself on close).
+        dialog.finished.connect(partial(_forget, weakref.ref(dialog)))
     dialog.open()
 
 
-def _forget(dialog: QDialog) -> None:
-    if dialog in _kept:
+def _forget(reference: weakref.ref[QDialog], _result: int = 0) -> None:
+    """Drop the finished dialog from the kept ones."""
+    dialog = reference()
+    if dialog is not None and dialog in _kept:
         _kept.remove(dialog)
 
 

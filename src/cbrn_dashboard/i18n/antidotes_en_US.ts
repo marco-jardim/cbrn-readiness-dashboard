@@ -5,7 +5,6 @@
     <name>Antidotes</name>
     <message>
         <source>Open record</source>
-        <extracomment>The positions of the three tabs. The horizons of the expiry schedule in months, and the one shown first.</extracomment>
         <translation>Open record</translation>
     </message>
     <message>

@@ -50,6 +50,7 @@ from cbrn_dashboard.services.stock import (
     NOTE_REQUIRED,
     ONLY_MOVEMENT,
     TEXT_TOO_LONG,
+    TYPE_IMMUTABLE,
     TYPE_IN_USE,
     TYPE_INACTIVE,
     StockTypeView,
@@ -105,7 +106,7 @@ _BUILT_IN_LABELS: dict[str, Callable[[], str]] = {
     ),
 }
 
-#: The codes of the 17 built-in item types, in the order of the seed migration.
+# The codes of the 17 built-in item types, in the order of the seed migration.
 BUILT_IN_TYPE_CODES: tuple[str, ...] = tuple(_BUILT_IN_LABELS)
 
 _CATEGORY_LABELS: dict[str, Callable[[], str]] = {
@@ -143,7 +144,12 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
         "Stock", "The change would leave the stock of this lot below zero on some date."
     ),
     CATEGORY_IMMUTABLE: lambda: QCoreApplication.translate(
-        "Stock", "The category cannot be changed because lots already use this type."
+        "Stock",
+        "The category cannot be changed because the type is already in use "
+        "(lots, a minimum, stored readings or targets).",
+    ),
+    TYPE_IMMUTABLE: lambda: QCoreApplication.translate(
+        "Stock", "The item type of a lot that has movements cannot be changed."
     ),
     DATE_IN_FUTURE: lambda: QCoreApplication.translate(
         "Stock", "A movement cannot be dated after today."
@@ -179,7 +185,9 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
         "A built-in item type cannot be deleted; only its minimum and active flag can change.",
     ),
     CODE_IMMUTABLE: lambda: QCoreApplication.translate(
-        "Stock", "The code cannot be changed because lots already use it."
+        "Stock",
+        "The code cannot be changed because the type is already in use "
+        "(lots, a minimum, stored readings or targets).",
     ),
     DUPLICATE_CODE: lambda: QCoreApplication.translate("Stock", "This code is already in use."),
     INVALID_AMOUNT: lambda: QCoreApplication.translate("Stock", "The price is not valid."),
@@ -231,7 +239,7 @@ for _config_code in CONFIG_ERROR_CODES:
         lambda: QCoreApplication.translate("Stock", "The setting is not valid."),
     )
 
-#: Every error code the stock UI can present (for the completeness test).
+# Every error code the stock UI can present (for the completeness test).
 ALL_ERROR_CODES: tuple[str, ...] = tuple(_ERROR_LABELS)
 
 _PLACEHOLDER = re.compile(r"%([1-9])")

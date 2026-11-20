@@ -24,7 +24,7 @@ from cbrn_dashboard.ui.alerts.labels import (
 from cbrn_dashboard.ui.shell.formatting import format_date
 from cbrn_dashboard.ui.shell.widgets import Column, ModuleTableModel
 
-__all__ = ["SEVERITY_COLUMN", "AlertsModel", "page_key_for"]
+__all__ = ["SEVERITY_COLUMN", "AlertsModel", "page_key_for", "stock_item_code"]
 
 #: A missing value in a cell (data, not a translatable text).
 NOT_RECORDED = "-"
@@ -56,6 +56,17 @@ def _stock_page_key(alert: Alert) -> str:
     if parts.get("category") in _ANTIDOTE_CATEGORIES:
         return ANTIDOTES_PAGE
     return _MODULE_PAGES[Module.STOCK.value]
+
+
+def stock_item_code(alert: Alert) -> str | None:
+    """The code of the stock item type of a stock alert (its ``item`` dimension), else ``None``."""
+    stock_subject = alert.subject_kind in (SubjectKind.LOT, SubjectKind.ITEM_TYPE)
+    if not (stock_subject or alert.module is Module.STOCK):
+        return None
+    try:
+        return decode_dimension(alert.dimension).get("item")
+    except InvalidDimensionError:
+        return None
 
 
 def page_key_for(alert: Alert) -> str:

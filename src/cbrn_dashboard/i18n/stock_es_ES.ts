@@ -5,7 +5,6 @@
     <name>Stock</name>
     <message>
         <source>Type</source>
-        <extracomment>The value of the minimum spin box that stands for &quot;not set&quot; (shown as its special text).</extracomment>
         <translation type="unfinished">Tipo</translation>
     </message>
     <message>
@@ -58,7 +57,6 @@
     </message>
     <message>
         <source>Not set</source>
-        <extracomment>A missing value in a cell (data, not a translatable text). The icon shape and palette colour of a lot status (D23): the look of the dashboard status it matches, so one vocabulary of shapes and colours is used everywhere. The statuses whose quantity counts as valid stock (an expiring lot is still valid).</extracomment>
         <translation type="unfinished">Sin definir</translation>
     </message>
     <message>
@@ -131,7 +129,6 @@
     </message>
     <message>
         <source>Add item type</source>
-        <extracomment>The placeholder of the minimum stock per item type (local only, no configuration field).</extracomment>
         <translation type="unfinished">Añadir tipo de artículo</translation>
     </message>
     <message>
@@ -216,12 +213,11 @@
     </message>
     <message>
         <source>Antidote</source>
-        <extracomment>The codes of the 17 built-in item types, in the order of the seed migration.</extracomment>
         <translation type="unfinished">Antídoto</translation>
     </message>
     <message>
         <source>Detector</source>
-        <translation type="unfinished">Detección</translation>
+        <translation type="unfinished">Detector</translation>
     </message>
     <message>
         <source>PPE</source>
@@ -280,8 +276,16 @@
         <translation type="unfinished">El cambio dejaría las existencias de este lote por debajo de cero en alguna fecha.</translation>
     </message>
     <message>
-        <source>The category cannot be changed because lots already use this type.</source>
-        <translation type="unfinished">La categoría no se puede cambiar porque ya hay lotes de este tipo.</translation>
+        <source>The category cannot be changed because the type is already in use (lots, a minimum, stored readings or targets).</source>
+        <translation type="unfinished">La categoría no se puede cambiar porque el tipo ya está en uso (lotes, un mínimo, lecturas almacenadas o metas).</translation>
+    </message>
+    <message>
+        <source>The item type of a lot that has movements cannot be changed.</source>
+        <translation type="unfinished">El tipo de artículo de un lote que tiene movimientos no se puede cambiar.</translation>
+    </message>
+    <message>
+        <source>The code cannot be changed because the type is already in use (lots, a minimum, stored readings or targets).</source>
+        <translation type="unfinished">El código no se puede cambiar porque el tipo ya está en uso (lotes, un mínimo, lecturas almacenadas o metas).</translation>
     </message>
     <message>
         <source>A movement cannot be dated after today.</source>
@@ -330,10 +334,6 @@
     <message>
         <source>A built-in item type cannot be deleted; only its minimum and active flag can change.</source>
         <translation type="unfinished">Un tipo de artículo integrado no se puede eliminar; solo cambian su mínimo y su indicador de activo.</translation>
-    </message>
-    <message>
-        <source>The code cannot be changed because lots already use it.</source>
-        <translation type="unfinished">El código no se puede cambiar porque ya hay lotes que lo usan.</translation>
     </message>
     <message>
         <source>This code is already in use.</source>
@@ -421,7 +421,6 @@
     </message>
     <message>
         <source>%1, %2</source>
-        <extracomment>Every error code the stock UI can present (for the completeness test).</extracomment>
         <translation type="unfinished">%1; %2</translation>
     </message>
     <message>
@@ -565,7 +564,6 @@
     </message>
     <message>
         <source>Stock item types</source>
-        <extracomment>Whether the badge of P12 is due (hidden without a readable configuration).</extracomment>
         <translation type="unfinished">Tipos de artículo de existencias</translation>
     </message>
     <message>

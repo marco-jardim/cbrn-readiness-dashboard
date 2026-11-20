@@ -6,8 +6,8 @@ or Activate, and Delete for a user-defined type that has no lots. A built-in typ
 category and name: only its minimum and its active flag change. The minimum stock of a type is the
 placeholder P12 (local only, no configuration field): its "to be confirmed" badge and Confirm
 button show until the operator confirms it or sets a minimum, as the infrastructure section does
-for A06. A minimum is always written through ``StockService.set_minimum`` with the confirmation
-of P12, so the minimum and the confirmation share one transaction.
+for A06. A type and its minimum are written through ``StockService.save_type_with_minimum`` with
+the confirmation of P12, so the type, the minimum and the confirmation share one transaction.
 
 The section reads and writes ONLY through ``context.services.stock`` and
 ``context.services.config`` (either may be ``None``: the actions are then disabled and the badge
@@ -43,7 +43,7 @@ __all__ = [
     "settings_section_title",
 ]
 
-#: The placeholder of the minimum stock per item type (local only, no configuration field).
+# The placeholder of the minimum stock per item type (local only, no configuration field).
 PLACEHOLDER_MINIMUM = "P12"
 
 
@@ -59,10 +59,9 @@ def _open(dialog: QDialog) -> None:
 class StockTypeSettingsDialog(StockTypeDialog):
     """The item-type dialog of the settings: a changed minimum confirms P12 (same transaction).
 
-    The other fields are stored first with the minimum the type already has (a refusal leaves
-    everything as it was); the minimum then goes through ``StockService.set_minimum`` with the
-    confirmation of P12, which writes the minimum and the confirmation in one transaction. A
-    minimum that does not change confirms nothing.
+    ``StockService.save_type_with_minimum`` writes the fields, the minimum and the confirmation of
+    P12 in ONE transaction: a refusal leaves everything as it was and creates no type. A minimum
+    that does not change confirms nothing.
     """
 
     def submit(self) -> bool:
@@ -82,19 +81,10 @@ class StockTypeSettingsDialog(StockTypeDialog):
         )
 
         def save() -> None:
-            if current is None:
-                type_id = service.create_type(data)
-                self.saved_type_id = type_id
-                # From here on the type exists: a retry (after a refused minimum) edits it.
-                self._type = service.get_type(type_id)
-                changed = minimum is not None
-            else:
-                type_id = current.id
-                service.update_type(type_id, data)
-                self.saved_type_id = type_id
-                changed = minimum != current.minimum_quantity
-            if changed:
-                service.set_minimum(type_id, minimum, confirm_placeholder=PLACEHOLDER_MINIMUM)
+            # One transaction: a refusal leaves the type as it was (or not created at all).
+            self.saved_type_id = service.save_type_with_minimum(
+                None if current is None else current.id, data, minimum, PLACEHOLDER_MINIMUM
+            )
 
         return apply_change(self.context, self, error_label, save)
 
@@ -158,7 +148,7 @@ class StockTypesSection(QWidget):
             self.delete_action,
             self.confirm_action,
         )
-        #: Whether the badge of P12 is due (hidden without a readable configuration).
+        # Whether the badge of P12 is due (hidden without a readable configuration).
         self._badge_due = False
         self.minimum_note = QLabel(self)
         self.minimum_note.setObjectName("stock_minimum_note")

@@ -184,15 +184,18 @@ não insira dados reais nem qualquer informação clínica.
      "Todos os tipos" mantém a aba atual, e trocar de aba à mão não muda o filtro.
 3. Use "Adicionar lote" para criar o lote fictício `TESTE-L10` do tipo "Cilindro de O2", sem validade,
    com data de recebimento hoje e quantidade inicial 10.
-   - Resultado esperado: o lote aparece com 10 em estoque e a situação "Válido". Um lote de antídoto
-     sem validade é recusado com uma mensagem.
+   - Resultado esperado: o lote aparece com 10 em estoque e a situação "Válido". Em seguida tente
+     criar um lote de antídoto deixando o campo de validade em branco: o campo começa em branco, a
+     caixa "Sem validade" fica desativada para esse tipo e o salvamento é recusado com a mensagem "Lotes
+     de antídotos e descontaminantes precisam de data de validade."; nada é gravado.
 4. Selecione o lote e use "Registrar movimentação" para uma saída (consumo) de 4 unidades.
    - Resultado esperado: o estoque passa a 6, e a lista de movimentações mostra +10 e -4 com o saldo
      após cada uma.
 5. Registre uma saída (consumo) de 20 unidades.
    - Resultado esperado: a tela recusa com a mensagem de que a alteração deixaria o estoque do lote
-     abaixo de zero em alguma data; nada é gravado. Uma movimentação com data posterior a hoje também
-     é recusada, e um ajuste sem observação também.
+     abaixo de zero em alguma data; nada é gravado. O campo de data da
+     movimentação não permite uma data posterior a hoje: ele para em hoje (não há como digitar ou
+     escolher um dia depois de hoje). Um ajuste sem observação é recusado com uma mensagem.
 6. Registre um descarte de 6 unidades.
    - Resultado esperado: o lote fica "Esgotado" e some da lista. Marque "Mostrar lotes esgotados":
      o lote volta a aparecer. Com a data de referência anterior ao descarte, o lote mostra de novo 6

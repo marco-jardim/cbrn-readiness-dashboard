@@ -16,6 +16,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QDialog, QWidget
 from pytestqt.qtbot import QtBot
 
+from cbrn_dashboard.domain.config import ConfigError
 from cbrn_dashboard.domain.stock import StockCategory
 from cbrn_dashboard.services.config import ConfigService
 from cbrn_dashboard.services.stock import (
@@ -26,6 +27,7 @@ from cbrn_dashboard.services.stock import (
     StockTypeInput,
     StockTypeView,
 )
+from cbrn_dashboard.storage import settings_repo
 from cbrn_dashboard.ui.shell import registry
 from cbrn_dashboard.ui.shell.context import AppContext, Services
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
@@ -250,6 +252,37 @@ def test_a_refused_new_type_writes_nothing_and_keeps_the_badge(
     assert section.model.rowCount() == 17
     assert _badge_shown(section)
     assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is True
+
+
+def test_a_failing_confirmation_creates_no_type_and_a_retry_creates_it_once(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    section = _section(app_context, qtbot)
+    section.add_action.trigger()
+    dialog = _open_dialog(section)
+    _fill_new(dialog, "DEMO-X", 25)
+
+    def failing(*_args: object) -> None:
+        raise ConfigError("UNKNOWN_PLACEHOLDER", "placeholder_id")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(settings_repo, "confirm_placeholder", failing)
+        dialog.accept()
+
+    assert dialog.isVisible()
+    assert _warnings(fake_prompts) == [error_label("UNKNOWN_PLACEHOLDER")]
+    assert _service(app_context).get_type_by_code("DEMO-X") is None  # one transaction: no half
+    assert dialog.saved_type_id is None
+    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is True
+
+    dialog.accept()  # the same dialog, now without the failure: creates the type once
+
+    assert _minimum(app_context, "DEMO-X") == 25
+    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is False
+    assert [row.code for row in section.model.rows()].count("DEMO-X") == 1
 
 
 def test_a_user_type_is_renamed_without_confirming_p12(

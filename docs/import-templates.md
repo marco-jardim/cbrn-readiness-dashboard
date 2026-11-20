@@ -423,9 +423,11 @@ Some entities need a note:
   without a currency is `INVALID_CURRENCY`; a currency without a price is ignored.
 * `stock_movement` is written through the stock service, which keeps the balance of a lot from
   going below zero on any date and refuses a date after today. The order of the rows in the file
-  does not matter: the movements of each lot are applied in the order of date, then inflows
-  (`receipt`, `adjustment_in`) before outflows, then file line, and each one is checked against the
-  movements the lot already has and the rows applied before it. `BALANCE_NEGATIVE` (column
+  does not matter: for each lot ALL the inflows (`receipt`, `adjustment_in`) are applied first,
+  whatever their dates (by date, then file line), and then the outflows by date, then file line.
+  Each one is checked against the whole dated timeline of the lot: the movements it already has and
+  the rows applied before it. So a lot with a receipt of 10 on day 1 and an issue of 10 on day 10 in
+  the database accepts a file with an issue of 5 on day 3 and a receipt of 5 on day 5. `BALANCE_NEGATIVE` (column
   `quantity`) and `DATE_IN_FUTURE` (column `moved_on`) are reported on the line of the movement that
   causes them. An empty `reference` is allowed and is stored as the empty text; it is part of the
   natural key. An adjustment without a `note` is `NOTE_REQUIRED`.

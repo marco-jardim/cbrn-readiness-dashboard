@@ -44,9 +44,9 @@ from cbrn_dashboard.ui.personnel.labels import error_label as _personnel_error_l
 from cbrn_dashboard.ui.shell.widgets import label_for
 from cbrn_dashboard.ui.stock.labels import error_label as _stock_error_label
 
-#: The label functions of the module pages, asked in turn for a code this UI has no label for.
-#: The stock one is last: ``BALANCE_NEGATIVE``, ``DATE_IN_FUTURE``, ``DUPLICATE_LOT``... of an
-#: imported stock row are its own codes.
+# The label functions of the module pages, asked in turn for a code this UI has no label for.
+# The stock one is last: ``BALANCE_NEGATIVE``, ``DATE_IN_FUTURE``, ``DUPLICATE_LOT``... of an
+# imported stock row are its own codes.
 _MODULE_LABELS: tuple[Callable[[str], str], ...] = (
     _personnel_error_label,
     _infrastructure_error_label,
@@ -201,14 +201,53 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
 ALL_ERROR_CODES: tuple[str, ...] = tuple(_ERROR_LABELS)
 
 
-def error_label(code: str) -> str:
-    """The translated message of an error code.
+# The stock entities: their rows report the codes of the stock service, which share names with
+# codes of other modules (``TYPE_INACTIVE``, ``INVALID_KIND``) but not their meaning (P11-03).
+_STOCK_ENTITIES = frozenset({"stock_item_type", "stock_lot", "stock_movement"})
 
-    A code of this UI first; then the four module label maps (an imported row reports the codes of
-    the module services, P8-09); the code itself when nobody knows it.
+# The label function of the module that owns an importable entity.
+_ENTITY_MODULE: dict[str, Callable[[str], str]] = {
+    "training_course": _personnel_error_label,
+    "staff_member": _personnel_error_label,
+    "ppe_certification": _personnel_error_label,
+    "training_record": _personnel_error_label,
+    "academic_degree": _personnel_error_label,
+    "asset_type": _infrastructure_error_label,
+    "asset": _infrastructure_error_label,
+    "asset_status_event": _infrastructure_error_label,
+    "maintenance_event": _infrastructure_error_label,
+    "evaluation_metric": _exercises_error_label,
+    "exercise_edition": _exercises_error_label,
+    "exercise_country": _exercises_error_label,
+    "evaluation_result": _exercises_error_label,
+    "funding_source": _budget_error_label,
+    "budget_entry": _budget_error_label,
+    "budget_execution": _budget_error_label,
+    "stock_item_type": _stock_error_label,
+    "stock_lot": _stock_error_label,
+    "stock_movement": _stock_error_label,
+}
+
+
+def error_label(code: str, entity: str | None = None) -> str:
+    """The translated message of an error code of a row of ``entity`` (``None``: not known).
+
+    A stock entity asks the stock labels first, so its codes keep their stock wording. For any
+    other entity a code of this UI comes first. Then the module that owns the entity, then the
+    other module label maps (an imported row reports the codes of the module services, P8-09);
+    the code itself when nobody knows it.
     """
+    own = None if entity is None else _ENTITY_MODULE.get(entity)
+    if entity in _STOCK_ENTITIES and own is not None:
+        text = own(code)
+        if text != code:
+            return text
     if code in _ERROR_LABELS:
         return label_for(_ERROR_LABELS, code)
+    if own is not None:
+        text = own(code)
+        if text != code:
+            return text
     for module_label in _MODULE_LABELS:
         text = module_label(code)
         if text != code:

@@ -5,6 +5,7 @@ Headers are translated on every ``headerData`` call; dates are formatted for the
 Cell contents are data: times, versions, the operator's reasons and the codes of the error report.
 """
 
+from dataclasses import dataclass
 from typing import Any
 
 from PySide6.QtCore import QCoreApplication
@@ -15,7 +16,7 @@ from cbrn_dashboard.ui.reports.labels import error_label, origin_label, state_la
 from cbrn_dashboard.ui.shell.formatting import format_date, format_number
 from cbrn_dashboard.ui.shell.widgets import Column, ModuleTableModel
 
-__all__ = ["IssuesModel", "SnapshotsModel"]
+__all__ = ["IssueRow", "IssuesModel", "SnapshotsModel"]
 
 #: A missing value in a cell (data, not a translatable text).
 NOT_RECORDED = "-"
@@ -67,6 +68,16 @@ class SnapshotsModel(ModuleTableModel):
         self.set_rows(snapshots)
 
 
+@dataclass(frozen=True)
+class IssueRow:
+    """One row of the error report: the issue and the entity of the file it was found in."""
+
+    line: int
+    column: str
+    code: str
+    entity: str | None = None
+
+
 class IssuesModel(ModuleTableModel):
     """The per-row error report of an import: line, column, the message and the raw code."""
 
@@ -87,7 +98,7 @@ class IssuesModel(ModuleTableModel):
         Column[Any](
             "problem",
             lambda: QCoreApplication.translate("ReportsUi", "Problem"),
-            lambda row, lang: error_label(row.code),
+            lambda row, lang: error_label(row.code, row.entity),
         ),
         Column[Any](
             "code",
@@ -96,5 +107,6 @@ class IssuesModel(ModuleTableModel):
         ),
     )
 
-    def set_issues(self, issues: tuple[ImportIssue, ...]) -> None:
-        self.set_rows(list(issues))
+    def set_issues(self, issues: tuple[ImportIssue, ...], entity: str | None = None) -> None:
+        """Show ``issues`` of a file of ``entity``; the entity decides which module words them."""
+        self.set_rows([IssueRow(i.line, i.column, i.code, entity) for i in issues])

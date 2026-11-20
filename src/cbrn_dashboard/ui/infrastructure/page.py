@@ -369,6 +369,19 @@ class InfrastructurePage(QWidget):
             self.tabs.setCurrentIndex(STOCK_TAB if stock else UNITS_TAB)
         self.refresh()
 
+    def show_stock_item(self, code: str) -> bool:
+        """Show the "Stock (lots)" tab with the "Type" filter on the stock type ``code``.
+
+        The hook of "Open record" for a stock alert. ``False`` (nothing changes) when no stock type
+        with that code is in the filter.
+        """
+        index = self.type_combo.findData(STOCK_FILTER_PREFIX + code)
+        if index < 0:
+            return False
+        self.type_combo.setCurrentIndex(index)  # _filter_changed shows the tab and refreshes
+        self.tabs.setCurrentIndex(STOCK_TAB)
+        return True
+
     def _apply_stock_filter(self, wanted: object) -> None:
         """Give the stock panel the chosen filter: all, one stock type, or the empty state."""
         if wanted is None:

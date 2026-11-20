@@ -28,6 +28,7 @@ __all__ = [
     "StockLotRow",
     "StockMovementRow",
     "StockTypeRow",
+    "code_in_stored_dimensions",
     "delete_lot",
     "delete_movement",
     "delete_type",
@@ -198,6 +199,21 @@ def type_in_use(conn: DatabaseConnection, type_id: int) -> bool:
     """Whether any lot uses the type."""
     sql = "SELECT 1 FROM stock_lot WHERE type_id = ? LIMIT 1"
     return conn.execute(sql, (type_id,)).fetchone() is not None
+
+
+def code_in_stored_dimensions(conn: DatabaseConnection, code: str) -> bool:
+    """Whether ``item=<code>`` is a part of a stored snapshot reading or indicator target.
+
+    The dimension text is ``key=value;key=value`` (sorted keys); the stock indicators use the
+    ``item`` key for the code of an item type. Such a row names the type by its code, so the code
+    must not change afterwards. The match is exact (case included), on a whole part.
+    """
+    needle = f";item={code};"
+    for table in ("readiness_snapshot_value", "indicator_target"):
+        sql = f"SELECT 1 FROM {table} WHERE instr(';' || dimension || ';', ?) > 0 LIMIT 1"
+        if conn.execute(sql, (needle,)).fetchone() is not None:
+            return True
+    return False
 
 
 def insert_type(

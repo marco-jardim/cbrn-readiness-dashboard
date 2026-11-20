@@ -650,7 +650,7 @@ class ImportDialog(FormDialog):
         entity = self.entity()
         report = guarded(self.context, self, error_label, lambda: service.dry_run(entity, path))
         self._report = report
-        self.issues_model.set_issues(() if report is None else report.errors)
+        self.issues_model.set_issues(() if report is None else report.errors, entity)
         self._show_summary()
         return report
 
@@ -686,7 +686,7 @@ class ImportDialog(FormDialog):
         if report is None:
             return False
         self._report = report
-        self.issues_model.set_issues(report.errors)
+        self.issues_model.set_issues(report.errors, entity)
         self._show_summary()
         if not report.ok:
             self.context.prompts.warning(self, title, problems)

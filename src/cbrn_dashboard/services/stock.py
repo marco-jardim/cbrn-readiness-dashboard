@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 
 from cbrn_dashboard.clock import Clock
@@ -117,6 +117,7 @@ __all__ = [
     "NOTE_REQUIRED",
     "ONLY_MOVEMENT",
     "TEXT_TOO_LONG",
+    "TYPE_IMMUTABLE",
     "TYPE_INACTIVE",
     "TYPE_IN_USE",
     "InitialReceipt",
@@ -159,6 +160,8 @@ ONLY_MOVEMENT = "ONLY_MOVEMENT"
 INVALID_KIND = "INVALID_KIND"
 #: The horizon of the expiry schedule is not from 1 to 60 months.
 INVALID_MONTHS = "INVALID_MONTHS"
+#: A lot that has movements cannot move to another item type (P11-06).
+TYPE_IMMUTABLE = "TYPE_IMMUTABLE"
 
 #: Longest lot code, in characters.
 LOT_CODE_MAX_LENGTH = 64
@@ -566,6 +569,18 @@ class StockService:
 
     # ----- item types: validation
 
+    def _type_is_referenced(self, row: StockTypeRow) -> bool:
+        """Whether something outside the type row relies on its code and category (P11-05).
+
+        A lot uses the type, a minimum (P12) is set for it, or its code is named by a stored
+        snapshot reading (dimension ``item=<code>``) or by an indicator target.
+        """
+        return (
+            repo.type_in_use(self._conn, row.id)
+            or row.minimum_quantity is not None
+            or repo.code_in_stored_dimensions(self._conn, row.code)
+        )
+
     def _validate_type(self, data: StockTypeInput, current: StockTypeRow | None) -> _TypeFields:
         code = _check_code(data.code)
         category = _parse_category(data.category)
@@ -592,7 +607,7 @@ class StockService:
                 raise ServiceError(LABEL_PT_BR_REQUIRED, "label_pt_br")
             label_en_us = _clean(data.label_en_us)
             label_es_es = _clean(data.label_es_es)
-            if current is not None and repo.type_in_use(self._conn, current.id):
+            if current is not None and self._type_is_referenced(current):
                 require(code == current.code, CODE_IMMUTABLE, "code")
                 require(category.value == current.category, CATEGORY_IMMUTABLE, "category")
         existing = repo.get_type_by_code(self._conn, code)
@@ -635,7 +650,9 @@ class StockService:
 
         Built-in types: only the minimum and ``active`` change (``BUILT_IN_TYPE`` when the code,
         the category or a label differs). User-defined types: the code is frozen
-        (``CODE_IMMUTABLE``) and so is the category (``CATEGORY_IMMUTABLE``) once a lot uses it.
+        (``CODE_IMMUTABLE``) and so is the category (``CATEGORY_IMMUTABLE``) once a lot uses the
+        type, a minimum is set for it, or its code is named by a stored snapshot reading or
+        indicator target (dimension ``item=<code>``).
         Use :meth:`set_minimum` to confirm P12 together with a new minimum.
         """
         self._require_writable()
@@ -689,6 +706,56 @@ class StockService:
             changed = self._write_type(row, minimum_quantity=checked, active=row.active)
             self._confirm_if_changed(changed, confirm_placeholder)
             return changed
+
+    def save_type_with_minimum(
+        self,
+        type_id: int | None,
+        data: StockTypeInput,
+        minimum: int | None,
+        confirm_placeholder: str | None = "P12",
+    ) -> int:
+        """Create (``type_id`` ``None``) or change a type together with its minimum; returns its id.
+
+        One transaction: the type, the minimum (``data.minimum_quantity`` is ignored) and, when the
+        minimum changed (a new type counts as changed when it has one), the confirmation of
+        ``confirm_placeholder`` (P12 by default; ``None`` confirms nothing). Any refusal, a bad
+        minimum or a failing confirmation included, leaves nothing written: no type is created and
+        no field is changed.
+        """
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            checked = _minimum(minimum)
+            current = None if type_id is None else self._type_row(type_id)
+            fields = self._validate_type(replace(data, minimum_quantity=checked), current)
+            if current is None:
+                saved_id = repo.insert_type(
+                    self._ctx(),
+                    code=fields.code,
+                    built_in=False,
+                    category=fields.category.value,
+                    label_pt_br=fields.label_pt_br,
+                    label_en_us=fields.label_en_us,
+                    label_es_es=fields.label_es_es,
+                    minimum_quantity=checked,
+                    active=fields.active,
+                )
+                changed = checked is not None
+            else:
+                saved_id = current.id
+                repo.update_type(
+                    self._ctx(),
+                    saved_id,
+                    code=fields.code,
+                    category=fields.category.value,
+                    label_pt_br=fields.label_pt_br,
+                    label_en_us=fields.label_en_us,
+                    label_es_es=fields.label_es_es,
+                    minimum_quantity=checked,
+                    active=fields.active,
+                )
+                changed = checked != current.minimum_quantity
+            self._confirm_if_changed(changed, confirm_placeholder)
+            return saved_id
 
     def _confirm_if_changed(self, changed: bool, placeholder_id: str | None) -> None:
         """Confirm ``placeholder_id`` (its badge is due) in the caller's transaction."""
@@ -749,6 +816,10 @@ class StockService:
         require(bool(lot_code), REQUIRED, "lot_code")
         require(len(lot_code) <= LOT_CODE_MAX_LENGTH, TEXT_TOO_LONG, "lot_code")
         type_row = self._type_row(data.type_id)
+        if current is not None and current.type_id != type_row.id:
+            # the balance, the schedule and the alerts of a lot follow its type: a lot with
+            # movements stays where it is (a lot entered by mistake is deleted and entered again)
+            require(not repo.lot_in_use(self._conn, current.id), TYPE_IMMUTABLE, "type_id")
         expires_on = _parse_optional_date(data.expires_on, "expires_on")
         if StockCategory(type_row.category) in EXPIRY_REQUIRED_CATEGORIES:
             require(expires_on is not None, EXPIRY_REQUIRED, "expires_on")
@@ -824,7 +895,10 @@ class StockService:
             return lot_id
 
     def update_lot(self, lot_id: int, data: LotInput) -> None:
-        """Change a lot (its movements are changed with the movement methods of T11.6)."""
+        """Change a lot (its movements are changed with the movement methods of T11.6).
+
+        ``TYPE_IMMUTABLE`` when the type changes and the lot already has movements.
+        """
         self._require_writable()
         with _translated(), transaction(self._conn):
             current = self._lot_row(lot_id)

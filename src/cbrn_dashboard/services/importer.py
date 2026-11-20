@@ -766,21 +766,24 @@ def _natural_key(spec: EntitySpec, values: _Values) -> tuple[object, ...]:
     return tuple(_normalised(code, values.get(code)) for code in spec.natural_key)
 
 
-def _movement_order(row: csv_io.ImportRow) -> tuple[str, str, str, int, int]:
-    """The order a lot's movements are applied in: date, inflows before outflows, file line.
+def _movement_order(row: csv_io.ImportRow) -> tuple[str, str, int, str, int]:
+    """The order a lot's movements are applied in: every inflow first, then the outflows.
 
-    The rows of one lot stay together (type code, lot code first). Inside a day the inflows come
-    first, as in the running balance of the screen, so a file with an outflow above the receipt
-    that feeds it is still consistent; ``row.line`` makes the order total and the result the same
-    on every run. ``BALANCE_NEGATIVE`` then falls on the line of the outflow that overdraws a lot.
+    The rows of one lot stay together (type code, lot code first). Inside a lot ALL the inflows
+    (receipt, adjustment_in) come first, whatever their dates, then the outflows by date and file
+    line (inflows by date and line among themselves). The service checks the whole dated timeline
+    of the lot on every insert, so an outflow that an inflow of the same file (or of the database)
+    covers is never refused only because the file lists it first or the inflow is dated later in
+    the file than in the database. ``row.line`` makes the order total and the result the same on
+    every run. ``BALANCE_NEGATIVE`` then falls on the line of the outflow that overdraws a lot.
     """
     values = row.values
     kind = values.get("kind")
     return (
         str(_normalised("type_code", values.get("type_code"))),
         str(_normalised("lot_code", values.get("lot_code"))),
-        str(_normalised("moved_on", values.get("moved_on"))),
         0 if isinstance(kind, str) and kind in _INFLOW_KINDS else 1,
+        str(_normalised("moved_on", values.get("moved_on"))),
         row.line,
     )
 

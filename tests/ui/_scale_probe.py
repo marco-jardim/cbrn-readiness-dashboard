@@ -8,9 +8,10 @@ test cannot change it in its own process.
 
 The probe collects every Qt warning, critical and fatal message through ``qInstallMessageHandler``
 (installed before the application object exists), starts the real window on the demo database,
-makes every page current, shows every dialog of the dialog registry, and prints ONE line of JSON
-with the keys ``pages`` and ``dialogs`` (counts), ``ratio`` (the device-pixel ratio of the primary
-screen) and ``messages`` (the Qt warnings collected).
+makes every page current and every tab of every tab widget of the page current (the Settings groups
+included), shows every dialog of the dialog registry, and prints ONE line of JSON with the keys
+``pages``, ``dialogs``, ``tabs`` and ``settings_groups`` (counts), ``ratio`` (the device-pixel
+ratio of the primary screen) and ``messages`` (the Qt warnings collected).
 """
 
 import json
@@ -19,6 +20,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QMessageLogContext, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QTabWidget
 
 from cbrn_dashboard.app import AppHandle, start
 from cbrn_dashboard.cli import CliOptions
@@ -60,10 +62,24 @@ def main(argv: list[str]) -> int:
     app = result.app
     app.processEvents()
     pages = 0
+    tabs = 0
+    settings_groups = 0
     for spec in registry.pages():
         window.show_page(spec.key)
         app.processEvents()
         pages += 1
+        # Every tab of every tab widget of the page (the stock tab, the antidotes tabs, the
+        # groups of Settings with the stock types and P11) is made current once.
+        page = window.page_widget(spec.key)
+        for tab_widget in page.findChildren(QTabWidget):
+            for index in range(tab_widget.count()):
+                tab_widget.setCurrentIndex(index)
+                app.processEvents()
+                tabs += 1
+                if tab_widget.objectName() == "settings_tabs":
+                    settings_groups += 1
+            tab_widget.setCurrentIndex(0)
+        app.processEvents()
     dialogs = 0
     for dialog_spec in registry.dialogs():
         dialog = dialog_spec.factory(result.context, window)
@@ -75,7 +91,14 @@ def main(argv: list[str]) -> int:
     screen = QGuiApplication.primaryScreen()
     ratio = 1.0 if screen is None else float(screen.devicePixelRatio())
     result.close()
-    report = {"pages": pages, "dialogs": dialogs, "ratio": ratio, "messages": _messages}
+    report = {
+        "pages": pages,
+        "dialogs": dialogs,
+        "tabs": tabs,
+        "settings_groups": settings_groups,
+        "ratio": ratio,
+        "messages": _messages,
+    }
     sys.stdout.write(json.dumps(report) + "\n")
     return 0
 

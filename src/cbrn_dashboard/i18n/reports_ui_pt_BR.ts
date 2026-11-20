@@ -139,7 +139,7 @@
     </message>
     <message>
         <source>The data is read-only: nothing was changed.</source>
-        <extracomment>The label functions of the module pages, asked in turn for a code this UI has no label for. The stock one is last: ``BALANCE_NEGATIVE``, ``DATE_IN_FUTURE``, ``DUPLICATE_LOT``... of an imported stock row are its own codes. The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
+        <extracomment>The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
         <translation type="unfinished">Os dados estão somente para leitura: nada foi alterado.</translation>
     </message>
     <message>

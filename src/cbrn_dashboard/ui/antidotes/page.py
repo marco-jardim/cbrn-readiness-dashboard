@@ -49,12 +49,12 @@ from cbrn_dashboard.ui.stock.panel import StockPanel
 
 __all__ = ["AntidotesPage", "create_page", "page_title"]
 
-#: The positions of the three tabs.
+# The positions of the three tabs.
 LOTS_TAB = 0
 SCHEDULE_TAB = 1
 ALERTS_TAB = 2
 
-#: The horizons of the expiry schedule in months, and the one shown first.
+# The horizons of the expiry schedule in months, and the one shown first.
 HORIZONS: tuple[int, ...] = (6, 12, 24)
 DEFAULT_HORIZON = 12
 

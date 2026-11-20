@@ -21,7 +21,7 @@ from cbrn_dashboard.ui.alerts.labels import (
     module_label,
     severity_label,
 )
-from cbrn_dashboard.ui.alerts.models import AlertsModel, page_key_for
+from cbrn_dashboard.ui.alerts.models import AlertsModel, page_key_for, stock_item_code
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.widgets import (
     EditAction,
@@ -217,7 +217,26 @@ class AlertsPage(QWidget):
         show_page = getattr(self.window(), "show_page", None)
         if callable(show_page):
             show_page(key)
+            self._show_stock_item(alert, key)
         return True
+
+    def _show_stock_item(self, alert: Alert, key: str) -> None:
+        """A stock alert that opens Infrastructure shows the lots of its item type (P11-08).
+
+        The antidote and decontaminant alerts open their own page, which handles them itself.
+        The page is asked only when it has the hook ``show_stock_item``.
+        """
+        item = stock_item_code(alert)
+        page_widget = getattr(self.window(), "page_widget", None)
+        if item is None or key != "infrastructure" or not callable(page_widget):
+            return
+        try:
+            target = page_widget(key)
+        except (KeyError, LookupError):
+            return
+        show_stock_item = getattr(target, "show_stock_item", None)
+        if callable(show_stock_item):
+            show_stock_item(item)
 
 
 # --------------------------------------------------------------------------- registry factories

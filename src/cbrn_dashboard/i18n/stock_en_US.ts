@@ -5,7 +5,6 @@
     <name>Stock</name>
     <message>
         <source>Type</source>
-        <extracomment>The value of the minimum spin box that stands for &quot;not set&quot; (shown as its special text).</extracomment>
         <translation>Type</translation>
     </message>
     <message>
@@ -58,7 +57,6 @@
     </message>
     <message>
         <source>Not set</source>
-        <extracomment>A missing value in a cell (data, not a translatable text). The icon shape and palette colour of a lot status (D23): the look of the dashboard status it matches, so one vocabulary of shapes and colours is used everywhere. The statuses whose quantity counts as valid stock (an expiring lot is still valid).</extracomment>
         <translation>Not set</translation>
     </message>
     <message>
@@ -131,7 +129,6 @@
     </message>
     <message>
         <source>Add item type</source>
-        <extracomment>The placeholder of the minimum stock per item type (local only, no configuration field).</extracomment>
         <translation>Add item type</translation>
     </message>
     <message>
@@ -216,7 +213,6 @@
     </message>
     <message>
         <source>Antidote</source>
-        <extracomment>The codes of the 17 built-in item types, in the order of the seed migration.</extracomment>
         <translation>Antidote</translation>
     </message>
     <message>
@@ -280,8 +276,16 @@
         <translation>The change would leave the stock of this lot below zero on some date.</translation>
     </message>
     <message>
-        <source>The category cannot be changed because lots already use this type.</source>
-        <translation>The category cannot be changed because lots already use this type.</translation>
+        <source>The category cannot be changed because the type is already in use (lots, a minimum, stored readings or targets).</source>
+        <translation>The category cannot be changed because the type is already in use (lots, a minimum, stored readings or targets).</translation>
+    </message>
+    <message>
+        <source>The item type of a lot that has movements cannot be changed.</source>
+        <translation>The item type of a lot that has movements cannot be changed.</translation>
+    </message>
+    <message>
+        <source>The code cannot be changed because the type is already in use (lots, a minimum, stored readings or targets).</source>
+        <translation>The code cannot be changed because the type is already in use (lots, a minimum, stored readings or targets).</translation>
     </message>
     <message>
         <source>A movement cannot be dated after today.</source>
@@ -330,10 +334,6 @@
     <message>
         <source>A built-in item type cannot be deleted; only its minimum and active flag can change.</source>
         <translation>A built-in item type cannot be deleted; only its minimum and active flag can change.</translation>
-    </message>
-    <message>
-        <source>The code cannot be changed because lots already use it.</source>
-        <translation>The code cannot be changed because lots already use it.</translation>
     </message>
     <message>
         <source>This code is already in use.</source>
@@ -421,7 +421,6 @@
     </message>
     <message>
         <source>%1, %2</source>
-        <extracomment>Every error code the stock UI can present (for the completeness test).</extracomment>
         <translation>%1, %2</translation>
     </message>
     <message>
@@ -565,7 +564,6 @@
     </message>
     <message>
         <source>Stock item types</source>
-        <extracomment>Whether the badge of P12 is due (hidden without a readable configuration).</extracomment>
         <translation>Stock item types</translation>
     </message>
     <message>

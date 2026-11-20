@@ -55,11 +55,11 @@ __all__ = [
     "signed_text",
 ]
 
-#: A missing value in a cell (data, not a translatable text).
+# A missing value in a cell (data, not a translatable text).
 NOT_RECORDED = "-"
 
-#: The icon shape and palette colour of a lot status (D23): the look of the dashboard status it
-#: matches, so one vocabulary of shapes and colours is used everywhere.
+# The icon shape and palette colour of a lot status (D23): the look of the dashboard status it
+# matches, so one vocabulary of shapes and colours is used everywhere.
 LOT_STATUS_LOOK: dict[LotStatus, IndicatorStatus] = {
     LotStatus.VALID: IndicatorStatus.OK,
     LotStatus.EXPIRING: IndicatorStatus.WARNING,
@@ -68,7 +68,7 @@ LOT_STATUS_LOOK: dict[LotStatus, IndicatorStatus] = {
     LotStatus.NOT_RECEIVED: IndicatorStatus.NO_DATA,
 }
 
-#: The statuses whose quantity counts as valid stock (an expiring lot is still valid).
+# The statuses whose quantity counts as valid stock (an expiring lot is still valid).
 _VALID_STATUSES = frozenset({LotStatus.VALID, LotStatus.EXPIRING})
 
 

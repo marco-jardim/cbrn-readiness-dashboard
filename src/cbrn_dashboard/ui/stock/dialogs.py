@@ -11,7 +11,7 @@ with ``i18nData``. Stock is management data only: the hints say so and no field 
 information (D19, D38).
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from PySide6.QtCore import QCoreApplication, QDate
 from PySide6.QtWidgets import (
@@ -83,7 +83,7 @@ __all__ = [
     "demo_type_dialog",
 ]
 
-#: The value of the minimum spin box that stands for "not set" (shown as its special text).
+# The value of the minimum spin box that stands for "not set" (shown as its special text).
 _MINIMUM_NOT_SET = -1
 
 
@@ -91,6 +91,34 @@ def _date_edit(parent: QWidget, value: QDate) -> QDateEdit:
     edit = QDateEdit(value, parent)
     edit.setCalendarPopup(True)
     return edit
+
+
+# The earliest date a "blank" date field can hold; at this date the field shows nothing.
+_BLANK_DATE = QDate(1900, 1, 1)
+# The special text of a blank date field (a single space: Qt treats an empty text as "none").
+_BLANK_TEXT = " "
+
+
+def _blank_date_edit(parent: QWidget, page: QDate) -> QDateEdit:
+    """A date field that starts blank: it shows nothing until a date is chosen.
+
+    The blank state is the minimum date with a special text, so no valid date is lost; read it
+    with :func:`_blank_to_none`. The calendar opens on the month of ``page``.
+    """
+    edit = QDateEdit(_BLANK_DATE, parent)
+    edit.setMinimumDate(_BLANK_DATE)
+    edit.setSpecialValueText(_BLANK_TEXT)
+    edit.setCalendarPopup(True)
+    calendar = edit.calendarWidget()
+    if calendar is not None:
+        calendar.setCurrentPage(page.year(), page.month())
+    return edit
+
+
+def _blank_to_none(edit: QDateEdit) -> date | None:
+    """The date of a field made by :func:`_blank_date_edit`; ``None`` while it is blank."""
+    value = edit.date()
+    return None if value == edit.minimumDate() else from_qdate(value)
 
 
 def _show_format_error(
@@ -133,7 +161,9 @@ class LotDialog(FormDialog):
     ``categories`` limits the item types offered (the antidotes page offers two categories); the
     types are the ACTIVE ones, plus the type of the lot being edited. ``type_code`` preselects a
     type. The "No expiry date" box is disabled (and unchecked) for the categories whose lots need
-    an expiry date. After a successful save ``saved_lot_id`` holds the id of the lot.
+    an expiry date; the expiry field starts blank, so such a lot saved without choosing a date is
+    refused by the service (``EXPIRY_REQUIRED``). The type of a lot being edited cannot be changed
+    (the combo box is disabled). After a successful save ``saved_lot_id`` holds the id of the lot.
     """
 
     def __init__(
@@ -168,7 +198,7 @@ class LotDialog(FormDialog):
         self.lot_code_edit = QLineEdit(self)
         self.lot_hint = QLabel(self)
         self.lot_hint.setWordWrap(True)
-        self.expires_edit = _date_edit(self, to_qdate(context.as_of))
+        self.expires_edit = _blank_date_edit(self, to_qdate(context.as_of))
         self.no_expiry_check = QCheckBox(self)
         self.no_expiry_check.setChecked(True)
         self.price_edit = QLineEdit(self)
@@ -212,6 +242,9 @@ class LotDialog(FormDialog):
         self.no_expiry_check.toggled.connect(self._sync_expiry)
         if lot is not None:
             self._load(lot)
+            # the item type of an existing lot does not change (``TYPE_IMMUTABLE`` once it has
+            # movements, and its balance, schedule and alerts follow its type)
+            self.type_combo.setEnabled(False)
         elif type_code is not None:
             self._select_type_code(type_code)
         self._sync_expiry()
@@ -296,7 +329,7 @@ class LotDialog(FormDialog):
                 _show_format_error(self.context, self, error, "unit_price_minor")
                 return False
             currency = self.selected_currency()
-        expires = None if self.no_expiry_check.isChecked() else from_qdate(self.expires_edit.date())
+        expires = None if self.no_expiry_check.isChecked() else _blank_to_none(self.expires_edit)
         data = LotInput(
             type_id=None if selected is None else selected.id,
             lot_code=self.lot_code_edit.text(),
@@ -597,6 +630,7 @@ def demo_lot_dialog(context: AppContext, parent: QWidget | None = None) -> QDial
     """A lot dialog filled with a fictitious lot (it writes nothing unless accepted)."""
     dialog = LotDialog(context, parent, type_code="ANTIDOTE_CHEMICAL")
     dialog.lot_code_edit.setText("DEMO-L001")
+    dialog.expires_edit.setDate(to_qdate(context.as_of + timedelta(days=365)))
     dialog.quantity_spin.setValue(10)
     dialog.reference_edit.setText("DEMO-REF-001")
     return dialog
