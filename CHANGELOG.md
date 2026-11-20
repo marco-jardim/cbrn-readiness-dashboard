@@ -30,6 +30,8 @@ are still flagged in code, and the terminology review is pending.
 - Stock of CBRN consumables and equipment by lot (owner request of 2026-11-20). This is a plan
   only: nothing of it is implemented yet, and no change to the data model, the pages, the
   indicators or the catalogues has been made for it. This entry will list what ships when it does.
+  The plan itself was amended (PLAN.md, task T11.2): the owner requests O01 to O04, the decisions
+  D32 to D38, the risks K20 to K23, the open questions Q25 to Q29 and the Phase 11 tasks.
 
 ### Changed since 1.0.2
 
@@ -114,9 +116,16 @@ records no answer to any of them.
 - Q22: answered and implemented in task T9.2
 - Q23: open
 - Q24: answered and applied locally
+- Q25: open
+- Q26: open
+- Q27: open
+- Q28: open
+- Q29: open
 
 Q19 (formal classification), Q4, Q11 and Q13 gate the entry of real data. Until they are answered,
-use only demo data. "Sensitive" is a working label of this project, not a classification.
+use only demo data. "Sensitive" is a working label of this project, not a classification. Q25 to
+Q29 (stock by lot) were added to the plan on 2026-11-20 with the stock module; none of them gates
+the entry of real data.
 
 ### Translations (Q14)
 

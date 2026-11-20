@@ -13,7 +13,7 @@ The checks read plain files; nothing here tags, builds or publishes anything. Th
 
 T10.5 extends this module for version 1.0: the 1.0.0 entry lists the placeholders still flagged,
 the local-only values stay flagged with an empty default, the number of unfinished translation
-messages stated equals the number found, every question Q1 to Q24 has one of the three status
+messages stated equals the number found, every question Q1 to Q29 has one of the three status
 phrases, and the manual test script for the committee names every registered page.
 """
 
@@ -54,8 +54,8 @@ LANGUAGES = ("pt-BR", "en-US", "es-ES")
 LAST_PUBLISHED = "1.0.2"
 LAST_PUBLISHED_DATE = "2026-11-14"
 
-#: The questions of PLAN.md section 12 that the changelog lists: Q1 to Q24.
-QUESTION_NUMBERS = range(1, 25)
+#: The questions of PLAN.md section 12 that the changelog lists: Q1 to Q29.
+QUESTION_NUMBERS = range(1, 30)
 
 #: The local-only placeholders (PLAN.md 3.5): flagged in code, never given a code default.
 LOCAL_ONLY_IDS = ("P03", "P10", "D18")
