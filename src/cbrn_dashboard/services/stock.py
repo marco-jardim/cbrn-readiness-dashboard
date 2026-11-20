@@ -1,0 +1,713 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Stock service: item types and lots (PLAN.md T11.5; movements and views come with T11.6).
+
+Qt-free. The rules about *values* (quantity, validity, status, minimum) live in ``domain/stock.py``;
+the rules about *input* live here and are reported as
+:class:`~cbrn_dashboard.services.errors.ServiceError` with a stable code and the name of the
+offending field; the UI maps codes to texts. Every mutating method
+
+* first refuses a read-only connection (``READ_ONLY``),
+* validates everything it needs and writes inside ONE transaction, so a refusal (or any later
+  failure) leaves neither data rows nor ``change_log`` rows behind,
+* writes only through ``storage/stock_repo.py``, whose writes use the repository helpers (one
+  ``change_log`` row per affected row, stamped with the injected clock and the current operator).
+
+Item types are list entries (D16, D32): a user-defined type needs a pt-BR label and a category; a
+built-in type (the 17 seeded ones) keeps empty labels (its name comes from the UI's ``labels.py``)
+and only its minimum and its ``active`` flag change; it is never deleted. The code and the category
+of a type are frozen once a lot uses it. The minimum (P12) is stored in the type; setting it can
+confirm the P12 placeholder in the same transaction.
+
+A lot is created together with its initial receipt movement (D33) in one transaction. Stock is
+management data only (D19, D38): there is no clinical field anywhere.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import date, datetime
+
+from cbrn_dashboard.clock import Clock
+from cbrn_dashboard.domain.budget import is_valid_currency
+from cbrn_dashboard.domain.config import ConfigError, ReadinessConfig
+from cbrn_dashboard.domain.dates import InvalidDateError, format_iso_date, parse_iso_date
+from cbrn_dashboard.domain.stock import EXPIRY_REQUIRED_CATEGORIES, MovementKind, StockCategory
+from cbrn_dashboard.services.budget import INVALID_AMOUNT, INVALID_CURRENCY, MAX_MINOR
+from cbrn_dashboard.services.config import CORRUPT_SETTING
+from cbrn_dashboard.services.errors import (
+    CODE_IMMUTABLE,
+    INVALID_CODE,
+    INVALID_DATE,
+    LABEL_PT_BR_REQUIRED,
+    LIST_CODE_PATTERN,
+    NOT_FOUND,
+    READ_ONLY,
+    REQUIRED,
+    ServiceError,
+    require,
+    translate_storage_error,
+)
+from cbrn_dashboard.services.infrastructure import (
+    BUILT_IN_TYPE,
+    DUPLICATE_CODE,
+    TEXT_TOO_LONG,
+    TYPE_IN_USE,
+    TYPE_INACTIVE,
+)
+from cbrn_dashboard.storage import settings_repo
+from cbrn_dashboard.storage import stock_repo as repo
+from cbrn_dashboard.storage.db import DatabaseConnection, ReadOnlyDatabaseError, transaction
+from cbrn_dashboard.storage.repository import ForeignKeyError, RowNotFoundError, WriteContext
+from cbrn_dashboard.storage.settings_repo import load_config
+from cbrn_dashboard.storage.stock_repo import StockLotRow, StockTypeRow
+
+__all__ = [
+    "BUILT_IN_TYPE",
+    "CATEGORY_IMMUTABLE",
+    "CODE_IMMUTABLE",
+    "DATE_IN_FUTURE",
+    "DUPLICATE_CODE",
+    "DUPLICATE_LOT",
+    "EXPIRY_REQUIRED",
+    "INITIAL_RECEIPT_REQUIRED",
+    "INVALID_AMOUNT",
+    "INVALID_CATEGORY",
+    "INVALID_CURRENCY",
+    "INVALID_QUANTITY",
+    "LABEL_PT_BR_REQUIRED",
+    "LOT_CODE_MAX_LENGTH",
+    "MAX_MINIMUM",
+    "MAX_QUANTITY",
+    "TEXT_TOO_LONG",
+    "TYPE_INACTIVE",
+    "TYPE_IN_USE",
+    "InitialReceipt",
+    "LotInput",
+    "LotView",
+    "StockService",
+    "StockTypeInput",
+    "StockTypeView",
+    "stock_type_label",
+]
+
+# Error codes of this service (the shared ones are in services/errors.py, budget.py and
+# infrastructure.py; they are re-exported above).
+#: The category of a type cannot change once a lot uses it.
+CATEGORY_IMMUTABLE = "CATEGORY_IMMUTABLE"
+#: The category is not one of the five of ``StockCategory``.
+INVALID_CATEGORY = "INVALID_CATEGORY"
+#: A quantity (initial receipt or minimum) is not a whole number in its range.
+INVALID_QUANTITY = "INVALID_QUANTITY"
+#: A lot is created without its initial receipt (date and quantity of at least 1).
+INITIAL_RECEIPT_REQUIRED = "INITIAL_RECEIPT_REQUIRED"
+#: Antidote and decontaminant lots must have an expiry date (D34).
+EXPIRY_REQUIRED = "EXPIRY_REQUIRED"
+#: The type already has a lot with this code.
+DUPLICATE_LOT = "DUPLICATE_LOT"
+#: A movement is dated after the injected clock's local date.
+DATE_IN_FUTURE = "DATE_IN_FUTURE"
+
+#: Longest lot code, in characters.
+LOT_CODE_MAX_LENGTH = 64
+#: Largest quantity of one movement (shared with the movements of T11.6).
+MAX_QUANTITY = 1_000_000
+#: Largest minimum stock of a type.
+MAX_MINIMUM = 1_000_000_000
+
+
+# --------------------------------------------------------------------------- input and output
+
+
+@dataclass(frozen=True)
+class StockTypeInput:
+    """The editable fields of an item type; only ``label_pt_br`` is required among the labels.
+
+    ``minimum_quantity``: ``None`` = not set (O04, P12), ``0`` = a minimum that is never below.
+    """
+
+    code: str
+    category: StockCategory | str
+    label_pt_br: str | None
+    label_en_us: str | None = None
+    label_es_es: str | None = None
+    minimum_quantity: int | None = None
+    active: bool = True
+
+
+@dataclass(frozen=True)
+class StockTypeView:
+    """A stored item type."""
+
+    id: int
+    code: str
+    built_in: bool
+    category: StockCategory
+    label_pt_br: str | None
+    label_en_us: str | None
+    label_es_es: str | None
+    minimum_quantity: int | None
+    active: bool
+
+
+@dataclass(frozen=True)
+class LotInput:
+    """The editable fields of a lot. ``expires_on`` is strict ISO text (or ``date``).
+
+    A price is a whole number of minor units; with a price and no currency the lot takes its
+    current currency or the configured default (A08); without a price the lot has no currency.
+    """
+
+    type_id: int | None
+    lot_code: str
+    expires_on: str | date | None = None
+    unit_price_minor: int | None = None
+    currency: str | None = None
+    notes: str | None = None
+
+
+@dataclass(frozen=True)
+class InitialReceipt:
+    """The receipt movement that starts a lot: date, quantity (at least 1), optional reference."""
+
+    moved_on: str | date | None
+    quantity: int | None
+    reference: str | None = None
+    note: str | None = None
+
+
+@dataclass(frozen=True)
+class LotView:
+    """A stored lot together with the code of its type."""
+
+    id: int
+    type_id: int
+    type_code: str
+    lot_code: str
+    expires_on: date | None
+    unit_price_minor: int | None
+    currency: str | None
+    notes: str | None
+
+
+def stock_type_label(view: StockTypeView, lang: str) -> str:
+    """The label of ``view`` in ``lang`` (``pt_BR``, ``en_US`` or ``es_ES``; ``-`` too).
+
+    Fallback (section 6): the language asked for, then pt-BR, then en-US, then the code.
+    A blank label counts as missing (built-in types have none: the UI names them).
+    """
+    labels = {
+        "pt_BR": view.label_pt_br,
+        "en_US": view.label_en_us,
+        "es_ES": view.label_es_es,
+    }
+    for candidate in (lang.replace("-", "_"), "pt_BR", "en_US"):
+        text = labels.get(candidate)
+        if text is not None and text.strip():
+            return text
+    return view.code
+
+
+# --------------------------------------------------------------------------- validation helpers
+
+
+@dataclass(frozen=True)
+class _TypeFields:
+    code: str
+    category: StockCategory
+    label_pt_br: str | None
+    label_en_us: str | None
+    label_es_es: str | None
+    minimum_quantity: int | None
+    active: bool
+
+
+@dataclass(frozen=True)
+class _LotFields:
+    type_id: int
+    lot_code: str
+    expires_on: date | None
+    unit_price_minor: int | None
+    currency: str | None
+    notes: str | None
+
+
+@dataclass(frozen=True)
+class _ReceiptFields:
+    moved_on: date
+    quantity: int
+    reference: str
+    note: str | None
+
+
+def _clean(text: str | None) -> str | None:
+    """Strip a free-text field; blank becomes ``None``."""
+    if text is None:
+        return None
+    stripped = text.strip()
+    return stripped or None
+
+
+def _check_code(code: str) -> str:
+    require(bool(code.strip()), REQUIRED, "code")
+    require(LIST_CODE_PATTERN.fullmatch(code) is not None, INVALID_CODE, "code")
+    return code
+
+
+def _parse_category(value: object) -> StockCategory:
+    if isinstance(value, StockCategory):
+        return value
+    if isinstance(value, str) and value in {category.value for category in StockCategory}:
+        return StockCategory(value)
+    raise ServiceError(INVALID_CATEGORY, "category")
+
+
+def _minimum(value: object) -> int | None:
+    """``None`` (not set) or a whole number from 0 to :data:`MAX_MINIMUM`."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ServiceError(INVALID_QUANTITY, "minimum_quantity")
+    require(0 <= value <= MAX_MINIMUM, INVALID_QUANTITY, "minimum_quantity")
+    return value
+
+
+def _quantity(value: object, field: str) -> int:
+    """A whole quantity from 1 to :data:`MAX_QUANTITY`."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ServiceError(INVALID_QUANTITY, field)
+    require(1 <= value <= MAX_QUANTITY, INVALID_QUANTITY, field)
+    return value
+
+
+def _price(value: object) -> int | None:
+    """``None`` (no price) or a whole number of minor units from 0 to the budget maximum."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ServiceError(INVALID_AMOUNT, "unit_price_minor")
+    require(0 <= value <= MAX_MINOR, INVALID_AMOUNT, "unit_price_minor")
+    return value
+
+
+def _parse_date(value: str | date | None, field: str) -> date:
+    if value is None:
+        raise ServiceError(REQUIRED, field)
+    if isinstance(value, datetime):
+        raise ServiceError(INVALID_DATE, field)
+    if isinstance(value, date):
+        return value
+    require(bool(value.strip()), REQUIRED, field)
+    try:
+        return parse_iso_date(value)
+    except InvalidDateError:
+        raise ServiceError(INVALID_DATE, field) from None
+
+
+def _parse_optional_date(value: str | date | None, field: str) -> date | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    return _parse_date(value, field)
+
+
+def _optional_iso(value: date | None) -> str | None:
+    return None if value is None else format_iso_date(value)
+
+
+@contextmanager
+def _translated() -> Iterator[None]:
+    """Turn the storage errors with a service meaning into service errors; re-raise the rest."""
+    try:
+        yield
+    except (ReadOnlyDatabaseError, RowNotFoundError) as exc:
+        raise translate_storage_error(exc) from exc
+
+
+def _type_view(row: StockTypeRow) -> StockTypeView:
+    return StockTypeView(
+        id=row.id,
+        code=row.code,
+        built_in=row.built_in,
+        category=StockCategory(row.category),
+        label_pt_br=row.label_pt_br,
+        label_en_us=row.label_en_us,
+        label_es_es=row.label_es_es,
+        minimum_quantity=row.minimum_quantity,
+        active=row.active,
+    )
+
+
+def _lot_view(row: StockLotRow, type_codes: dict[int, str]) -> LotView:
+    return LotView(
+        id=row.id,
+        type_id=row.type_id,
+        type_code=type_codes.get(row.type_id, ""),
+        lot_code=row.lot_code,
+        expires_on=None if row.expires_on is None else parse_iso_date(row.expires_on),
+        unit_price_minor=row.unit_price_minor,
+        currency=row.currency,
+        notes=row.notes,
+    )
+
+
+# --------------------------------------------------------------------------- the service
+
+
+class StockService:
+    """Create, change, delete and read stock item types and lots."""
+
+    def __init__(
+        self,
+        conn: DatabaseConnection,
+        clock: Clock,
+        operator: Callable[[], str] = lambda: "",
+    ) -> None:
+        self._conn = conn
+        self._clock = clock
+        self._operator = operator
+
+    # ----- plumbing
+
+    def _ctx(self) -> WriteContext:
+        return WriteContext(self._conn, self._clock, self._operator())
+
+    def _require_writable(self) -> None:
+        require(not self._conn.read_only, READ_ONLY)
+
+    def _type_row(self, type_id: int | None, field: str = "type_id") -> StockTypeRow:
+        if type_id is None:
+            raise ServiceError(REQUIRED, field)
+        row = repo.get_type(self._conn, type_id)
+        if row is None:
+            raise ServiceError(NOT_FOUND, field)
+        return row
+
+    def _lot_row(self, lot_id: int) -> StockLotRow:
+        row = repo.get_lot(self._conn, lot_id)
+        if row is None:
+            raise ServiceError(NOT_FOUND, "lot_id")
+        return row
+
+    def _type_codes(self) -> dict[int, str]:
+        return {row.id: row.code for row in repo.list_types(self._conn)}
+
+    def _config(self) -> ReadinessConfig:
+        """The stored configuration; ``CORRUPT_SETTING`` when a stored value is unusable."""
+        try:
+            return load_config(self._conn)
+        except ConfigError as exc:
+            raise ServiceError(CORRUPT_SETTING, exc.field or None) from exc
+
+    def _write_type(self, row: StockTypeRow, *, minimum_quantity: int | None, active: bool) -> bool:
+        """Write ``row`` with a new minimum and ``active`` flag; True if anything changed."""
+        return repo.update_type(
+            self._ctx(),
+            row.id,
+            code=row.code,
+            category=row.category,
+            label_pt_br=row.label_pt_br,
+            label_en_us=row.label_en_us,
+            label_es_es=row.label_es_es,
+            minimum_quantity=minimum_quantity,
+            active=active,
+        )
+
+    # ----- item types: validation
+
+    def _validate_type(self, data: StockTypeInput, current: StockTypeRow | None) -> _TypeFields:
+        code = _check_code(data.code)
+        category = _parse_category(data.category)
+        minimum = _minimum(data.minimum_quantity)
+        if current is not None and current.built_in:
+            # A built-in type keeps its code, category and (empty) labels: only the minimum and
+            # the active flag change.
+            require(code == current.code, BUILT_IN_TYPE, "code")
+            require(category.value == current.category, BUILT_IN_TYPE, "category")
+            same_labels = (
+                _clean(data.label_pt_br) == _clean(current.label_pt_br)
+                and _clean(data.label_en_us) == _clean(current.label_en_us)
+                and _clean(data.label_es_es) == _clean(current.label_es_es)
+            )
+            require(same_labels, BUILT_IN_TYPE, "label_pt_br")
+            label_pt_br, label_en_us, label_es_es = (
+                current.label_pt_br,
+                current.label_en_us,
+                current.label_es_es,
+            )
+        else:
+            label_pt_br = _clean(data.label_pt_br)
+            if label_pt_br is None:
+                raise ServiceError(LABEL_PT_BR_REQUIRED, "label_pt_br")
+            label_en_us = _clean(data.label_en_us)
+            label_es_es = _clean(data.label_es_es)
+            if current is not None and repo.type_in_use(self._conn, current.id):
+                require(code == current.code, CODE_IMMUTABLE, "code")
+                require(category.value == current.category, CATEGORY_IMMUTABLE, "category")
+        existing = repo.get_type_by_code(self._conn, code)
+        require(
+            existing is None or (current is not None and existing.id == current.id),
+            DUPLICATE_CODE,
+            "code",
+        )
+        return _TypeFields(
+            code=code,
+            category=category,
+            label_pt_br=label_pt_br,
+            label_en_us=label_en_us,
+            label_es_es=label_es_es,
+            minimum_quantity=minimum,
+            active=data.active,
+        )
+
+    # ----- item types: writes
+
+    def create_type(self, data: StockTypeInput) -> int:
+        """Create a user-defined item type; returns its id."""
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            fields = self._validate_type(data, None)
+            return repo.insert_type(
+                self._ctx(),
+                code=fields.code,
+                built_in=False,
+                category=fields.category.value,
+                label_pt_br=fields.label_pt_br,
+                label_en_us=fields.label_en_us,
+                label_es_es=fields.label_es_es,
+                minimum_quantity=fields.minimum_quantity,
+                active=fields.active,
+            )
+
+    def update_type(self, type_id: int, data: StockTypeInput) -> None:
+        """Change a type; the ``active`` flag is changed here too.
+
+        Built-in types: only the minimum and ``active`` change (``BUILT_IN_TYPE`` when the code,
+        the category or a label differs). User-defined types: the code is frozen
+        (``CODE_IMMUTABLE``) and so is the category (``CATEGORY_IMMUTABLE``) once a lot uses it.
+        Use :meth:`set_minimum` to confirm P12 together with a new minimum.
+        """
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            current = self._type_row(type_id)
+            fields = self._validate_type(data, current)
+            repo.update_type(
+                self._ctx(),
+                type_id,
+                code=fields.code,
+                category=fields.category.value,
+                label_pt_br=fields.label_pt_br,
+                label_en_us=fields.label_en_us,
+                label_es_es=fields.label_es_es,
+                minimum_quantity=fields.minimum_quantity,
+                active=fields.active,
+            )
+
+    def deactivate_type(self, type_id: int) -> None:
+        """Mark a type inactive (built-in ones too): it keeps its lots but gets no new ones."""
+        self._set_active(type_id, False)
+
+    def activate_type(self, type_id: int) -> None:
+        """Mark a type active again."""
+        self._set_active(type_id, True)
+
+    def _set_active(self, type_id: int, active: bool) -> None:
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            row = self._type_row(type_id)
+            self._write_type(row, minimum_quantity=row.minimum_quantity, active=active)
+
+    def set_minimum(
+        self,
+        type_id: int,
+        minimum: int | None,
+        *,
+        confirm_placeholder: str | None = None,
+    ) -> bool:
+        """Set or clear the minimum stock of a type (built-in ones too); True if it changed.
+
+        With ``confirm_placeholder`` (for example ``"P12"``), a call that changed something also
+        confirms that placeholder, in the SAME transaction (PLAN.md 3.5): a failing confirmation
+        rolls the minimum back. ``INVALID_QUANTITY`` when ``minimum`` is not ``None`` or a whole
+        number from 0 to :data:`MAX_MINIMUM`.
+        """
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            row = self._type_row(type_id)
+            checked = _minimum(minimum)
+            changed = self._write_type(row, minimum_quantity=checked, active=row.active)
+            self._confirm_if_changed(changed, confirm_placeholder)
+            return changed
+
+    def _confirm_if_changed(self, changed: bool, placeholder_id: str | None) -> None:
+        """Confirm ``placeholder_id`` (its badge is due) in the caller's transaction."""
+        if not changed or placeholder_id is None:
+            return
+        try:
+            if settings_repo.needs_badge(self._conn, placeholder_id):
+                settings_repo.confirm_placeholder(self._ctx(), placeholder_id)
+        except ConfigError as exc:
+            raise ServiceError(exc.code, exc.field or None) from exc
+
+    def delete_type(self, type_id: int) -> None:
+        """Delete a user-defined type that has no lots (``BUILT_IN_TYPE``, ``TYPE_IN_USE``)."""
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            row = self._type_row(type_id)
+            require(not row.built_in, BUILT_IN_TYPE, "type_id")
+            require(not repo.type_in_use(self._conn, type_id), TYPE_IN_USE, "type_id")
+            try:
+                repo.delete_type(self._ctx(), type_id)
+            except ForeignKeyError:
+                raise ServiceError(TYPE_IN_USE, "type_id") from None
+
+    # ----- item types: reads
+
+    def list_types(self, include_inactive: bool = False) -> list[StockTypeView]:
+        """The types ordered by code; inactive ones only when asked for."""
+        rows = repo.list_types(self._conn, include_inactive=include_inactive)
+        return [_type_view(row) for row in rows]
+
+    def get_type(self, type_id: int) -> StockTypeView:
+        """One type; ``NOT_FOUND`` when it does not exist."""
+        return _type_view(self._type_row(type_id))
+
+    def get_type_by_code(self, code: str) -> StockTypeView | None:
+        """The type with this code (active or not), or ``None``."""
+        row = repo.get_type_by_code(self._conn, code)
+        return None if row is None else _type_view(row)
+
+    # ----- lots: validation
+
+    def _currency(
+        self, requested: str | None, price: int | None, current: StockLotRow | None
+    ) -> str | None:
+        """The currency to store: none without a price, else the one asked for, kept or default."""
+        if requested is not None:
+            require(is_valid_currency(requested), INVALID_CURRENCY, "currency")
+        if price is None:
+            return None  # no price, no currency
+        if requested is not None:
+            return requested
+        if current is not None and current.currency is not None:
+            return current.currency
+        return self._config().default_currency  # A08
+
+    def _validate_lot(self, data: LotInput, current: StockLotRow | None) -> _LotFields:
+        lot_code = data.lot_code.strip()
+        require(bool(lot_code), REQUIRED, "lot_code")
+        require(len(lot_code) <= LOT_CODE_MAX_LENGTH, TEXT_TOO_LONG, "lot_code")
+        type_row = self._type_row(data.type_id)
+        expires_on = _parse_optional_date(data.expires_on, "expires_on")
+        if StockCategory(type_row.category) in EXPIRY_REQUIRED_CATEGORIES:
+            require(expires_on is not None, EXPIRY_REQUIRED, "expires_on")
+        price = _price(data.unit_price_minor)
+        currency = self._currency(data.currency, price, current)
+        if current is None or current.type_id != type_row.id:
+            require(type_row.active, TYPE_INACTIVE, "type_id")
+        existing = repo.get_lot_by_code(self._conn, type_row.id, lot_code)
+        require(
+            existing is None or (current is not None and existing.id == current.id),
+            DUPLICATE_LOT,
+            "lot_code",
+        )
+        return _LotFields(
+            type_id=type_row.id,
+            lot_code=lot_code,
+            expires_on=expires_on,
+            unit_price_minor=price,
+            currency=currency,
+            notes=_clean(data.notes),
+        )
+
+    def _validate_receipt(self, receipt: InitialReceipt | None) -> _ReceiptFields:
+        if receipt is None:
+            raise ServiceError(INITIAL_RECEIPT_REQUIRED, "initial_receipt")
+        if receipt.moved_on is None or (
+            isinstance(receipt.moved_on, str) and not receipt.moved_on.strip()
+        ):
+            raise ServiceError(INITIAL_RECEIPT_REQUIRED, "moved_on")
+        if receipt.quantity is None:
+            raise ServiceError(INITIAL_RECEIPT_REQUIRED, "quantity")
+        moved_on = _parse_date(receipt.moved_on, "moved_on")
+        quantity = _quantity(receipt.quantity, "quantity")
+        require(moved_on <= self._clock.local_date(), DATE_IN_FUTURE, "moved_on")
+        return _ReceiptFields(
+            moved_on=moved_on,
+            quantity=quantity,
+            reference=(receipt.reference or "").strip(),
+            note=_clean(receipt.note),
+        )
+
+    # ----- lots: writes
+
+    def create_lot(self, data: LotInput, initial_receipt: InitialReceipt | None) -> int:
+        """Create a lot and its initial receipt movement; returns the lot id.
+
+        ``INITIAL_RECEIPT_REQUIRED`` when there is no receipt (or it has no date or quantity);
+        both rows are written in one transaction, so a refusal leaves nothing behind.
+        """
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            fields = self._validate_lot(data, None)
+            receipt = self._validate_receipt(initial_receipt)
+            ctx = self._ctx()
+            lot_id = repo.insert_lot(
+                ctx,
+                type_id=fields.type_id,
+                lot_code=fields.lot_code,
+                expires_on=_optional_iso(fields.expires_on),
+                unit_price_minor=fields.unit_price_minor,
+                currency=fields.currency,
+                notes=fields.notes,
+            )
+            repo.insert_movement(
+                ctx,
+                lot_id=lot_id,
+                moved_on=format_iso_date(receipt.moved_on),
+                kind=MovementKind.RECEIPT.value,
+                quantity=receipt.quantity,
+                reference=receipt.reference,
+                note=receipt.note,
+            )
+            return lot_id
+
+    def update_lot(self, lot_id: int, data: LotInput) -> None:
+        """Change a lot (its movements are changed with the movement methods of T11.6)."""
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            current = self._lot_row(lot_id)
+            fields = self._validate_lot(data, current)
+            repo.update_lot(
+                self._ctx(),
+                lot_id,
+                type_id=fields.type_id,
+                lot_code=fields.lot_code,
+                expires_on=_optional_iso(fields.expires_on),
+                unit_price_minor=fields.unit_price_minor,
+                currency=fields.currency,
+                notes=fields.notes,
+            )
+
+    def delete_lot(self, lot_id: int) -> None:
+        """Delete a lot entered by mistake with all its movements.
+
+        The log gets one ``delete`` row for the lot and one for each movement. A lot that existed
+        is closed with a disposal or a loss (T11.6), not deleted.
+        """
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            self._lot_row(lot_id)
+            repo.delete_lot(self._ctx(), lot_id)
+
+    # ----- lots: reads
+
+    def list_lots(self, type_id: int | None = None) -> list[LotView]:
+        """The lots by type code and lot code; optionally only those of one type."""
+        type_codes = self._type_codes()
+        views = [_lot_view(row, type_codes) for row in repo.list_lots(self._conn, type_id)]
+        return sorted(views, key=lambda view: (view.type_code, view.lot_code, view.id))
+
+    def get_lot(self, lot_id: int) -> LotView:
+        """One lot; ``NOT_FOUND`` when it does not exist."""
+        return _lot_view(self._lot_row(lot_id), self._type_codes())

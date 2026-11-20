@@ -34,6 +34,7 @@ from cbrn_dashboard.services.indicators import IndicatorService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
 from cbrn_dashboard.services.snapshots import SnapshotService
+from cbrn_dashboard.services.stock import StockService
 from cbrn_dashboard.services.validation_export import ValidationExportService
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import DatabaseConnection
@@ -63,6 +64,7 @@ class Services:
     dashboard: DashboardService | None = None
     snapshots: SnapshotService | None = None
     validation_export: ValidationExportService | None = None
+    stock: StockService | None = None
 
 
 def build_services(
@@ -113,6 +115,7 @@ def build_services(
         dashboard=dashboard,
         snapshots=snapshots,
         validation_export=validation_export,
+        stock=StockService(conn, clock, operator),
     )
 
 
