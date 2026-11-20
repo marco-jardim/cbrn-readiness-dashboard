@@ -35,6 +35,7 @@ from cbrn_dashboard.demo import (
 from cbrn_dashboard.domain.alerts import AlertKind, Severity
 from cbrn_dashboard.domain.indicators import IndicatorStatus, UnitKind
 from cbrn_dashboard.domain.registry import build_registry
+from cbrn_dashboard.domain.stock import StockCategory
 from cbrn_dashboard.paths import DATABASE_FILE_NAME
 from cbrn_dashboard.services.alerts import AlertService
 from cbrn_dashboard.services.budget import BudgetService
@@ -44,6 +45,7 @@ from cbrn_dashboard.services.indicators import MAX_RATIO_TARGET, IndicatorServic
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
 from cbrn_dashboard.services.snapshots import SnapshotOrigin, SnapshotService
+from cbrn_dashboard.services.stock import StockService
 from cbrn_dashboard.services.validation_export import (
     NO_PRIOR_SNAPSHOT,
     UNSUPPRESSED_BANNER,
@@ -157,6 +159,7 @@ class Demo:
     dashboard: DashboardService
     snapshots: SnapshotService
     budget: BudgetService
+    stock: StockService
 
     @property
     def today(self) -> date:
@@ -168,6 +171,7 @@ def _services(conn: DatabaseConnection, day: Day, clock: FixedClock) -> Demo:
     infrastructure = InfrastructureService(conn, clock)
     exercises = ExercisesService(conn, clock)
     budget = BudgetService(conn, clock)
+    stock = StockService(conn, clock)
     indicators = IndicatorService(
         conn,
         clock,
@@ -175,8 +179,11 @@ def _services(conn: DatabaseConnection, day: Day, clock: FixedClock) -> Demo:
         infrastructure=infrastructure,
         exercises=exercises,
         budget=budget,
+        stock=stock,
     )
-    alerts = AlertService(personnel=personnel, infrastructure=infrastructure, indicators=indicators)
+    alerts = AlertService(
+        personnel=personnel, infrastructure=infrastructure, indicators=indicators, stock=stock
+    )
     dashboard = DashboardService(
         indicators=indicators,
         alerts=alerts,
@@ -184,9 +191,14 @@ def _services(conn: DatabaseConnection, day: Day, clock: FixedClock) -> Demo:
         infrastructure=infrastructure,
         exercises=exercises,
         budget=budget,
+        stock=stock,
     )
-    snapshots = SnapshotService(conn, clock, indicators=indicators, infrastructure=infrastructure)
-    return Demo(conn, day, clock, exercises, indicators, alerts, dashboard, snapshots, budget)
+    snapshots = SnapshotService(
+        conn, clock, indicators=indicators, infrastructure=infrastructure, stock=stock
+    )
+    return Demo(
+        conn, day, clock, exercises, indicators, alerts, dashboard, snapshots, budget, stock
+    )
 
 
 @pytest.fixture(scope="module", params=DAYS, ids=lambda day: day.today.isoformat())
@@ -224,7 +236,15 @@ def _dump(conn: DatabaseConnection) -> dict[str, list[tuple[object, ...]]]:
 
 def test_the_cross_module_generators_come_after_the_module_generators() -> None:
     names = [generator.name for generator in GENERATORS]
-    assert names == ["personnel", "infrastructure", "exercises", "budget", "targets", "snapshots"]
+    assert names == [
+        "personnel",
+        "infrastructure",
+        "exercises",
+        "budget",
+        "stock",
+        "targets",
+        "snapshots",
+    ]
 
 
 def test_the_demo_flag_and_the_seed_marker_are_set(demo: Demo) -> None:
@@ -328,11 +348,7 @@ def test_an_execution_row_dated_after_today_exists_except_on_the_last_day_of_the
 
 def test_the_alerts_show_every_kind_and_every_severity(demo: Demo) -> None:
     alerts = demo.alerts.alerts(demo.today)
-    # the stock kinds join the demo with the stock demo data (T11.16)
-    stock_kinds = {"LOT_EXPIRED", "LOT_EXPIRING", "LOW_STOCK"}
-    assert {alert.kind for alert in alerts} >= {
-        kind for kind in AlertKind if kind.value not in stock_kinds
-    }
+    assert {alert.kind for alert in alerts} >= set(AlertKind)
     assert {alert.severity for alert in alerts} == set(Severity)
     counts = demo.dashboard.data(demo.today).alert_counts
     assert all(counts[severity] > 0 for severity in Severity)
@@ -524,6 +540,12 @@ def test_the_validation_export_of_the_demo_database_produces_rows(
         ("budget_entry", "notes", "notes IS NOT NULL"),
         ("budget_execution", "note", "note IS NOT NULL"),
         ("readiness_snapshot", "note", "1"),
+        ("stock_item_type", "code", "built_in = 0"),
+        ("stock_item_type", "label_pt_br", "built_in = 0"),
+        ("stock_lot", "lot_code", "1"),
+        ("stock_lot", "notes", "notes IS NOT NULL"),
+        ("stock_movement", "reference", "1"),
+        ("stock_movement", "note", "note IS NOT NULL"),
     ],
 )
 def test_no_record_lacks_the_demo_marker(demo: Demo, table: str, column: str, where: str) -> None:
@@ -660,6 +682,8 @@ def _dataset_names(conn: DatabaseConnection) -> set[str]:
         "SELECT code FROM evaluation_metric",
         "SELECT code FROM funding_source",
         "SELECT description FROM budget_entry",
+        "SELECT code FROM stock_item_type",
+        "SELECT lot_code FROM stock_lot",
     )
     return {str(row[0]) for query in queries for row in conn.execute(query).fetchall()}
 
@@ -689,6 +713,7 @@ def test_every_code_quoted_in_the_walkthrough_is_a_known_code(demo: Demo) -> Non
         | {kind.value for kind in AlertKind}
         | {status.value for status in IndicatorStatus}
         | {NO_PRIOR_SNAPSHOT}
+        | {str(row[0]) for row in demo.conn.execute("SELECT code FROM stock_item_type")}
     )
     codes = [
         token
@@ -721,6 +746,9 @@ def _dimension(code: str, text: str) -> str:
         return ""
     if text.startswith("level "):
         return "level=" + text.removeprefix("level ")
+    category, _, item = text.partition(", ")
+    if category in {kind.value for kind in StockCategory}:  # "antidote, ANTIDOTE_CHEMICAL"
+        return f"category={category};item={item}"
     if code.startswith("INFRA_"):
         return f"type={text}"
     if code.startswith("EX_"):
@@ -754,9 +782,7 @@ def test_the_walkthrough_status_table_is_the_statuses_of_the_dataset(demo: Demo)
 def test_the_walkthrough_alert_table_is_the_alerts_of_the_dataset(demo: Demo) -> None:
     alerts = demo.alerts.alerts(demo.today)
     rows = [cells for cells in _table_rows() if cells[0].strip("`") in AlertKind.__members__]
-    # the stock kinds join the walkthrough with the stock demo data (T11.16)
-    stock_kinds = {"LOT_EXPIRED", "LOT_EXPIRING", "LOW_STOCK"}
-    assert {cells[0].strip("`") for cells in rows} == set(AlertKind.__members__) - stock_kinds
+    assert {cells[0].strip("`") for cells in rows} == set(AlertKind.__members__)
     for cells in rows:
         kind, severity, example = cells[0].strip("`"), cells[1], cells[2]
         reference, _, level = example.partition(", ")

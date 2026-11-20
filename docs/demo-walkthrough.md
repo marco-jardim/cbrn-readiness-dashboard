@@ -102,6 +102,79 @@ added together.
 - The other entries are `DEMO - DIRSA annual allocation`, `DEMO - COMAER allocation`,
   `DEMO - COMAER foreign purchases`, `DEMO - equipment` and `DEMO - training`.
 
+## Infraestrutura -> Estoque (lotes)
+
+The tab "Estoque (lotes)" of the Infrastructure page shows the stock by lot: 14 fictitious lots of
+10 item types, next to the per-unit assets. Every lot has a dated receipt and may have more dated
+movements; nothing is dated after the creation day. Lot codes are unique in the demo, so an alert
+names its lot. Prices are whole minor units: BRL, except one lot priced in USD, which is never
+added to the BRL values. The statuses below are those of the creation day (the warning window is
+the default 90 days, setting P11):
+
+| Lot | Item type | On hand | Status on the creation day |
+|---|---|---|---|
+| `DEMO-L001` | Antidoto Quimico | 45 | Valid: expires in 400 days; 50 received 200 days ago, 5 issued 30 days ago |
+| `DEMO-L002` | Antidoto Quimico | 10 | Expiring soon: expires in 20 days |
+| `DEMO-L003` | Antidoto Quimico | 4 | Expired: expired 15 days ago and still has stock |
+| `DEMO-L004` | Antidoto Quimico | 0 | Empty: 10 received, 10 disposed of after the expiry; hidden unless "Show empty lots" is on |
+| `DEMO-L005` | Antidoto Radiologico e Nuclear | 8 | Valid |
+| `DEMO-L006` | Antidoto Biologico | 12 | Valid: receipt, adjustment (increase), loss and adjustment (decrease) |
+| `DEMO-L007` | Descontaminante | 25 | Valid |
+| `DEMO-L008` | Descontaminante | 20 | Expiring soon: expires in 60 days; the one lot priced in USD |
+| `DEMO-L009` | Detector Quimico | 5 | Valid: no expiry date |
+| `DEMO-L010` | EPI nivel A | 10 | Expiring soon: expires in 45 days |
+| `DEMO-L011` | Luva | 160 | Expiring soon: expires in 70 days |
+| `DEMO-L012` | Cilindro de O2 | 8 | Valid: no expiry date; first received 10 days ago |
+| `DEMO-L013` | Maca Bolha | 2 | Valid: no expiry date; the one lot without a price |
+| `DEMO-L014` | `DEMO-ANTIDOTE-X` | 6 | Valid: a lot of the user-defined type |
+
+All six movement kinds appear: receipt (every lot), issue, disposal (`DEMO-L004`), loss,
+adjustment (increase) and adjustment (decrease) (all three on `DEMO-L006`, the adjustments with a
+note). The as-of date of the page is not the only way to read the past: with the as-of date set 30
+days before the creation day, `DEMO-L012` reads "Not yet received", because its first receipt is
+10 days ago. A lot that is expired but empty (`DEMO-L004`) raises no alert.
+
+`DEMO-ANTIDOTE-X` is a user-defined item type of the category antidote; its label in Settings
+starts with DEMO. The built-in types keep their fixed names.
+
+## Antidotos e descontaminantes
+
+The page "Antidotos e descontaminantes" shows the lots of the two categories antidote and
+decontaminant: `DEMO-L001` to `DEMO-L003` and `DEMO-L005` to `DEMO-L008`, and `DEMO-L014`
+(`DEMO-L004` is empty and hidden). The Dashboard has a shortcut button to it. It is management
+data only: quantities, lots, expiry dates, prices and movements.
+
+The demo database holds two minimums, set only in the demo database (a real database has none):
+20 for the radiological and nuclear antidote and 5 for the biological antidote. They are written
+without confirming the placeholder, so P12 keeps its "Placeholder - to be confirmed" badge in
+Settings, as in a real database.
+
+| Reading | Dimension | Value on the creation day |
+|---|---|---|
+| `STOCK_VALID_QTY` | antidote, ANTIDOTE_CHEMICAL | 55 (59 on hand, 4 expired, 10 expiring) |
+| `STOCK_VALID_QTY` | antidote, ANTIDOTE_RAD_NUCLEAR | 8 (minimum 20) |
+| `STOCK_VALID_QTY` | antidote, ANTIDOTE_BIOLOGICAL | 12 (minimum 5) |
+| `STOCK_VALID_QTY` | decontaminant, DECONTAMINANT | 45 (20 expiring) |
+| `STOCK_LOTS_EXPIRED` | antidote | 1 |
+| `STOCK_LOTS_EXPIRING` | antidote | 1 |
+| `STOCK_LOTS_EXPIRING` | decontaminant | 1 |
+| `STOCK_LOTS_EXPIRING` | ppe | 2 |
+| `STOCK_TYPES_BELOW_MIN` | antidote | 1 |
+
+The stock readings have no target (a minimum is not a target), so their tiles read "No target".
+The three stock alerts of the Alerts section come from these lots:
+
+- `LOT_EXPIRED` for `DEMO-L003`: expired 15 days ago with 4 still in stock (critical).
+- `LOT_EXPIRING` for `DEMO-L002` (in 20 days), and also for `DEMO-L008`, `DEMO-L010` and
+  `DEMO-L011` (warning).
+- `LOW_STOCK` for the radiological and nuclear antidote: 8 valid against a minimum of 20
+  (critical). The biological antidote, with 12 against 5, raises none.
+
+The expiry schedule of the page puts `DEMO-L003` under "Vencidos (ainda em estoque)", `DEMO-L002`
+and `DEMO-L008` in the months of their expiry dates; every lot of these two categories has an
+expiry date, so "Sem validade" is empty there (the lots without one are on the "Estoque (lotes)"
+tab).
+
 ## Dashboard
 
 The Dashboard shows one tile per indicator reading, the number of alerts per severity and the
@@ -161,6 +234,9 @@ produces every kind, and each severity:
 | `MAINT_SCHEDULE_UNKNOWN` | info | `DEMO-A003` |
 | `INDICATOR_CRITICAL` | critical | `PERS_CERT_VALID`, level C |
 | `INDICATOR_WARNING` | warning | `PERS_CERT_VALID`, level B |
+| `LOT_EXPIRED` | critical | `DEMO-L003`, antidote, ANTIDOTE_CHEMICAL |
+| `LOT_EXPIRING` | warning | `DEMO-L002`, antidote, ANTIDOTE_CHEMICAL |
+| `LOW_STOCK` | critical | `ANTIDOTE_RAD_NUCLEAR`, antidote, ANTIDOTE_RAD_NUCLEAR |
 
 The random filler people and assets can add more alerts of the same kinds. `DEMO-P004` raises no
 alert although its PPE qualification is marked "no renewal", and `DEMO-A004` raises none because it has

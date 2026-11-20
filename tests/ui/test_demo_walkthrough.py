@@ -60,7 +60,7 @@ MINIMUM_ROWS = {
     "dashboard": 20,
     "personnel": 5,
     "infrastructure": 7,
-    "antidotes": 0,  # the demo stock arrives with T11.16, which raises this to its lot count
+    "antidotes": 1,  # 8 lots of antidotes and decontaminants (DEMO-L004 is empty and hidden)
     "exercises": 8,
     "budget": 6,
     "alerts": 7,
@@ -168,10 +168,7 @@ def test_the_alerts_page_shows_every_severity_and_every_kind(
     assert isinstance(page, AlertsPage)
     shown = page.shown_alerts()
     assert {alert.severity for alert in shown} == set(Severity)
-    # the stock kinds join the demo with the stock demo data (T11.16)
-    stock_kinds = {"LOT_EXPIRED", "LOT_EXPIRING", "LOW_STOCK"}
-    assert {alert.kind for alert in shown} >= {
-        kind for kind in AlertKind if kind.value not in stock_kinds
-    }
+    assert {alert.kind for alert in shown} >= set(AlertKind)
     subjects = {alert.subject_ref for alert in shown}
     assert {"DEMO-P002", "DEMO-P003", "DEMO-A001", "DEMO-A002", "DEMO-A003"} <= subjects
+    assert {"DEMO-L002", "DEMO-L003", "ANTIDOTE_RAD_NUCLEAR"} <= subjects  # the stock alerts

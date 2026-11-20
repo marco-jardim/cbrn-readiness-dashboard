@@ -44,7 +44,15 @@ from pathlib import Path
 
 from cbrn_dashboard import __version__
 from cbrn_dashboard.clock import Clock
-from cbrn_dashboard.demo import budget, exercises, infrastructure, personnel, snapshots, targets
+from cbrn_dashboard.demo import (
+    budget,
+    exercises,
+    infrastructure,
+    personnel,
+    snapshots,
+    stock,
+    targets,
+)
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import (
     DatabaseConnection,
@@ -133,6 +141,7 @@ GENERATORS: tuple[DemoGenerator, ...] = (
     DemoGenerator("infrastructure", infrastructure.generate),
     DemoGenerator("exercises", exercises.generate),
     DemoGenerator("budget", budget.generate),
+    DemoGenerator("stock", stock.generate),
     DemoGenerator("targets", targets.generate),
     DemoGenerator("snapshots", snapshots.generate),
 )
