@@ -25,20 +25,52 @@ below).
 **Preliminary version - indicators not institutionally validated.** The placeholders listed below
 are still flagged in code, and the terminology review is pending.
 
-### Planned for 1.1.0
+### Added
 
-- Stock of CBRN consumables and equipment by lot (owner request of 2026-11-20). This is a plan
-  only: nothing of it is implemented yet, and no change to the data model, the pages, the
-  indicators or the catalogues has been made for it. This entry will list what ships when it does.
-  The plan itself was amended (PLAN.md, task T11.2): the owner requests O01 to O04, the decisions
-  D32 to D38, the risks K20 to K23, the open questions Q25 to Q29 and the Phase 11 tasks.
+Stock of CBRN consumables and equipment by lot, and an antidotes and decontaminants page (owner
+request of 2026-11-20; PLAN.md Phase 11, tasks T11.1 to T11.18, owner requests O01 to O04,
+decisions D32 to D38, risks K20 to K23, open questions Q25 to Q29). It is implemented in the
+repository and covered by automated tests; it has not been tried by a person on a clean Windows
+machine (see the known limits).
+
+- **Stock by lot.** 17 built-in CBRN item types (in the categories antidote, decontaminant,
+  detector, PPE and other) plus item types defined by the user. Each lot has dated movements
+  (receipt, issue, disposal, loss, adjustment in and adjustment out), and the balance of a lot is never negative:
+  a movement that would make it negative is refused.
+- **Infraestrutura tabs.** The Infrastructure page has two tabs, the units and "Estoque (lotes)"
+  (stock by lot), with one "Tipo" (type) filter shared by both.
+- **Page "Antídotos e descontaminantes".** A new page with the lots and their movements, an
+  "Aprazamento de vencimentos" (expiry schedule) tab, the stock alerts, and a shortcut to it on
+  the Dashboard.
+- **Alerts.** Three new kinds: `LOT_EXPIRED`, `LOT_EXPIRING` and `LOW_STOCK`.
+- **Indicators.** Four new `STOCK_*` indicators on the Dashboard (`STOCK_VALID_QTY`,
+  `STOCK_LOTS_EXPIRING`, `STOCK_LOTS_EXPIRED`, `STOCK_TYPES_BELOW_MIN`; see
+  [docs/indicators.md](docs/indicators.md)). A fresh database has no stock value, and no default
+  target exists for them (P03).
+- **Settings.** The warning window before a lot expires (`P11`, 90 days by default, flagged as a
+  generic placeholder) and the minimum stock per item type (`P12`, local-only: no code default,
+  entered per installation in Settings only). A new Settings section manages the item types.
+- **CSV.** Export, import and templates for stock.
+- **Reports.** The internal report has stock key figures and an internal list of expired and
+  expiring lots. The anonymised report carries counts only, never lot-level content (D37).
+- **Demo.** The demo database has fictitious stock (item types, lots, movements, expired and
+  expiring lots, a low-stock type).
+- **Help** for the new page and the stock tabs, in Brazilian Portuguese, English and Spanish.
+- **Migration 0009** (schema of the stock tables and the seed of the 17 item types).
 
 ### Changed since 1.0.2
 
 - The version is 1.1.0 in the source, the install guides, the manual test documents and the
   readiness tests. The readiness tests and the documents name 1.0.2 as the last published version
-  (1.0.2 stays in this changelog as published history). No code other than the version string
-  changed.
+  (1.0.2 stays in this changelog as published history).
+- The configuration hash stored with each readiness snapshot changes **once**, on upgrade, because
+  the hashed configuration gains `stock_expiry_warning_days` (P11) and
+  `stock_item_type_minimum_quantity` (the minimum of every type, P12; risk K21). Snapshots taken
+  before the upgrade are not rewritten and are not comparable with later ones: they keep the old
+  hash, and the `STOCK_*` indicators are missing from them, which is read as "no data", never as
+  zero.
+- The manual test script, the demo walkthrough and the indicator reference cover the new page, the
+  stock tabs and the stock indicators.
 
 ### Placeholders still flagged in `domain/config.py`
 
@@ -136,8 +168,9 @@ the entry of real data.
 The terminology review (Q14) by the committee is pending. The pt-BR and es-ES catalogues are drafts
 and their messages are still marked `unfinished`; the en-US catalogue is the source language and
 has none marked. The count was made over the `.ts` files in `src/cbrn_dashboard/i18n` (one
-message, one `type="unfinished"` translation); a test compares it with the files. Nothing changed
-in the catalogues since 1.0.2.
+message, one `type="unfinished"` translation); a test compares it with the files. The catalogues
+grew since 1.0.2 with the stock messages (the new page, tabs, dialogs, alerts and help), which
+also await the terminology review.
 
 - Messages still marked unfinished: 2476 (1238 in the pt-BR catalogues and 1238 in the es-ES
   catalogues), pending terminology review (Q14)

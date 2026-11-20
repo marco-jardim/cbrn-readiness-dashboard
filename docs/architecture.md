@@ -63,7 +63,7 @@ Top-level packages of `src/cbrn_dashboard/`:
 
 | Package | Role |
 |---|---|
-| `domain/` | pure rules and indicator definitions: `config.py` (readiness configuration and the placeholder registry), `dates.py`, `indicators.py` (framework), `registry.py` (composition of the indicator registry), `personnel.py`, `infrastructure.py`, `exercises.py`, `budget.py`, `stock.py` (lots, movements, statuses and the stock indicators and alerts), `alerts.py` |
+| `domain/` | pure rules and indicator definitions: `config.py` (readiness configuration and the placeholder registry), `dates.py`, `indicators.py` (framework), `registry.py` (composition of the indicator registry), `personnel.py`, `infrastructure.py`, `exercises.py`, `budget.py`, `stock.py` (lots, movements, statuses and the stock indicators), `alerts.py` (all alert rules, the stock alerts included) |
 | `storage/` | `db.py` (the single place that opens connections), `migrate.py` and `migrations/`, `repository.py` (writes with the change log), one repository per area (`stock_repo.py` for the stock tables), `settings_repo.py`, `targets_repo.py`, `snapshots_repo.py`, `app_meta.py`, `backup.py` (plain copies and rotation), `crypto_backup.py` (the `.cbrnbak` container), `csv_io.py` |
 | `services/` | use cases over storage and domain: `personnel.py`, `infrastructure.py`, `exercises.py`, `budget.py`, `stock.py`, `indicators.py`, `alerts.py`, `dashboard.py`, `config.py`, `snapshots.py`, `validation_export.py`, `backup.py`, `restore.py`, `export.py`, `importer.py`, `countries.py`, `errors.py` |
 | `reports/` | `model.py` (report content as codes and numbers), `anonymise.py` (small-count suppression), `message_keys.py` (code-to-message-key map) and `labels.py` (texts in the language chosen for the report), `pdf.py` (Qt rendering) |
@@ -359,8 +359,9 @@ movements): no column or field holds a dose, an indication or a protocol (D38).
   decontaminants. A status is always shown as text plus icon plus colour (D23).
 - **Indicators and alerts.** `domain/stock.py` registers `STOCK_VALID_QTY`, `STOCK_LOTS_EXPIRING`,
   `STOCK_LOTS_EXPIRED` and `STOCK_TYPES_BELOW_MIN` under `Module.STOCK` (dimension keys `category`
-  and `item`), and the alerts `LOT_EXPIRED` and `LOW_STOCK` (critical) and `LOT_EXPIRING`
-  (warning), with the subject kinds `LOT` and `ITEM_TYPE`. An empty lot never raises an alert. The
+  and `item`). The alerts live in `domain/alerts.py` (`stock_alerts`, which reuses the lot rows and
+  type summaries of `domain/stock.py`): `LOT_EXPIRED` and `LOW_STOCK` (critical) and
+  `LOT_EXPIRING` (warning), with the subject kinds `LOT` and `ITEM_TYPE`. An empty lot never raises an alert. The
   minimum stock is not an indicator target (D35): a type is below it when its valid quantity is
   strictly less, and a type with no minimum is never below it. It is placeholder P12 and is
   local-only (no code default).

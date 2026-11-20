@@ -4,7 +4,7 @@
 |---|---|
 | Repository | `marco-jardim/cbrn-readiness-dashboard` (public) |
 | Licence | GPL-3.0-or-later |
-| Plan status | Draft for review by the project owner and the hospital's CBRN defence committee. Implemented up to T10.5. Version 1.0.2 (per-user installer, optional SignPath signing, off) was published on GitHub on 2026-11-14 (tag `v1.0.2`, commit `4d57a4f`; installer, zip and the Qt/PySide6 sources attached by CI; the signing job was skipped). The previous published release is v1.0.1 (tag `v1.0.1`, commit `1a02e2f`; v1.0.0 was withdrawn), published on 2026-11-13; both were published before the manual test, because the SignPath Foundation open-source programme requires an already released project. Still open from section 13: the manual test on a clean Windows profile (item 10, `docs/manual-test-script.pt-BR.md`), the committee's terminology review (Q14, item 6) and the questions of section 12 that the committee has not answered. Version 1.1.0 (stock by lot, antidotes and decontaminants; owner request of 2026-11-20) is planned in Phase 11: T11.1 and T11.2 are done and the rest is not implemented yet. |
+| Plan status | Draft for review by the project owner and the hospital's CBRN defence committee. Implemented up to T10.5 for the published releases and, for the unreleased version 1.1.0, up to T11.18 (T11.19, the release, is pending: the tag, the CI run, the manual test and the publication). Version 1.0.2 (per-user installer, optional SignPath signing, off) was published on GitHub on 2026-11-14 (tag `v1.0.2`, commit `4d57a4f`; installer, zip and the Qt/PySide6 sources attached by CI; the signing job was skipped). The previous published release is v1.0.1 (tag `v1.0.1`, commit `1a02e2f`; v1.0.0 was withdrawn), published on 2026-11-13; both were published before the manual test, because the SignPath Foundation open-source programme requires an already released project. Still open from section 13: the manual test on a clean Windows profile (item 10, `docs/manual-test-script.pt-BR.md`), the committee's terminology review (Q14, item 6) and the questions of section 12 that the committee has not answered. Version 1.1.0 (stock by lot, antidotes and decontaminants; owner request of 2026-11-20) is implemented in Phase 11 up to T11.18 and committed; it is not released: no tag `v1.1.0`, the release workflow has not run for it and the manual test has not been executed (T11.19 pending). |
 | Requirements source | Appendix A of the thesis, product "PTT 2" (appendix source lines 55–95, in Portuguese). `Lnn` = line *nn* of that source. The source is not in this repository (the thesis is unpublished), so the R01–R36 quotes and the `Lnn` references cannot be checked from the repository alone. They were checked against `postextual/apendice-a.tex` of the private thesis repository, commit `f8b1d65a76b53019573fb789c09d3d938dbffb59` (2026-11-13), SHA-256 `fbe30bc40ff6ab5ebace449dd3309e2dc2ff8f216d4ad9048c77a83b9c6661c1` (Q18). |
 | Date | 2026-11-12 |
 
@@ -2264,7 +2264,7 @@ Rules that hold for every task of the phase:
 - Accept: the readiness tests pass for 1.1.0; the changelog entry states that it is not published.
 - Check: `uv run pytest tests/meta/test_release_readiness.py`
 
-**T11.2 — Plan amendments for the stock module** (S) · Depends on: T11.1
+**T11.2 — Plan amendments for the stock module** (S) · Depends on: T11.1 · **Status: done** (commit `ebcbf23`)
 - Files: `PLAN.md`, `tests/meta/test_release_readiness.py`, `CHANGELOG.md`.
 - Work:
   - Amend `PLAN.md` as follows: the label O (§1); the non-goal of §2.2; the new §3.1b (O01–O04); the decisions D32–D38 (§3.4); the package map (§4.4); the data model (§5.1–§5.5); the catalogue areas `stock` and `antidotes` (§6); the stock data under the "sensitive" working label (§7.1); the hashed-field note of T8.1; the Phase 11 tasks; the sizing row (§10.4); the risks K20–K23 (§11); the questions Q25–Q29 and the Q14 scope (§12); and §13.1.
@@ -2276,7 +2276,7 @@ Rules that hold for every task of the phase:
   - the other tests of `tests/meta` still pass.
 - Check: `uv run pytest tests/meta`
 
-**T11.3 — Stock schema (migration 0009)** (S) · Depends on: T11.2, T1.3 · Parallel with: T11.4
+**T11.3 — Stock schema (migration 0009)** (S) · Depends on: T11.2, T1.3 · Parallel with: T11.4 · **Status: done** (commit `b3c1032`)
 - Files: `storage/migrations/0009_stock.sql`, `tests/storage/test_schema_stock.py`, `docs/architecture.md` (§9, the migration list).
 - Work:
   - Create `stock_item_type`, `stock_lot` and `stock_movement` as in §5.2, with `STRICT`, the date `GLOB` checks of 0003, the currency check of 0005, `UNIQUE (type_id, lot_code)` and `UNIQUE (lot_id, moved_on, kind, quantity, reference)` (an empty reference is `''`, not NULL), an index on `stock_lot (type_id)`, `ON DELETE RESTRICT` from lot to type and `ON DELETE CASCADE` from movement to lot. A price and a currency are both set or both empty. `minimum_quantity` is NULL or at least 0, and a movement quantity is at least 1.
@@ -2290,7 +2290,7 @@ Rules that hold for every task of the phase:
   - the existing migration tests pass with the ninth migration present (the tests that count or list migrations are updated if they name the last one).
 - Check: `uv run pytest tests/storage/test_schema_stock.py`
 
-**T11.4 — Stock rules, expiry window and minimum placeholders** (M) · Depends on: T11.2, T1.1, T1.5, T1.6 · Parallel with: T11.3
+**T11.4 — Stock rules, expiry window and minimum placeholders** (M) · Depends on: T11.2, T1.1, T1.5, T1.6 · Parallel with: T11.3 · **Status: done** (commit `365b324`)
 - Files: `domain/stock.py`, `domain/config.py`, `docs/indicators.md` (placeholder rows only), `PLAN.md` (§3.5), `CHANGELOG.md`, `tests/domain/test_stock.py`, `tests/domain/test_config.py`, `tests/meta/test_release_readiness.py` (`LOCAL_ONLY_IDS` gains `P12`, `ASSUMPTIONS_WITHOUT_SETTING` gains `A15` and `A16`).
 - Work: pure functions, no Qt, no I/O and no clock; each takes the as-of date *d*.
   - Enums `StockCategory` (antidote, decontaminant, detector, ppe, other), `MovementKind` (six kinds, with a sign of +1 for receipt and adjustment in, −1 for the others) and `LotStatus` (`VALID`, `EXPIRING`, `EXPIRED`, `EMPTY`, `NOT_RECEIVED`). The antidote page categories and the categories that need an expiry date are both antidote and decontaminant. Records `StockType`, `Lot`, `Movement`, and `StockRules(expiry_warning_days=90)`.
@@ -2309,7 +2309,7 @@ Rules that hold for every task of the phase:
   - `ReadinessConfig()` has `stock_expiry_warning_days == 90`; P12 is flagged, local-only and has no code default; the placeholder, documentation and release-readiness tests pass.
 - Check: `uv run pytest tests/domain/test_stock.py tests/domain/test_config.py tests/meta`
 
-**T11.5 — Stock repository and service: types and lots** (M) · Depends on: T11.3, T11.4
+**T11.5 — Stock repository and service: types and lots** (M) · Depends on: T11.3, T11.4 · **Status: done** (commit `4178ee2`)
 - Files: `storage/stock_repo.py`, `services/stock.py`, `ui/shell/context.py` (`Services.stock`), `tests/storage/test_stock_repo.py`, `tests/services/test_stock_service.py`.
 - Work: the service follows `services/infrastructure.py`: refuse read-only mode first, validate, then write in one transaction through the repository helpers. Error codes are enum values; the UI maps them to text.
   - Types: a built-in type is never deleted and only its minimum and its active flag change (`BUILT_IN_TYPE`). A user type needs a pt-BR label (`LABEL_PT_BR_REQUIRED`). The code is frozen once a lot uses it (`CODE_IMMUTABLE`) and so is the category (`CATEGORY_IMMUTABLE`). An inactive type takes no new lot (`TYPE_INACTIVE`), but movements on its existing lots stay possible. Deleting a user type that has lots is refused (`TYPE_IN_USE`). Setting a minimum logs an update and, when it confirms P12, a `setting` row in the same transaction.
@@ -2323,7 +2323,7 @@ Rules that hold for every task of the phase:
   - no `change_log` value holds a personal column.
 - Check: `uv run pytest tests/storage/test_stock_repo.py tests/services/test_stock_service.py`
 
-**T11.6 — Movements, balance rule and as-of views** (M) · Depends on: T11.5
+**T11.6 — Movements, balance rule and as-of views** (M) · Depends on: T11.5 · **Status: done** (commit `31b0491`)
 - Files: `services/stock.py`, `storage/stock_repo.py`, `tests/services/test_stock_service.py` (extend), `tests/services/test_stock_movements.py`.
 - Work:
   - Add, edit and delete movements. A quantity is from 1 to 1,000,000 (`INVALID_QUANTITY`); an adjustment needs a note (`NOTE_REQUIRED`); a date after `Clock.local_date()` is refused (`DATE_IN_FUTURE`, with the injected clock); a duplicate is `DUPLICATE_MOVEMENT`.
@@ -2338,7 +2338,7 @@ Rules that hold for every task of the phase:
   - every refusal leaves the database as it was.
 - Check: `uv run pytest tests/services/test_stock_service.py tests/services/test_stock_movements.py`
 
-**T11.7 — Stock indicators, `Module.STOCK`, snapshot hash and wiring** (M) · Depends on: T11.6, T6.1, T8.1
+**T11.7 — Stock indicators, `Module.STOCK`, snapshot hash and wiring** (M) · Depends on: T11.6, T6.1, T8.1 · **Status: done** (commit `a31dcdb`, with T11.9)
 - Files: `domain/stock.py`, `domain/indicators.py`, `domain/registry.py` (one `PROVIDERS` line), `services/indicators.py`, `services/dashboard.py`, `services/snapshots.py`, `ui/shell/context.py`, `demo/stack.py`, `ui/reports/actions.py`, `ui/dashboard/labels.py`, `docs/indicators.md`, `tests/meta/test_docs.py`, `tests/domain/test_stock.py`, `tests/domain/test_indicators.py`, `tests/ui/test_dashboard_page.py`, `tests/ui/test_alert_labels.py`, `tests/reports/test_report_pdf.py`, `tests/services/test_stock_indicators.py`, `tests/services/test_snapshots.py`.
 - Work:
   - `Module.STOCK` is appended last to `Module`. The four indicators of §5.4 are `STOCK_VALID_QTY` (dimension `category`, `item`), `STOCK_LOTS_EXPIRING`, `STOCK_LOTS_EXPIRED` and `STOCK_TYPES_BELOW_MIN` (dimension `category`), all counts. A value of `STOCK_VALID_QTY` is produced for each active type that is in use on the date or has a minimum, and for each inactive type that still has stock on hand; the lot counts for every category that has such a value; `STOCK_TYPES_BELOW_MIN` only for a category with at least one active type that has a minimum. A fresh real database therefore shows no stock tiles (D36, K22). The minimum is not a target (D35).
@@ -2355,7 +2355,7 @@ Rules that hold for every task of the phase:
   - the documentation test passes with the four new codes and no stock alert or subject kind starting with `STOCK_`.
 - Check: `uv run pytest tests/domain tests/services/test_stock_indicators.py tests/services/test_snapshots.py tests/meta/test_docs.py tests/ui/test_dashboard_page.py tests/ui/test_alert_labels.py tests/reports/test_report_pdf.py`
 
-**T11.8 — Stock alerts** (M) · Depends on: T11.7, T6.2
+**T11.8 — Stock alerts** (M) · Depends on: T11.7, T6.2 · **Status: done** (commit `2fbcb57`, with T11.10 and T11.14)
 - Files: `domain/alerts.py`, `services/alerts.py`, `reports/model.py` (the alert source and the alert summary only), `ui/alerts/models.py`, `ui/alerts/labels.py`, `i18n/alerts_*.ts`, `tests/domain/test_alerts.py`, `tests/services/test_alerts_service.py`, `tests/ui/test_alert_labels.py`, `tests/reports/test_report_model.py`.
 - Work:
   - Add the alert kinds `LOT_EXPIRED` (critical), `LOT_EXPIRING` (warning) and `LOW_STOCK` (critical), and the subject kinds `LOT` and `ITEM_TYPE` (§5.5). A lot alert needs stock on hand, so an empty lot never alerts, and a lot has at most one alert. `LOW_STOCK` applies to an active type with a minimum, with the valid quantity as value and the minimum as threshold, and has no due date. The dimension is `category=<c>;item=<code>`. `stock_alerts(...)` reuses `lot_rows` and `type_summaries`; `all_alerts` gains keyword parameters with defaults, so existing callers do not change.
@@ -2366,7 +2366,7 @@ Rules that hold for every task of the phase:
 - Accept: tests cover each kind on, just inside and just outside its boundary; no alert for an empty lot, for a lot with no expiry, or for a type with no minimum; at most one alert per lot and per type; the severity order and due dates; the target page of every subject; all plural forms of the three messages in the three languages; the report alert summary counts stock alerts, and the anonymised summary still adds up.
 - Check: `uv run pytest tests/domain/test_alerts.py tests/services/test_alerts_service.py tests/ui/test_alert_labels.py tests/reports/test_report_model.py tests/i18n`
 
-**T11.9 — Shared stock UI: labels, models and dialogs** (M) · Depends on: T11.6, T1.9
+**T11.9 — Shared stock UI: labels, models and dialogs** (M) · Depends on: T11.6, T1.9 · **Status: done** (commit `a31dcdb`, with T11.7)
 - Files: `ui/stock/__init__.py`, `ui/stock/labels.py`, `ui/stock/models.py`, `ui/stock/dialogs.py`, `i18n/__init__.py` (area `stock` with the folder `ui/stock`, context `Stock`), `i18n/stock_{pt_BR,en_US,es_ES}.ts`, `ui/shell/registry.py` (dialog registry: `stock.lot`, `stock.movement`, `stock.type`, with fictitious data), `ui/shell/formatting.py` (only if a shared helper is needed), `docs/architecture.md` (§11, contexts), `reports/message_keys.py`, `tests/ui/test_stock_labels.py`, `tests/ui/test_stock_dialogs.py`.
 - Work:
   - `labels.py`: the 17 built-in names (pt-BR exactly as in T11.3), the categories, the movement kinds, the lot statuses and every error code of T11.5 and T11.6, with the configuration fallback of `ui/infrastructure/labels.py`. A built-in type shows its translated name; a user type shows its own label with the fallback of §6.
@@ -2380,7 +2380,7 @@ Rules that hold for every task of the phase:
   - the catalogue tests (completeness, sync, placeholders) pass for the new area.
 - Check: `uv run pytest tests/ui/test_stock_labels.py tests/ui/test_stock_dialogs.py tests/i18n tests/ui/test_no_hardcoded_strings.py`
 
-**T11.10 — Stock panel and the Infraestrutura tabs** (M) · Depends on: T11.9, T3.4
+**T11.10 — Stock panel and the Infraestrutura tabs** (M) · Depends on: T11.9, T3.4 · **Status: done** (commit `2fbcb57`, with T11.8 and T11.14)
 - Files: `ui/stock/panel.py`, `ui/infrastructure/page.py`, `i18n/infrastructure_*.ts`, `i18n/stock_*.ts`, `tests/ui/test_stock_panel.py`, `tests/ui/test_infrastructure_page.py` (extend).
 - Work:
   - `StockPanel(context, categories)` is the one panel of D38: the summary table; a "Show empty lots" check box (off); the text "%n lot(s) shown"; the lots table with "Add lot", "Edit lot", "Delete lot" and "Record movement"; the caption "Movements of the selected lot" with the movements table and "Edit movement" and "Delete movement". It can take a type filter (`set_type_filter(code | None)`) and show an empty state (`set_no_match()`). The edit actions are disabled in read-only mode, and writes go through the shared change helper of the shell.
@@ -2393,8 +2393,8 @@ Rules that hold for every task of the phase:
   - read-only mode disables every edit action.
 - Check: `uv run pytest tests/ui/test_stock_panel.py tests/ui/test_infrastructure_page.py tests/ui/test_no_hardcoded_strings.py`
 
-**T11.11 — The page "Antídotos e descontaminantes"** (M) · Depends on: T11.8, T11.10
-- Files: `ui/antidotes/__init__.py`, `ui/antidotes/page.py`, `ui/antidotes/models.py`, `ui/shell/registry.py` (key `antidotes`, order 25), `ui/shell/formatting.py` (`format_month`), `ui/alerts/models.py` (navigation), `i18n/__init__.py` (area `antidotes` with the folder `ui/antidotes`, context `Antidotes`), `i18n/antidotes_*.ts`, `help/{pt_BR,en_US,es_ES}.md` (the topic `antidotes`), `docs/manual-test-script.pt-BR.md`, `tests/meta/test_release_readiness.py` (`PAGE_TITLES`), `tests/ui/test_antidotes_page.py`, `tests/ui/test_shell_formatting.py`.
+**T11.11 — The page "Antídotos e descontaminantes"** (M) · Depends on: T11.8, T11.10 · **Status: done** (commit `9a2ca74`, with T11.12, T11.13 and T11.15)
+- Files: `ui/antidotes/__init__.py`, `ui/antidotes/page.py`, `ui/shell/registry.py` (key `antidotes`, order 25), `ui/shell/formatting.py` (`format_month`), `ui/alerts/models.py` (navigation), `i18n/__init__.py` (area `antidotes` with the folder `ui/antidotes`, context `Antidotes`), `i18n/antidotes_*.ts`, `help/{pt_BR,en_US,es_ES}.md` (the topic `antidotes`), `docs/manual-test-script.pt-BR.md`, `tests/meta/test_release_readiness.py` (`PAGE_TITLES`), `tests/ui/test_antidotes_page.py`, `tests/ui/test_shell_formatting.py`.
 - Work:
   - The page header reads "Situação em %1", with the note "Dados de gestão: quantidades, lotes, validades e preços." (D19). Its own "Tipo" filter starts with "Todos os antídotos e descontaminantes" and lists the types of those two categories (active ones, and inactive ones that have lots).
   - Three tabs. "Lotes e movimentações" is `StockPanel` over antidotes and decontaminants. "Aprazamento de vencimentos" has a horizon box (6, 12 or 24 months, 12 by default) and a table of period, type, lot, expiry, on hand and status (text plus icon); the periods are "Vencidos (ainda em estoque)", one per month, "Mais tarde" and "Sem validade". Month names come from a new `format_month(date, language)`, tested with exact strings in the three languages. A chart is optional and may be deferred. "Alertas" lists the stock alerts of the page's categories for the as-of date, and "Abrir registro" selects the lot in the first tab (for a lot alert) or sets the type filter (for a type or indicator alert).
@@ -2407,7 +2407,7 @@ Rules that hold for every task of the phase:
   - the registry, readiness and help tests (every page named in the manual script and in the help; the three help files with the same headings) pass.
 - Check: `uv run pytest tests/ui/test_antidotes_page.py tests/ui/test_shell_formatting.py tests/ui/test_help_and_about.py tests/meta/test_release_readiness.py tests/ui/test_no_hardcoded_strings.py`
 
-**T11.12 — Dashboard shortcut and stock chart** (M) · Depends on: T11.7, T11.11, T6.5
+**T11.12 — Dashboard shortcut and stock chart** (M) · Depends on: T11.7, T11.11, T6.5 · **Status: done** (commit `9a2ca74`, with T11.11, T11.13 and T11.15)
 - Files: `ui/dashboard/page.py`, `ui/dashboard/labels.py`, `services/dashboard.py`, `i18n/dashboard_*.ts`, `tests/ui/test_dashboard_page.py`, `tests/services/test_dashboard_service.py`.
 - Work:
   - A navigation action "Abrir antídotos e descontaminantes" in the header row beside "Record snapshot". It is a plain action, not an edit action, so it stays enabled in read-only mode; it checks that the page key is registered and then asks the window to show the page `antidotes`. There is no global shortcut.
@@ -2415,7 +2415,7 @@ Rules that hold for every task of the phase:
 - Accept: the action opens the page and is enabled in read-only mode; stock tiles appear only when stock indicators have values; the chart table view lists every type with its valid quantity and its minimum or "not recorded"; the dashboard tests for the other modules pass unchanged.
 - Check: `uv run pytest tests/ui/test_dashboard_page.py tests/services/test_dashboard_service.py`
 
-**T11.13 — Settings: stock types, P12 and P11** (M) · Depends on: T11.5, T11.9
+**T11.13 — Settings: stock types, P12 and P11** (M) · Depends on: T11.5, T11.9 · **Status: done** (commit `9a2ca74`, with T11.11, T11.12 and T11.15)
 - Files: `ui/stock/settings.py`, `ui/settings/sections.py` (the third field of the alerts section), `i18n/settings_*.ts`, `i18n/stock_*.ts`, `tests/ui/test_stock_settings.py`, `tests/ui/test_settings_page.py`, `tests/ui/test_placeholder_confirmation.py`.
 - Work:
   - A "stock types" section in the infrastructure group of Settings (registered by its own key, without editing the group registry): a table of types with "Add", "Edit" and "Deactivate", and "Delete" for user types only. It shows the "placeholder — to be confirmed" badge of P12 with a Confirm action, as the infrastructure section does for A06. Setting a minimum calls the service with the placeholder confirmation `P12`.
@@ -2423,17 +2423,17 @@ Rules that hold for every task of the phase:
 - Accept: a minimum is set, changed and cleared, and the badge appears and disappears as for the other placeholders; a built-in type cannot be deleted or renamed; P11 is saved and changes the lot alerts for the next evaluation; read-only mode disables the sections; the pseudo-locale walk passes.
 - Check: `uv run pytest tests/ui/test_stock_settings.py tests/ui/test_settings_page.py tests/ui/test_placeholder_confirmation.py`
 
-**T11.14 — CSV export and import of stock** (M) · Depends on: T11.6, T8.3, T8.4
-- Files: `storage/csv_io.py`, `services/export.py`, `services/importer.py`, `docs/import-templates.md`, `ui/reports/labels.py`, `tests/storage/test_csv_io.py`, `tests/services/test_importer_stock.py`, `tests/services/test_export.py`.
+**T11.14 — CSV export and import of stock** (M) · Depends on: T11.6, T8.3, T8.4 · **Status: done** (commit `2fbcb57`, with T11.8 and T11.10)
+- Files: `storage/csv_io.py`, `services/export.py`, `services/importer.py`, `docs/import-templates.md`, `ui/reports/labels.py`, `tests/storage/test_csv_io.py`, `tests/services/test_importer.py`, `tests/services/test_export.py`.
 - Work: three entities, in import order after `funding_source` and `budget_execution`:
   - `stock_item_type` (code, built-in, category, the three labels, minimum quantity, active; key: code), imported like asset types, including the refusal to change a built-in type;
   - `stock_lot` (type code, lot code, expiry date, unit price, currency, notes; key: type code and lot code), with a warning count `LOT_WITHOUT_MOVEMENTS` for a lot that has no movement (like the warning of T8.4);
   - `stock_movement` (type code, lot code, date, kind, quantity, reference, note; key: all but the note, with `''` for an empty reference).
   - The importer applies the movements of a lot in the order of date, then inflows before outflows, then file line. `BALANCE_NEGATIVE` and `DATE_IN_FUTURE` are reported on the offending file line, and the import stays atomic. Entity labels and the new error codes are added to the reports UI labels and to the import templates document.
 - Accept: a round trip (export, import into an empty database) gives the same lots, movements and quantities; a file whose movements make a balance negative is refused as a whole with the line number; a movement in the future is refused; a lot without movements gives the warning; a built-in type cannot be altered; export cells are protected against formula injection as in T8.3.
-- Check: `uv run pytest tests/storage/test_csv_io.py tests/services/test_importer_stock.py tests/services/test_export.py`
+- Check: `uv run pytest tests/storage/test_csv_io.py tests/services/test_importer.py tests/services/test_export.py`
 
-**T11.15 — Reports: stock in the internal and the anonymised report** (M) · Depends on: T11.7, T11.8, T8.6
+**T11.15 — Reports: stock in the internal and the anonymised report** (M) · Depends on: T11.7, T11.8, T8.6 · **Status: done** (commit `9a2ca74`, with T11.11, T11.12 and T11.13)
 - Files: `reports/model.py`, `reports/anonymise.py`, `reports/labels.py`, `reports/message_keys.py`, `reports/pdf.py`, `i18n/reports_*.ts`, `i18n/reportsui_*.ts`, `tests/reports/test_report_model.py`, `tests/reports/test_report_pdf.py`, `tests/reports/test_report_anonymise.py`.
 - Work:
   - `Cell` gains `internal_only: bool = False`. A key-figure group for `Module.STOCK` has the counts of expired lots, expiring lots and types below the minimum, and, per currency, the valid and the expired stock value (not counts, internal only). The `STOCK_VALID_QTY` cells and the stock chart are internal only. `ReportDocument` gains `stock_lots` (the expired and expiring lots with stock, internal only; empty by default).
@@ -2442,7 +2442,7 @@ Rules that hold for every task of the phase:
 - Accept: the internal report shows the stock figures, the chart and the list of lots; the anonymised report shows none of the quantities, values or prices of any type, only the counts; two currencies are never added; the report tests for the other modules and the anonymisation tests pass unchanged; the PDF opens in three languages.
 - Check: `uv run pytest tests/reports`
 
-**T11.16 — Demo data and walkthrough for stock** (M) · Depends on: T11.8, T11.11, T11.12, T10.1
+**T11.16 — Demo data and walkthrough for stock** (M) · Depends on: T11.8, T11.11, T11.12, T10.1 · **Status: done** (commit `2147d1e`)
 - Files: `demo/stock.py`, `demo/__init__.py` (registered after the budget and before the targets), `docs/demo-walkthrough.md`, `tests/demo/test_demo_stock.py`, `tests/demo/test_demo_complete.py`, `tests/ui/test_demo_walkthrough.py`.
 - Work: the demo writes through `StockService` with the operator `DEMO`, with dates relative to the day the demo is made and none after it. It creates:
   - "Antídoto Químico": `DEMO-L001` valid (expires in 400 days; 50 received 200 days ago, 5 issued 30 days ago), `DEMO-L002` expiring (in 20 days, 10 on hand), `DEMO-L003` expired (15 days ago, 4 still on hand, so `LOT_EXPIRED`) and `DEMO-L004` empty (10 received, 10 disposed of after the expiry);
@@ -2453,13 +2453,13 @@ Rules that hold for every task of the phase:
 - Accept: every lot shows the status above; the alerts include each stock kind; the demo antidotes page, the Infraestrutura stock tab and the dashboard tiles show rows; every identifier starts with `DEMO`; a real database created after a demo run has no stock rows and no minimum.
 - Check: `uv run pytest tests/demo tests/ui/test_demo_walkthrough.py`
 
-**T11.17 — Help and reference documentation for stock** (S) · Depends on: T11.11, T11.14, T11.15
+**T11.17 — Help and reference documentation for stock** (S) · Depends on: T11.11, T11.14, T11.15 · **Status: done** (commit `57b6b44`)
 - Files: `help/{pt_BR,en_US,es_ES}.md` (the topic `infrastructure_stock`, under Infraestrutura), `docs/architecture.md`, `docs/data-protection.md`, `docs/indicators.md`, `docs/import-templates.md`, `README.md`, `tests/ui/test_help_and_about.py`, `tests/meta/test_docs.py`.
 - Work: the help gets "### Estoque (lotes)" with the same heading structure in the three languages, no clinical content and no links. The architecture document gets the new packages, the three tables and the catalogue areas; the data-protection guide says that stock data is covered by the same handling as the other data and that the anonymised report omits per-type quantities (Q27); the README lists the stock feature.
 - Accept: the help tests (same headings, no external link) and the documentation tests pass.
 - Check: `uv run pytest tests/ui/test_help_and_about.py tests/meta/test_docs.py tests/meta/test_readme.py`
 
-**T11.18 — Accessibility, pseudo-locale and read-only QA for stock** (M) · Depends on: T11.10, T11.12, T11.13, T11.14, T11.15, T11.16
+**T11.18 — Accessibility, pseudo-locale and read-only QA for stock** (M) · Depends on: T11.10, T11.12, T11.13, T11.14, T11.15, T11.16 · **Status: done** (T11.18 QA fixes commit)
 - Files: `ui/**` (adjustments), `tests/ui/test_accessibility.py`, `tests/ui/test_no_hardcoded_strings.py`, `tests/ui/_scale_probe.py`, `tests/ui/test_stock_readonly.py`.
 - Work: walk the new page, the stock tab, the three stock dialogs and the Settings section. Every interactive widget has an accessible name or a buddy label; every status shows text; every action has a mnemonic or a shortcut; a sensible tab order; the pseudo-locale walk finds no hard-coded text; the page opens with `QT_SCALE_FACTOR=2` without Qt warnings; in read-only mode every write action is disabled while the navigation action of the dashboard stays enabled.
 - Accept: the walks above pass with the new page and dialogs included (`stock.lot`, `stock.movement` and `stock.type` use fictitious data); a language switch with a dialog open keeps its content.
