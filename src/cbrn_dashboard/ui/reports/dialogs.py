@@ -618,6 +618,14 @@ class ImportDialog(FormDialog):
                 None,
                 report.assets_without_status_event,
             )
+        if report is not None and report.lots_without_movements:
+            text += " " + QCoreApplication.translate(
+                "ReportsUi",
+                "%n lot(s) have no movement yet and show no stock until their movements are "
+                "imported.",
+                None,
+                report.lots_without_movements,
+            )
         self.summary_label.setText(text)
 
     # ----- the file

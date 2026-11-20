@@ -42,13 +42,17 @@ from cbrn_dashboard.ui.exercises.labels import error_label as _exercises_error_l
 from cbrn_dashboard.ui.infrastructure.labels import error_label as _infrastructure_error_label
 from cbrn_dashboard.ui.personnel.labels import error_label as _personnel_error_label
 from cbrn_dashboard.ui.shell.widgets import label_for
+from cbrn_dashboard.ui.stock.labels import error_label as _stock_error_label
 
 #: The label functions of the module pages, asked in turn for a code this UI has no label for.
+#: The stock one is last: ``BALANCE_NEGATIVE``, ``DATE_IN_FUTURE``, ``DUPLICATE_LOT``... of an
+#: imported stock row are its own codes.
 _MODULE_LABELS: tuple[Callable[[str], str], ...] = (
     _personnel_error_label,
     _infrastructure_error_label,
     _exercises_error_label,
     _budget_error_label,
+    _stock_error_label,
 )
 
 __all__ = [
@@ -248,6 +252,7 @@ _ENTITY_LABELS: dict[str, Callable[[], str]] = {
     "asset_type": lambda: QCoreApplication.translate("ReportsUi", "Asset types"),
     "evaluation_metric": lambda: QCoreApplication.translate("ReportsUi", "Evaluation metrics"),
     "funding_source": lambda: QCoreApplication.translate("ReportsUi", "Funding sources"),
+    "stock_item_type": lambda: QCoreApplication.translate("ReportsUi", "Stock item types"),
     "staff_member": lambda: QCoreApplication.translate("ReportsUi", "Staff"),
     "ppe_certification": lambda: QCoreApplication.translate("ReportsUi", "PPE qualifications"),
     "training_record": lambda: QCoreApplication.translate("ReportsUi", "Training records"),
@@ -260,6 +265,8 @@ _ENTITY_LABELS: dict[str, Callable[[], str]] = {
     "evaluation_result": lambda: QCoreApplication.translate("ReportsUi", "Evaluation results"),
     "budget_entry": lambda: QCoreApplication.translate("ReportsUi", "Budget entries"),
     "budget_execution": lambda: QCoreApplication.translate("ReportsUi", "Budget executions"),
+    "stock_lot": lambda: QCoreApplication.translate("ReportsUi", "Stock lots"),
+    "stock_movement": lambda: QCoreApplication.translate("ReportsUi", "Stock movements"),
 }
 
 

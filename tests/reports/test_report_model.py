@@ -426,10 +426,12 @@ def test_internal_alert_summary_is_split_by_source_with_hand_computed_values(
         (Severity.CRITICAL, AlertSource.PERSONNEL),
         (Severity.CRITICAL, AlertSource.INFRASTRUCTURE),
         (Severity.CRITICAL, AlertSource.INDICATORS),
+        (Severity.CRITICAL, AlertSource.STOCK),
         (Severity.WARNING, AlertSource.ALL),
         (Severity.WARNING, AlertSource.PERSONNEL),
         (Severity.WARNING, AlertSource.INFRASTRUCTURE),
         (Severity.WARNING, AlertSource.INDICATORS),
+        (Severity.WARNING, AlertSource.STOCK),
         (Severity.INFO, AlertSource.ALL),
     ]
     values = {key: cell.value for key, cell in cells.items()}
@@ -438,17 +440,22 @@ def test_internal_alert_summary_is_split_by_source_with_hand_computed_values(
         "alert:CRITICAL:personnel": 1.0,
         "alert:CRITICAL:infrastructure": 1.0,
         "alert:CRITICAL:indicators": 0.0,
+        "alert:CRITICAL:stock": 0.0,
         "alert:WARNING": 5.0,
         "alert:WARNING:personnel": 4.0,
         "alert:WARNING:infrastructure": 0.0,
         "alert:WARNING:indicators": 1.0,
+        "alert:WARNING:stock": 0.0,
         "alert:INFO": 0.0,
     }
     assert cells["alert:WARNING"].total_of == (
         "alert:WARNING:personnel",
         "alert:WARNING:infrastructure",
         "alert:WARNING:indicators",
+        "alert:WARNING:stock",
     )
+    assert not cells["alert:WARNING:stock"].personnel_derived
+    assert cells["alert:WARNING:stock"].total_of == ()
     assert cells["alert:WARNING:personnel"].total_of == (
         "kf:PERSONNEL:expiring:A",
         "kf:PERSONNEL:expiring:B",

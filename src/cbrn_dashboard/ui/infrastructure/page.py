@@ -8,6 +8,13 @@ type and the history of the selected asset. It reads and writes ONLY through
 drive them. The settings section edits the asset types and the A05 switch (through the
 configuration service when the context has one). The module-level factories are what the
 registries of the shell call.
+
+The page has two tabs under one "Type" filter (PLAN.md T11.10): the units (assets, availability and
+history) and the stock (``StockPanel``, lots and movements). The filter lists "All types", the asset
+types, a separator and the stock types (data ``stock:<code>``). Choosing an asset type shows the
+units tab, filters the assets and gives the stock panel its empty state; choosing a stock type shows
+the stock tab, filters the lots and leaves the asset list empty; "All types" filters nothing and
+keeps the tab. Switching tabs by hand never changes the filter.
 """
 
 from datetime import date
@@ -20,18 +27,21 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from cbrn_dashboard.domain.infrastructure import AssetStatus, MaintenanceKind
+from cbrn_dashboard.domain.stock import CATEGORY_ORDER
 from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.services.infrastructure import (
     AssetTypeView,
     MaintenanceView,
     StatusEventView,
 )
+from cbrn_dashboard.services.stock import StockTypeView
 from cbrn_dashboard.ui.infrastructure.dialogs import (
     AssetDialog,
     MaintenanceDialog,
@@ -54,12 +64,15 @@ from cbrn_dashboard.ui.shell.widgets import (
     EditAction,
     action_row,
     apply_change,
+    apply_tab_order,
     current_language,
     follow_language,
     make_edit_action,
     make_table_view,
     mark_data,
 )
+from cbrn_dashboard.ui.stock.labels import stock_type_display
+from cbrn_dashboard.ui.stock.panel import StockPanel
 
 __all__ = [
     "InfrastructurePage",
@@ -76,6 +89,14 @@ __all__ = [
 
 #: The configuration field of the A05 switch.
 DEGRADED_FIELD = "degraded_counts_as_available"
+
+#: The data of a stock type in the type filter is this prefix and the code of the type. An asset
+#: type code never has a colon (list codes allow letters, digits, dot, hyphen and underscore).
+STOCK_FILTER_PREFIX = "stock:"
+
+#: The positions of the two tabs.
+UNITS_TAB = 0
+STOCK_TAB = 1
 
 
 def _open(dialog: QDialog) -> None:
@@ -100,6 +121,7 @@ class InfrastructurePage(QWidget):
         self.setObjectName("infrastructure_page")
         self.context = context
         self._types: dict[str, AssetTypeView] = {}
+        self._stock_types: dict[str, StockTypeView] = {}
         self.assets_model = AssetsModel(self)
         self.availability_model = AvailabilityModel(self)
         self.history_model = HistoryModel(self)
@@ -165,15 +187,14 @@ class InfrastructurePage(QWidget):
             self.delete_entry_action,
         )
 
-        filter_row = QHBoxLayout()
-        filter_row.addWidget(self.type_caption)
-        filter_row.addWidget(self.type_combo)
-        filter_row.addStretch(1)
-        layout = QVBoxLayout(self)
-        layout.addLayout(filter_row)
-        layout.addWidget(self.assets_view, 3)
-        layout.addWidget(self.count_label)
-        layout.addLayout(
+        self.tabs = QTabWidget(self)
+        self.tabs.setObjectName("infrastructure_tabs")
+        self.units_tab = QWidget(self.tabs)
+        self.units_tab.setObjectName("units_tab")
+        units = QVBoxLayout(self.units_tab)
+        units.addWidget(self.assets_view, 3)
+        units.addWidget(self.count_label)
+        units.addLayout(
             action_row(
                 (
                     self.add_action,
@@ -183,17 +204,31 @@ class InfrastructurePage(QWidget):
                     self.status_action,
                     self.maintenance_action,
                 ),
-                self,
+                self.units_tab,
             )
         )
-        layout.addWidget(self.availability_caption)
-        layout.addWidget(self.availability_view, 1)
-        layout.addWidget(self.availability_note)
-        layout.addWidget(self.history_caption)
-        layout.addWidget(self.history_view, 2)
-        layout.addLayout(action_row((self.edit_entry_action, self.delete_entry_action), self))
+        units.addWidget(self.availability_caption)
+        units.addWidget(self.availability_view, 1)
+        units.addWidget(self.availability_note)
+        units.addWidget(self.history_caption)
+        units.addWidget(self.history_view, 2)
+        units.addLayout(
+            action_row((self.edit_entry_action, self.delete_entry_action), self.units_tab)
+        )
+        self.stock_panel = StockPanel(context, None, self.tabs)
+        self.tabs.addTab(self.units_tab, "")
+        self.tabs.addTab(self.stock_panel, "")
 
-        self.type_combo.currentIndexChanged.connect(self.refresh)
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(self.type_caption)
+        filter_row.addWidget(self.type_combo)
+        filter_row.addStretch(1)
+        layout = QVBoxLayout(self)
+        layout.addLayout(filter_row)
+        layout.addWidget(self.tabs, 1)
+        apply_tab_order(self)
+
+        self.type_combo.currentIndexChanged.connect(self._filter_changed)
         selection = self.assets_view.selectionModel()
         if selection is not None:
             selection.selectionChanged.connect(self._asset_selected)
@@ -223,6 +258,13 @@ class InfrastructurePage(QWidget):
         self.history_caption.setText(
             QCoreApplication.translate("Infrastructure", "History of the selected asset")
         )
+        self.tabs.setTabText(
+            UNITS_TAB,
+            QCoreApplication.translate("Infrastructure", "Equipment and facilities (units)"),
+        )
+        self.tabs.setTabText(
+            STOCK_TAB, QCoreApplication.translate("Infrastructure", "Stock (lots)")
+        )
         for action in self._actions:
             action.retranslate()
         self._type_texts()
@@ -238,10 +280,20 @@ class InfrastructurePage(QWidget):
             self.retranslate()
 
     def _type_texts(self) -> None:
+        """Rebuild the type filter when its entries changed, then name every entry."""
+        self._sync_type_filter()
         self.type_combo.setItemText(0, QCoreApplication.translate("Infrastructure", "All types"))
         lang = current_language(self.context)
         for index in range(1, self.type_combo.count()):
-            asset_type = self._types.get(str(self.type_combo.itemData(index)))
+            data = self.type_combo.itemData(index)
+            if not isinstance(data, str):
+                continue  # the separator
+            if data.startswith(STOCK_FILTER_PREFIX):
+                stock_type = self._stock_types.get(data[len(STOCK_FILTER_PREFIX) :])
+                if stock_type is not None:
+                    self.type_combo.setItemText(index, stock_type_display(stock_type, lang))
+                continue
+            asset_type = self._types.get(data)
             if asset_type is not None:
                 self.type_combo.setItemText(index, type_display(asset_type, lang))
 
@@ -262,42 +314,99 @@ class InfrastructurePage(QWidget):
         row = self.history_model.selected_row(self.history_view)
         return row if isinstance(row, HistoryRow) else None
 
-    def _sync_type_filter(self, types: list[AssetTypeView]) -> None:
-        """Rebuild the type filter when the set of types changed (no refresh while doing so)."""
-        wanted = [t.code for t in types]
-        current = [str(self.type_combo.itemData(i)) for i in range(1, self.type_combo.count())]
+    def _filter_data(self) -> list[str | None]:
+        """The data of the entries after "All types": asset types, a separator, stock types.
+
+        The separator is ``None`` and only there when both groups exist. Stock types are ordered by
+        category and then by the name in the current language, so a language switch can reorder
+        them.
+        """
+        lang = current_language(self.context)
+        stock_types = sorted(
+            self._stock_types.values(),
+            key=lambda item: (
+                CATEGORY_ORDER.index(item.category),
+                stock_type_display(item, lang).casefold(),
+                item.code,
+            ),
+        )
+        data: list[str | None] = list(self._types)
+        if data and stock_types:
+            data.append(None)
+        data.extend(STOCK_FILTER_PREFIX + item.code for item in stock_types)
+        return data
+
+    def _sync_type_filter(self) -> None:
+        """Rebuild the type filter when its entries changed (no refresh while doing so).
+
+        The whole list of entries is compared, so a new stock type, a renamed order or a type that
+        moved between groups all rebuild it; the choice is kept when it still exists.
+        """
+        wanted = self._filter_data()
+        current = [self.type_combo.itemData(i) for i in range(1, self.type_combo.count())]
         if wanted == current:
             return
         previous = self.type_combo.currentData()
         self.type_combo.blockSignals(True)
         while self.type_combo.count() > 1:
             self.type_combo.removeItem(1)
-        for asset_type in types:
-            self.type_combo.addItem("", asset_type.code)
+        for entry in wanted:
+            if entry is None:
+                self.type_combo.insertSeparator(self.type_combo.count())
+            else:
+                self.type_combo.addItem("", entry)
         self.type_combo.setCurrentIndex(max(0, self.type_combo.findData(previous)))
         self.type_combo.blockSignals(False)
+
+    def _filter_changed(self, *_args: object) -> None:
+        """The user chose an entry: an asset type shows the units tab, a stock type the lots tab.
+
+        "All types" keeps the current tab. Switching tabs by hand never comes back here.
+        """
+        data = self.type_combo.currentData()
+        if isinstance(data, str):
+            stock = data.startswith(STOCK_FILTER_PREFIX)
+            self.tabs.setCurrentIndex(STOCK_TAB if stock else UNITS_TAB)
+        self.refresh()
+
+    def _apply_stock_filter(self, wanted: object) -> None:
+        """Give the stock panel the chosen filter: all, one stock type, or the empty state."""
+        if wanted is None:
+            self.stock_panel.set_type_filter(None)
+        elif isinstance(wanted, str) and wanted.startswith(STOCK_FILTER_PREFIX):
+            self.stock_panel.set_type_filter(wanted[len(STOCK_FILTER_PREFIX) :])
+        else:
+            self.stock_panel.set_no_match()
 
     def refresh(self) -> None:
         """Read the assets as of the as-of date (and the history of the selected one) again."""
         service = self.context.services.infrastructure
+        stock_service = self.context.services.stock
         previous = self.selected_asset()
+        self._types = (
+            {}
+            if service is None
+            else {t.code: t for t in service.list_types(include_inactive=True)}
+        )
+        self._stock_types = (
+            {}
+            if stock_service is None
+            else {t.code: t for t in stock_service.list_types(include_inactive=True)}
+        )
+        self._type_texts()
+        wanted = self.type_combo.currentData()
+        self._apply_stock_filter(wanted)
         if service is None:
-            self._types = {}
-            self._sync_type_filter([])
             self.assets_model.set_rows([])
             self.availability_model.set_rows([])
         else:
             as_of = self.context.as_of
-            types = service.list_types(include_inactive=True)
-            self._types = {t.code: t for t in types}
-            self._sync_type_filter(types)
-            self._type_texts()
-            wanted = self.type_combo.currentData()
+            stock_chosen = isinstance(wanted, str) and wanted.startswith(STOCK_FILTER_PREFIX)
             stored = {asset.id: asset for asset in service.list_assets()}
             rows = [
                 AssetTableRow(row, stored.get(row.asset_id), self._types.get(row.type_code))
                 for row in service.asset_rows(as_of)
-                if wanted is None or row.type_code == wanted
+                if not stock_chosen and (wanted is None or row.type_code == wanted)
             ]
             self.assets_model.set_rows(rows)
             self.availability_model.set_rows(

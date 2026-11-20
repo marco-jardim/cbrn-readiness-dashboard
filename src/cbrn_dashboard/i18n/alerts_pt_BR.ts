@@ -76,9 +76,27 @@
         <source>Indicator %1 is at %2 (critical threshold: %3).</source>
         <translation type="unfinished">O indicador %1 está em %2 (limite crítico: %3).</translation>
     </message>
+    <message numerus="yes">
+        <source>Lot %1 of %2 expired %n day(s) ago and still has stock.</source>
+        <translation type="unfinished">
+            <numerusform>O lote %1 de %2 venceu há %n dia e ainda tem estoque.</numerusform>
+            <numerusform>O lote %1 de %2 venceu há %n dias e ainda tem estoque.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Lot %1 of %2 expires in %n day(s).</source>
+        <translation type="unfinished">
+            <numerusform>O lote %1 de %2 vence em %n dia.</numerusform>
+            <numerusform>O lote %1 de %2 vence em %n dias.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Valid stock of %1 is %2, below the minimum of %3.</source>
+        <translation type="unfinished">O estoque válido de %1 é %2, abaixo do mínimo de %3.</translation>
+    </message>
     <message>
         <source>Severity</source>
-        <extracomment>A missing value in a cell (data, not a translatable text). The column that shows the severity icon next to its text.</extracomment>
+        <extracomment>A missing value in a cell (data, not a translatable text). The column that shows the severity icon next to its text. The page of the antidotes and decontaminants (T11.11); every other stock category stays on the Infrastructure page.</extracomment>
         <translation type="unfinished">Gravidade</translation>
     </message>
     <message>

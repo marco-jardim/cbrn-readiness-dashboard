@@ -163,6 +163,10 @@ def test_the_alerts_page_shows_every_severity_and_every_kind(
     assert isinstance(page, AlertsPage)
     shown = page.shown_alerts()
     assert {alert.severity for alert in shown} == set(Severity)
-    assert {alert.kind for alert in shown} == set(AlertKind)
+    # the stock kinds join the demo with the stock demo data (T11.16)
+    stock_kinds = {"LOT_EXPIRED", "LOT_EXPIRING", "LOW_STOCK"}
+    assert {alert.kind for alert in shown} >= {
+        kind for kind in AlertKind if kind.value not in stock_kinds
+    }
     subjects = {alert.subject_ref for alert in shown}
     assert {"DEMO-P002", "DEMO-P003", "DEMO-A001", "DEMO-A002", "DEMO-A003"} <= subjects

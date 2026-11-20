@@ -7,6 +7,8 @@ configuration-derived rules those services use for their own as-of views) and th
 :meth:`~cbrn_dashboard.services.indicators.IndicatorService.evaluate`, then calls the rule functions
 of ``domain/alerts.py``. No rule is implemented here, so the alerts, the pages and the indicators
 cannot disagree. A past as-of date gives the alerts of that date from the records known today.
+The stock alerts (T11.8) come from ``stock.alert_inputs()`` and the P11 window of the stock service;
+without a stock service there are none.
 """
 
 from __future__ import annotations
@@ -17,9 +19,11 @@ from datetime import date
 from cbrn_dashboard.domain import alerts as rules
 from cbrn_dashboard.domain.alerts import Alert, Severity
 from cbrn_dashboard.domain.indicators import IndicatorReading, IndicatorRegistry, Module
+from cbrn_dashboard.domain.stock import Lot, Movement, StockRules, StockType
 from cbrn_dashboard.services.indicators import IndicatorService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
+from cbrn_dashboard.services.stock import StockService
 
 __all__ = ["AlertService"]
 
@@ -33,10 +37,12 @@ class AlertService:
         personnel: PersonnelService,
         infrastructure: InfrastructureService,
         indicators: IndicatorService,
+        stock: StockService | None = None,
     ) -> None:
         self._personnel = personnel
         self._infrastructure = infrastructure
         self._indicators = indicators
+        self._stock = stock
 
     def alerts(
         self, as_of: date, *, readings: Sequence[IndicatorReading] | None = None
@@ -48,6 +54,13 @@ class AlertService:
         """
         people = self._personnel.alert_inputs()
         assets = self._infrastructure.alert_inputs()
+        stock_types: tuple[StockType, ...] = ()
+        stock_lots: tuple[Lot, ...] = ()
+        stock_movements: tuple[Movement, ...] = ()
+        stock_rules = StockRules()
+        if self._stock is not None:
+            stock_types, stock_lots, stock_movements = self._stock.alert_inputs()
+            stock_rules = self._stock.stock_rules()
         return rules.all_alerts(
             staff=people.staff,
             certs=people.certificates,
@@ -60,6 +73,10 @@ class AlertService:
             readings=self._indicators.evaluate(as_of) if readings is None else list(readings),
             registry=self._registry(),
             d=as_of,
+            stock_types=stock_types,
+            stock_lots=stock_lots,
+            stock_movements=stock_movements,
+            stock_rules=stock_rules,
         )
 
     def _registry(self) -> IndicatorRegistry:

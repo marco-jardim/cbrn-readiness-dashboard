@@ -360,6 +360,8 @@ STATUS_COLUMNS = frozenset(
         ("AlertsModel", "severity"),
         ("AssetsModel", "status"),
         ("HistoryModel", "details"),
+        ("LotsModel", "status"),
+        ("SummaryModel", "below_minimum"),
         ("StaffModel", "level_a"),
         ("StaffModel", "level_b"),
         ("StaffModel", "level_c"),

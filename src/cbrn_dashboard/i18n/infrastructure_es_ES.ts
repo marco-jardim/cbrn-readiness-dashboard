@@ -379,7 +379,7 @@
     </message>
     <message>
         <source>Add asset</source>
-        <extracomment>The configuration field of the A05 switch.</extracomment>
+        <extracomment>The configuration field of the A05 switch. The data of a stock type in the type filter is this prefix and the code of the type. An asset type code never has a colon (list codes allow letters, digits, dot, hyphen and underscore). The positions of the two tabs.</extracomment>
         <translation type="unfinished">Añadir activo</translation>
     </message>
     <message>
@@ -488,6 +488,14 @@
     <message>
         <source>Assets</source>
         <translation type="unfinished">Activos</translation>
+    </message>
+    <message>
+        <source>Equipment and facilities (units)</source>
+        <translation type="unfinished">Equipos e instalaciones (unidades)</translation>
+    </message>
+    <message>
+        <source>Stock (lots)</source>
+        <translation type="unfinished">Existencias (lotes)</translation>
     </message>
     <message>
         <source>Retire asset %1 as of %2? It stays in the database with its history.</source>

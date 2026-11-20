@@ -35,6 +35,7 @@ from cbrn_dashboard.services.personnel import (
     PersonnelService,
     StaffInput,
 )
+from cbrn_dashboard.services.stock import InitialReceipt, LotInput, MovementInput, StockService
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.storage.repository import WriteContext
 from cbrn_dashboard.storage.settings_repo import load_config, save_config
@@ -46,6 +47,8 @@ MAINT_OVERDUE = "INFRA_MAINT_OVERDUE"
 LEVEL_A = "level=A"
 LEVEL_B = "level=B"
 TYPE_DIM = "type=DEMO-TYPE"
+STOCK_KINDS = {AlertKind.LOT_EXPIRED, AlertKind.LOT_EXPIRING, AlertKind.LOW_STOCK}
+NON_STOCK_KINDS = set(AlertKind) - STOCK_KINDS
 
 
 @dataclass
@@ -184,7 +187,8 @@ def _save_config(db: DatabaseConnection, clock: FixedClock, config: ReadinessCon
 
 def test_every_alert_kind_is_produced_with_its_severity(full: Stack) -> None:
     alerts = full.alerts.alerts(AS_OF)
-    assert {a.kind for a in alerts} == set(AlertKind)
+    # no stock service is wired in this stack: the stock kinds are tested further down
+    assert {a.kind for a in alerts} == NON_STOCK_KINDS
     for alert in alerts:
         assert alert.severity is SEVERITY_OF[alert.kind]
     severities = {a.kind: a.severity for a in alerts}
@@ -580,3 +584,124 @@ def test_a_read_only_connection_still_computes_the_alerts(
     assert frozen.alerts.alerts(AS_OF) == expected
     assert frozen.alerts.counts(AS_OF) == full.alerts.counts(AS_OF)
     assert frozen.alerts.has_actionable(AS_OF) is True
+
+
+# --------------------------------------------------------------------------- stock (T11.8)
+
+CHEMICAL = "ANTIDOTE_CHEMICAL"
+BIOLOGICAL = "ANTIDOTE_BIOLOGICAL"
+GLOVE = "GLOVE"
+
+
+def _operator() -> str:
+    return OPERATOR
+
+
+@dataclass
+class StockStack:
+    stock: StockService
+    alerts: AlertService
+    without: AlertService
+
+
+@pytest.fixture
+def stocked(bare: Stack, db: DatabaseConnection, clock: FixedClock) -> StockStack:
+    """Stock written through the service; P11 = 90 days, so the window ends on 2026-06-03.
+
+    CHEMICAL: DEMO-L001 expires 2026-06-03 (10, last day of the window), DEMO-L002 expired
+    2026-03-04 (4), DEMO-L003 expires 2026-06-04 (7, valid). BIOLOGICAL has a minimum of 20 and no
+    lot. GLOVE has a lot without expiry date.
+    """
+    stock = StockService(db, clock, _operator)
+
+    def lot(code: str, lot_code: str, expires_on: str | None, quantity: int) -> None:
+        found = stock.get_type_by_code(code)
+        assert found is not None
+        stock.create_lot(
+            LotInput(type_id=found.id, lot_code=lot_code, expires_on=expires_on),
+            InitialReceipt(moved_on="2026-01-01", quantity=quantity),
+        )
+
+    lot(CHEMICAL, "DEMO-L001", "2026-06-03", 10)
+    lot(CHEMICAL, "DEMO-L002", "2026-03-04", 4)
+    lot(CHEMICAL, "DEMO-L003", "2026-06-04", 7)
+    lot(GLOVE, "DEMO-L004", None, 100)
+    biological = stock.get_type_by_code(BIOLOGICAL)
+    assert biological is not None
+    stock.set_minimum(biological.id, 20)
+    wired = AlertService(
+        personnel=bare.personnel,
+        infrastructure=bare.infrastructure,
+        indicators=bare.indicators,
+        stock=stock,
+    )
+    return StockStack(stock, wired, bare.alerts)
+
+
+def test_the_stock_alerts_are_in_the_service_with_hand_computed_fields(stocked: StockStack) -> None:
+    alerts = stocked.alerts.alerts(AS_OF)
+
+    assert [(a.kind, a.subject_ref, a.severity) for a in alerts] == [
+        (AlertKind.LOT_EXPIRED, "DEMO-L002", Severity.CRITICAL),
+        (AlertKind.LOW_STOCK, BIOLOGICAL, Severity.CRITICAL),
+        (AlertKind.LOT_EXPIRING, "DEMO-L001", Severity.WARNING),
+    ]
+    expired, low, expiring = alerts
+    assert (expired.module, expired.subject_kind) == (Module.STOCK, SubjectKind.LOT)
+    assert expired.dimension == f"category=antidote;item={CHEMICAL}"
+    assert (expired.due_on, expired.days_remaining, expired.value) == (date(2026, 3, 4), -1, 4.0)
+    assert (low.subject_kind, low.due_on, low.days_remaining) == (SubjectKind.ITEM_TYPE, None, None)
+    assert (low.value, low.threshold) == (0.0, 20.0)
+    assert (expiring.due_on, expiring.days_remaining, expiring.value) == (
+        date(2026, 6, 3),
+        90,
+        10.0,
+    )
+
+
+def test_without_a_stock_service_there_are_no_stock_alerts(stocked: StockStack) -> None:
+    assert not [a for a in stocked.without.alerts(AS_OF) if a.module is Module.STOCK]
+    assert stocked.without.counts(AS_OF)[Severity.CRITICAL] == 0
+
+
+def test_the_counts_and_the_filters_include_the_stock_alerts(stocked: StockStack) -> None:
+    counts = stocked.alerts.counts(AS_OF)
+
+    assert dict(counts) == {Severity.CRITICAL: 2, Severity.WARNING: 1, Severity.INFO: 0}
+    assert len(stocked.alerts.alerts_filtered(AS_OF, module=Module.STOCK)) == 3
+    assert stocked.alerts.has_actionable(AS_OF) is True
+
+
+def test_the_p11_window_of_the_settings_is_honoured(
+    stocked: StockStack, db: DatabaseConnection, clock: FixedClock
+) -> None:
+    def expiring() -> set[str]:
+        found = _of_kind(stocked.alerts.alerts(AS_OF), AlertKind.LOT_EXPIRING)
+        return {a.subject_ref for a in found}
+
+    assert expiring() == {"DEMO-L001"}
+    _save_config(db, clock, load_config(db).with_changes(stock_expiry_warning_days=89))
+    assert expiring() == set()
+    _save_config(db, clock, load_config(db).with_changes(stock_expiry_warning_days=91))
+    assert expiring() == {"DEMO-L001", "DEMO-L003"}
+
+
+def test_a_past_as_of_date_gives_the_stock_alerts_of_that_date(stocked: StockStack) -> None:
+    # before the first receipt nothing is on hand: only the type below its minimum remains
+    before = stocked.alerts.alerts(date(2025, 12, 31))
+    assert [(a.kind, a.subject_ref) for a in before] == [(AlertKind.LOW_STOCK, BIOLOGICAL)]
+    # on 2026-02-01 DEMO-L002 (2026-03-04) is inside the window; DEMO-L001 is 122 days away
+    early = stocked.alerts.alerts(date(2026, 2, 1))
+    assert [(a.kind, a.subject_ref) for a in _of_kind(early, AlertKind.LOT_EXPIRING)] == [
+        (AlertKind.LOT_EXPIRING, "DEMO-L002")
+    ]
+    assert not _of_kind(early, AlertKind.LOT_EXPIRED)
+
+
+def test_an_empty_lot_stops_alerting_after_a_disposal(stocked: StockStack) -> None:
+    [lot] = [row for row in stocked.stock.list_lots() if row.lot_code == "DEMO-L002"]
+    stocked.stock.record_movement(
+        lot.id, MovementInput(moved_on="2026-03-05", kind="disposal", quantity=4)
+    )
+
+    assert not _of_kind(stocked.alerts.alerts(AS_OF), AlertKind.LOT_EXPIRED)

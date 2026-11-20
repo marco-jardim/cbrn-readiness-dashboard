@@ -9,8 +9,8 @@ itself (encoding, delimiter, guard, column codes) lives in ``storage/csv_io.py``
 Whether the file names carry the ``DEMO-`` prefix comes from ``app_meta.is_demo`` of the open
 database, never from a parameter (D25). The service shows no prompt and no path warning: warning
 about network, cloud or removable-media folders is the job of the UI (T8.7). The files contain
-internal data (staff qualifications, infrastructure status, budget); they stay where the operator
-puts them.
+internal data (staff qualifications, infrastructure status, budget, stock quantities and prices);
+they stay where the operator puts them.
 
 An existing file of the same name is overwritten (the UI asks first, using
 :meth:`ExportService.existing_files`). :meth:`ExportService.export_all` writes every file into a
@@ -38,6 +38,7 @@ from cbrn_dashboard.storage import (
     exercises_repo,
     infrastructure_repo,
     personnel_repo,
+    stock_repo,
 )
 from cbrn_dashboard.storage.csv_io import EntitySpec
 from cbrn_dashboard.storage.db import DatabaseConnection
@@ -323,11 +324,65 @@ def _load_executions(conn: DatabaseConnection) -> list[_Row]:
     return rows
 
 
+def _load_stock_types(conn: DatabaseConnection) -> list[_Row]:
+    return [
+        {
+            "code": row.code,
+            "built_in": row.built_in,
+            "category": row.category,
+            "label_pt_br": row.label_pt_br,
+            "label_en_us": row.label_en_us,
+            "label_es_es": row.label_es_es,
+            "minimum_quantity": row.minimum_quantity,
+            "active": row.active,
+        }
+        for row in stock_repo.list_types(conn)
+    ]
+
+
+def _load_stock_lots(conn: DatabaseConnection) -> list[_Row]:
+    types = {row.id: row.code for row in stock_repo.list_types(conn)}
+    return [
+        {
+            "type_code": _parent(types, row.type_id, "stock_lot"),
+            "lot_code": row.lot_code,
+            "expires_on": row.expires_on,
+            "unit_price": row.unit_price_minor,
+            "currency": row.currency,
+            "notes": row.notes,
+        }
+        for row in stock_repo.list_lots(conn)
+    ]
+
+
+def _load_stock_movements(conn: DatabaseConnection) -> list[_Row]:
+    types = {row.id: row.code for row in stock_repo.list_types(conn)}
+    lots = {row.id: row for row in stock_repo.list_lots(conn)}
+    rows: list[_Row] = []
+    for movement in stock_repo.list_movements(conn):
+        lot = lots.get(movement.lot_id)
+        if lot is None:
+            raise ServiceError(EXPORT_FAILED, "stock_movement")
+        rows.append(
+            {
+                "type_code": _parent(types, lot.type_id, "stock_movement"),
+                "lot_code": lot.lot_code,
+                "moved_on": movement.moved_on,
+                "kind": movement.kind,
+                "quantity": movement.quantity,
+                "reference": movement.reference,
+                "note": movement.note,
+            }
+        )
+    return rows
+
+
 _LOADERS: dict[str, Callable[[DatabaseConnection], list[_Row]]] = {
     "training_course": _load_courses,
     "asset_type": _load_asset_types,
     "evaluation_metric": _load_metrics,
     "funding_source": _load_sources,
+    "stock_item_type": _load_stock_types,
     "staff_member": _load_staff,
     "ppe_certification": _load_certificates,
     "training_record": _load_training,
@@ -340,6 +395,8 @@ _LOADERS: dict[str, Callable[[DatabaseConnection], list[_Row]]] = {
     "evaluation_result": _load_results,
     "budget_entry": _load_entries,
     "budget_execution": _load_executions,
+    "stock_lot": _load_stock_lots,
+    "stock_movement": _load_stock_movements,
 }
 
 

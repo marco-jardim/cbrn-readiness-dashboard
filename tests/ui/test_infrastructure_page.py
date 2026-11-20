@@ -6,11 +6,12 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QDate
+from PySide6.QtCore import QCoreApplication, QDate, Qt
 from PySide6.QtWidgets import QDialog, QWidget
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard.domain.infrastructure import AssetStatus, MaintenanceKind, ScheduleBasis
+from cbrn_dashboard.domain.stock import CATEGORY_ORDER
 from cbrn_dashboard.services import errors as errors_module
 from cbrn_dashboard.services import infrastructure as infrastructure_module
 from cbrn_dashboard.services.config import CONFIG_ERROR_CODES
@@ -19,6 +20,12 @@ from cbrn_dashboard.services.infrastructure import (
     AssetTypeInput,
     AssetTypeView,
     InfrastructureService,
+)
+from cbrn_dashboard.services.stock import (
+    InitialReceipt,
+    LotInput,
+    StockService,
+    StockTypeInput,
 )
 from cbrn_dashboard.ui.infrastructure.dialogs import (
     AssetDialog,
@@ -52,6 +59,8 @@ from cbrn_dashboard.ui.infrastructure.page import (
 )
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
+from cbrn_dashboard.ui.stock import labels as stock_labels
+from cbrn_dashboard.ui.stock.dialogs import LotDialog
 from tests.ui._fakes import FakePrompts
 from tests.ui._walk import assert_fully_translated
 
@@ -66,6 +75,12 @@ AS_OF = date(2026, 3, 5)
 
 def _service(context: AppContext) -> InfrastructureService:
     service = context.services.infrastructure
+    assert service is not None
+    return service
+
+
+def _stock_service(context: AppContext) -> StockService:
+    service = context.services.stock
     assert service is not None
     return service
 
@@ -445,7 +460,9 @@ def test_the_type_filter_limits_the_assets(app_context: AppContext, qtbot: QtBot
     page = InfrastructurePage(app_context)
     qtbot.addWidget(page)
     types = _service(app_context).list_types(include_inactive=True)
-    assert page.type_combo.count() == 1 + len(types)
+    stock_types = _stock_service(app_context).list_types(include_inactive=True)
+    # "All types", the asset types, the separator and the stock types (T11.10)
+    assert page.type_combo.count() == 1 + len(types) + 1 + len(stock_types)
     assert page.assets_model.rowCount() == 2
     page.type_combo.setCurrentIndex(page.type_combo.findData("bay"))
     assert [row.row.tag for row in page.assets_model.rows()] == ["DEMO-BAY"]
@@ -861,6 +878,276 @@ def test_the_only_status_entry_of_an_asset_cannot_be_deleted(
     assert _warnings(fake_prompts) == [error_label("ONLY_STATUS_EVENT")]
     assert len(service.asset_history(asset_id).status_events) == 1
     assert page.history_model.rowCount() == 1
+
+
+# --------------------------------------------------------------------------- stock tab and filter
+
+
+def _filter_data(page: InfrastructurePage) -> list[object]:
+    return [page.type_combo.itemData(i) for i in range(page.type_combo.count())]
+
+
+def _choose(page: InfrastructurePage, data: str | None) -> None:
+    index = page.type_combo.findData(data)
+    assert index >= 0
+    page.type_combo.setCurrentIndex(index)
+
+
+def _add_lot(context: AppContext, code: str, lot_code: str, expires: date | None = None) -> int:
+    stock = _stock_service(context)
+    view = stock.get_type_by_code(code)
+    assert view is not None
+    return stock.create_lot(
+        LotInput(type_id=view.id, lot_code=lot_code, expires_on=expires),
+        InitialReceipt(moved_on=date(2026, 2, 1), quantity=10),
+    )
+
+
+def _lot_codes(page: InfrastructurePage) -> list[str]:
+    return sorted(row.row.lot_code for row in page.stock_panel.lots_model.rows())
+
+
+def test_the_page_has_two_tabs_with_the_filter_above_them(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    assert page.tabs.count() == 2
+    assert page.tabs.tabText(0) == QCoreApplication.translate(
+        "Infrastructure", "Equipment and facilities (units)"
+    )
+    assert page.tabs.tabText(1) == QCoreApplication.translate("Infrastructure", "Stock (lots)")
+    assert page.tabs.widget(0) is page.units_tab
+    assert page.tabs.widget(1) is page.stock_panel
+    assert page.tabs.currentIndex() == 0
+    assert page.assets_view.parentWidget() is page.units_tab
+    assert page.type_combo.parentWidget() is page
+    assert page.type_combo.currentData() is None
+    assert page.stock_panel.type_filter is None
+    assert not page.stock_panel.no_match
+
+
+def test_the_type_filter_lists_asset_types_a_separator_and_every_stock_type(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    asset_codes = [t.code for t in _service(app_context).list_types(include_inactive=True)]
+    stock_types = _stock_service(app_context).list_types(include_inactive=True)
+    assert len(stock_types) == 17
+    data = _filter_data(page)
+    count = len(asset_codes)
+    assert data[0] is None
+    assert data[1 : 1 + count] == asset_codes
+    separator = 1 + count
+    assert data[separator] is None
+    assert (
+        page.type_combo.itemData(separator, Qt.ItemDataRole.AccessibleDescriptionRole)
+        == "separator"
+    )
+    stock_data = data[separator + 1 :]
+    assert sorted(str(item) for item in stock_data) == sorted(
+        "stock:" + item.code for item in stock_types
+    )
+    # ordered by category, then by name in the language shown
+    by_code = {item.code: item for item in stock_types}
+    keys = [
+        (
+            CATEGORY_ORDER.index(by_code[str(item)[6:]].category),
+            stock_labels.stock_type_display(by_code[str(item)[6:]], "en_US").casefold(),
+        )
+        for item in stock_data
+    ]
+    assert keys == sorted(keys)
+    glove = page.type_combo.findData("stock:GLOVE")
+    assert page.type_combo.itemText(glove) == stock_labels.code_label("GLOVE")
+    assert page.type_combo.itemText(page.type_combo.findData("bed")) == "Bed"
+
+
+def test_choosing_a_stock_type_shows_the_lots_tab_and_filters_the_lots(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    _add_asset(app_context, "DEMO-BED", code="bed")
+    _add_lot(app_context, "ANTIDOTE_CHEMICAL", "L1", date(2026, 6, 1))
+    _add_lot(app_context, "GLOVE", "G1")
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    assert page.tabs.currentIndex() == 0
+    assert page.assets_model.rowCount() == 1
+    assert _lot_codes(page) == ["G1", "L1"]
+
+    _choose(page, "stock:ANTIDOTE_CHEMICAL")
+    assert page.tabs.currentIndex() == 1
+    assert page.assets_model.rowCount() == 0
+    assert page.availability_model.rowCount() > 0  # the availability table is not filtered
+    assert page.count_label.text() == QCoreApplication.translate(
+        "Infrastructure", "%n asset(s) shown", None, 0
+    )
+    assert page.stock_panel.type_filter == "ANTIDOTE_CHEMICAL"
+    assert not page.stock_panel.no_match
+    assert _lot_codes(page) == ["L1"]
+
+
+def test_choosing_an_asset_type_shows_the_units_tab_and_the_stock_empty_state(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    _add_asset(app_context, "DEMO-BED", code="bed")
+    _add_asset(app_context, "DEMO-BAY", code="bay")
+    _add_lot(app_context, "GLOVE", "G1")
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    page.tabs.setCurrentIndex(1)
+
+    _choose(page, "bay")
+    assert page.tabs.currentIndex() == 0
+    assert [row.row.tag for row in page.assets_model.rows()] == ["DEMO-BAY"]
+    assert page.stock_panel.no_match
+    assert page.stock_panel.lots_model.rowCount() == 0
+    assert not page.stock_panel.empty_label.isHidden()
+
+    _choose(page, "stock:GLOVE")
+    assert page.tabs.currentIndex() == 1
+    assert page.assets_model.rowCount() == 0
+    assert not page.stock_panel.no_match
+    assert _lot_codes(page) == ["G1"]
+    assert page.stock_panel.empty_label.isHidden()
+
+    _choose(page, "bed")
+    assert page.tabs.currentIndex() == 0
+    assert [row.row.tag for row in page.assets_model.rows()] == ["DEMO-BED"]
+    assert page.stock_panel.no_match
+
+
+def test_all_types_filters_nothing_and_keeps_the_current_tab(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    _add_asset(app_context, "DEMO-BED", code="bed")
+    _add_lot(app_context, "GLOVE", "G1")
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    _choose(page, "stock:GLOVE")
+    assert page.tabs.currentIndex() == 1
+    _choose(page, None)
+    assert page.tabs.currentIndex() == 1
+    assert page.assets_model.rowCount() == 1
+    assert _lot_codes(page) == ["G1"]
+    assert page.stock_panel.type_filter is None
+    assert not page.stock_panel.no_match
+
+    page.tabs.setCurrentIndex(0)
+    _choose(page, "bed")
+    page.tabs.setCurrentIndex(1)
+    _choose(page, None)
+    assert page.tabs.currentIndex() == 1
+    assert page.assets_model.rowCount() == 1
+    assert not page.stock_panel.no_match
+
+
+def test_switching_tabs_by_hand_never_changes_the_filter(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    _add_asset(app_context, "DEMO-BED", code="bed")
+    _add_lot(app_context, "GLOVE", "G1")
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    _choose(page, "stock:GLOVE")
+    page.tabs.setCurrentIndex(0)
+    assert page.type_combo.currentData() == "stock:GLOVE"
+    assert page.assets_model.rowCount() == 0
+    assert _lot_codes(page) == ["G1"]
+    _choose(page, "bed")
+    page.tabs.setCurrentIndex(1)
+    assert page.type_combo.currentData() == "bed"
+    assert page.assets_model.rowCount() == 1
+    assert page.stock_panel.no_match
+
+
+def test_a_language_switch_keeps_the_filter_choice(app_context: AppContext, qtbot: QtBot) -> None:
+    _add_asset(app_context, "DEMO-BED", code="bed")
+    _add_lot(app_context, "GLOVE", "G1")
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    _choose(page, "stock:GLOVE")
+    before = sorted(str(item) for item in _filter_data(page))
+    for lang in ("pt_BR", "es_ES", "en_US"):
+        app_context.translator_manager.set_language(lang)
+        assert page.type_combo.currentData() == "stock:GLOVE"
+        assert page.tabs.currentIndex() == 1
+        assert page.stock_panel.type_filter == "GLOVE"
+        assert page.assets_model.rowCount() == 0
+        assert _lot_codes(page) == ["G1"]
+        assert sorted(str(item) for item in _filter_data(page)) == before
+        index = page.type_combo.findData("stock:GLOVE")
+        assert page.type_combo.itemText(index) == stock_labels.code_label("GLOVE")
+        assert page.tabs.tabText(1) == QCoreApplication.translate("Infrastructure", "Stock (lots)")
+
+
+def test_a_new_stock_type_appears_in_the_filter_and_the_choice_stays(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    _choose(page, "bay")
+    assert page.type_combo.findData("stock:DEMO-TYPE") == -1
+    _stock_service(app_context).create_type(
+        StockTypeInput(code="DEMO-TYPE", category="other", label_pt_br="Tipo demonstrativo")
+    )
+    app_context.notify_data_changed()
+    index = page.type_combo.findData("stock:DEMO-TYPE")
+    assert index > 0
+    assert page.type_combo.itemText(index) == "Tipo demonstrativo"
+    assert page.type_combo.currentData() == "bay"
+    assert page.stock_panel.no_match
+
+
+def test_adding_a_lot_in_the_stock_tab_shows_it_and_its_movement(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    _choose(page, "stock:GLOVE")
+    page.stock_panel.add_lot_action.trigger()
+    dialog = _open_dialog(page, LotDialog)
+    selected = dialog.selected_type()
+    assert selected is not None
+    assert selected.code == "GLOVE"
+    dialog.lot_code_edit.setText("G-1")
+    dialog.received_edit.setDate(QDate(2026, 3, 1))
+    dialog.quantity_spin.setValue(30)
+    dialog.accept()
+    assert _lot_codes(page) == ["G-1"]
+    assert page.stock_panel.movements_model.rowCount() == 1
+    assert page.stock_panel.summary_model.rowCount() == 1
+
+
+def test_the_page_without_a_stock_service_lists_only_asset_types(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    app_context.services.stock = None
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    types = _service(app_context).list_types(include_inactive=True)
+    assert page.type_combo.count() == 1 + len(types)
+    assert None not in _filter_data(page)[1:]
+    assert page.stock_panel.lots_model.rowCount() == 0
+    assert not page.stock_panel.add_lot_action.isEnabled()
+
+
+def test_read_only_mode_disables_every_edit_action_of_the_stock_tab(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    _add_lot(app_context, "GLOVE", "G1")
+    app_context.read_only = True
+    page = InfrastructurePage(app_context)
+    qtbot.addWidget(page)
+    _choose(page, "stock:GLOVE")
+    page.stock_panel.lots_view.selectRow(0)
+    page.stock_panel.movements_view.selectRow(0)
+    targets = app_context.edit_targets()
+    assert len(page.stock_panel._actions) == 6
+    for action in page.stock_panel._actions:
+        assert action in targets
+        assert not action.isEnabled()
 
 
 # --------------------------------------------------------------------------- read-only, no service

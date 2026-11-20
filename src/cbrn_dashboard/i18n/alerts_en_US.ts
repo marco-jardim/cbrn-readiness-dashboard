@@ -76,9 +76,27 @@
         <source>Indicator %1 is at %2 (critical threshold: %3).</source>
         <translation>Indicator %1 is at %2 (critical threshold: %3).</translation>
     </message>
+    <message numerus="yes">
+        <source>Lot %1 of %2 expired %n day(s) ago and still has stock.</source>
+        <translation>
+            <numerusform>Lot %1 of %2 expired %n day ago and still has stock.</numerusform>
+            <numerusform>Lot %1 of %2 expired %n days ago and still has stock.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Lot %1 of %2 expires in %n day(s).</source>
+        <translation>
+            <numerusform>Lot %1 of %2 expires in %n day.</numerusform>
+            <numerusform>Lot %1 of %2 expires in %n days.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Valid stock of %1 is %2, below the minimum of %3.</source>
+        <translation>Valid stock of %1 is %2, below the minimum of %3.</translation>
+    </message>
     <message>
         <source>Severity</source>
-        <extracomment>A missing value in a cell (data, not a translatable text). The column that shows the severity icon next to its text.</extracomment>
+        <extracomment>A missing value in a cell (data, not a translatable text). The column that shows the severity icon next to its text. The page of the antidotes and decontaminants (T11.11); every other stock category stays on the Infrastructure page.</extracomment>
         <translation>Severity</translation>
     </message>
     <message>

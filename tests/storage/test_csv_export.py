@@ -40,12 +40,20 @@ from cbrn_dashboard.services.personnel import (
     StaffInput,
     TrainingInput,
 )
+from cbrn_dashboard.services.stock import (
+    InitialReceipt,
+    LotInput,
+    MovementInput,
+    StockService,
+    StockTypeInput,
+)
 from cbrn_dashboard.storage import (
     app_meta,
     budget_repo,
     exercises_repo,
     infrastructure_repo,
     personnel_repo,
+    stock_repo,
 )
 from cbrn_dashboard.storage.csv_io import (
     ENTITIES,
@@ -77,6 +85,7 @@ ENTITY_NAMES = (
     "asset_type",
     "evaluation_metric",
     "funding_source",
+    "stock_item_type",
     "staff_member",
     "ppe_certification",
     "training_record",
@@ -89,6 +98,8 @@ ENTITY_NAMES = (
     "evaluation_result",
     "budget_entry",
     "budget_execution",
+    "stock_lot",
+    "stock_movement",
 )
 
 SPEC_IDS = [spec.name for spec in ENTITIES]
@@ -310,11 +321,54 @@ def _seed_budget(conn: DatabaseConnection) -> None:
     budget.add_execution(en3, "2025-01-15", 250)
 
 
+def _seed_stock(conn: DatabaseConnection) -> None:
+    stock = StockService(conn, CLOCK)
+    custom = stock.create_type(
+        StockTypeInput(
+            code="DEMO-STOCK",
+            category="detector",
+            label_pt_br="Tipo DEMO",
+            label_en_us="Demo type",
+            minimum_quantity=5,
+        )
+    )
+    chemical = stock.get_type_by_code("ANTIDOTE_CHEMICAL")
+    assert chemical is not None
+    l1 = stock.create_lot(
+        LotInput(
+            type_id=chemical.id,
+            lot_code="DEMO-L001",
+            expires_on="2027-01-31",
+            unit_price_minor=1250,
+            currency="BRL",
+            notes="=1+1",
+        ),
+        InitialReceipt("2026-01-10", 50, reference="DEMO-DN-1"),
+    )
+    l2 = stock.create_lot(
+        LotInput(
+            type_id=chemical.id,
+            lot_code="DEMO-L002",
+            expires_on="2026-09-30",
+            unit_price_minor=325,
+            currency="USD",
+        ),
+        InitialReceipt("2026-02-01", 10),
+    )
+    stock.create_lot(
+        LotInput(type_id=custom, lot_code="007"), InitialReceipt("2026-02-02", 3, note="DEMO note")
+    )
+    stock.record_movement(l1, MovementInput("2026-02-10", "issue", 5, reference="DEMO-REF"))
+    stock.record_movement(l1, MovementInput("2026-02-11", "adjustment_out", 2, note='DEMO; "note"'))
+    stock.record_movement(l2, MovementInput("2026-02-15", "loss", 1))
+
+
 def _seed(conn: DatabaseConnection) -> None:
     _seed_personnel(conn)
     _seed_infrastructure(conn)
     _seed_exercises(conn)
     _seed_budget(conn)
+    _seed_stock(conn)
 
 
 @pytest.fixture
@@ -425,6 +479,30 @@ def _expected(conn: DatabaseConnection) -> dict[str, list[dict[str, object]]]:
         }
         for row in budget_repo.list_executions(conn)
     ]
+    stock_types = stock_repo.list_types(conn)
+    stock_type_code = {row.id: row.code for row in stock_types}
+    stock_lots = stock_repo.list_lots(conn)
+    stock_lot_by_id = {row.id: row for row in stock_lots}
+    out["stock_item_type"] = [_fields(row, "id") for row in stock_types]
+    out["stock_lot"] = [
+        {
+            "type_code": stock_type_code[row.type_id],
+            "lot_code": row.lot_code,
+            "expires_on": row.expires_on,
+            "unit_price": row.unit_price_minor,
+            "currency": row.currency,
+            "notes": row.notes,
+        }
+        for row in stock_lots
+    ]
+    out["stock_movement"] = [
+        {
+            "type_code": stock_type_code[stock_lot_by_id[row.lot_id].type_id],
+            "lot_code": stock_lot_by_id[row.lot_id].lot_code,
+            **_fields(row, "id", "lot_id"),
+        }
+        for row in stock_repo.list_movements(conn)
+    ]
     return out
 
 
@@ -466,7 +544,7 @@ def _spec(name: str) -> EntitySpec:
 # --------------------------------------------------------------------------- the round trip
 
 
-def test_entity_names_are_the_sixteen_entities_in_import_order(seeded: DatabaseConnection) -> None:
+def test_entity_names_are_the_nineteen_entities_in_import_order(seeded: DatabaseConnection) -> None:
     service = ExportService(seeded, CLOCK)
     assert service.entity_names() == ENTITY_NAMES
     assert tuple(spec.name for spec in ENTITIES) == ENTITY_NAMES
@@ -684,7 +762,7 @@ def test_numbers_dates_and_money_are_never_guarded(tmp_path: Path) -> None:
 
 def test_real_database_files_have_no_demo_prefix(export_dir: Path) -> None:
     names = sorted(path.name for path in export_dir.iterdir())
-    assert len(names) == 16
+    assert len(names) == 19
     assert not any(name.startswith("DEMO-") for name in names)
 
 
@@ -753,6 +831,49 @@ def test_execution_amounts_keep_their_currency(export_dir: Path) -> None:
         ("EUR", 250),
         ("USD", 7),
     }
+
+
+def test_stock_prices_keep_their_currency_and_survive_exactly(export_dir: Path) -> None:
+    raw = {r["lot_code"]: r for r in _raw_rows(_file(export_dir, "stock_lot"))}
+    assert (raw["DEMO-L001"]["unit_price"], raw["DEMO-L001"]["currency"]) == ("12.50", "BRL")
+    assert (raw["DEMO-L002"]["unit_price"], raw["DEMO-L002"]["currency"]) == ("3.25", "USD")
+    assert (raw["007"]["unit_price"], raw["007"]["currency"], raw["007"]["expires_on"]) == (
+        "",
+        "",
+        "",
+    )
+    assert raw["DEMO-L001"]["notes"] == "'=1+1"  # the formula guard
+    lots = read_entity(_file(export_dir, "stock_lot"), _spec("stock_lot"))
+    assert {(r["lot_code"], r["unit_price"], r["currency"]) for r in lots} == {
+        ("DEMO-L001", 1250, "BRL"),
+        ("DEMO-L002", 325, "USD"),
+        ("007", None, None),
+    }
+    assert next(r["notes"] for r in lots if r["lot_code"] == "DEMO-L001") == "=1+1"
+    assert "007" in {r["lot_code"] for r in _raw_rows(_file(export_dir, "stock_lot"))}
+
+
+def test_stock_movements_keep_an_empty_reference_as_the_empty_text(export_dir: Path) -> None:
+    movements = read_entity(_file(export_dir, "stock_movement"), _spec("stock_movement"))
+    assert len(movements) == 6
+    assert {r["reference"] for r in movements} == {"DEMO-DN-1", "DEMO-REF", ""}
+    assert all(isinstance(r["reference"], str) for r in movements)
+    notes = {r["note"] for r in movements}
+    assert notes == {None, "DEMO note", 'DEMO; "note"'}
+    assert {r["kind"] for r in movements} == {"receipt", "issue", "adjustment_out", "loss"}
+
+
+def test_the_built_in_stock_types_are_exported_with_empty_labels(export_dir: Path) -> None:
+    types = read_entity(_file(export_dir, "stock_item_type"), _spec("stock_item_type"))
+    built_in = [r for r in types if r["built_in"] is True]
+    assert len(built_in) == 17
+    assert all(r["label_pt_br"] is None and r["minimum_quantity"] is None for r in built_in)
+    custom = next(r for r in types if r["code"] == "DEMO-STOCK")
+    assert (custom["built_in"], custom["category"], custom["minimum_quantity"]) == (
+        False,
+        "detector",
+        5,
+    )
 
 
 def test_empty_description_is_the_empty_text(export_dir: Path) -> None:
@@ -876,7 +997,7 @@ def test_existing_files_lists_the_names_an_export_would_overwrite(
     assert sorted(path.name for path in service.existing_files(out)) == sorted(
         path.name for path in out.iterdir()
     )
-    assert len(service.existing_files(out)) == 16
+    assert len(service.existing_files(out)) == 19
 
 
 def test_write_entity_leaves_no_temporary_file_on_failure(tmp_path: Path) -> None:

@@ -111,6 +111,7 @@ CSV_FILES = (
     "asset_type.csv",
     "evaluation_metric.csv",
     "funding_source.csv",
+    "stock_item_type.csv",
     "staff_member.csv",
     "ppe_certification.csv",
     "training_record.csv",
@@ -123,6 +124,8 @@ CSV_FILES = (
     "evaluation_result.csv",
     "budget_entry.csv",
     "budget_execution.csv",
+    "stock_lot.csv",
+    "stock_movement.csv",
 )
 
 #: The English text of every code, written by hand.
@@ -653,7 +656,7 @@ def test_the_csv_export_writes_one_file_per_entity_after_the_internal_data_warni
         "The files contain internal data: staff, assets, exercises and budget. " + CLOSING
     )
     assert sorted(path.name for path in folder.iterdir()) == sorted(CSV_FILES)
-    assert _infos(fake_prompts) == [f"16 files were written to {folder}."]
+    assert _infos(fake_prompts) == [f"19 files were written to {folder}."]
     text = (folder / "staff_member.csv").read_text(encoding="utf-8-sig")
     assert "DEMO-P001" in text
     assert "DEMO-P002" in text
@@ -1238,7 +1241,7 @@ def test_the_entity_names_are_translated_and_follow_the_import_order(
     names = [str(dialog.entity_combo.itemData(i)) for i in range(dialog.entity_combo.count())]
     assert names == [spec.name for spec in csv_io.ENTITIES]
     assert dialog.entity_combo.itemText(0) == "Training courses"
-    assert dialog.entity_combo.itemText(len(names) - 1) == "Budget executions"
+    assert dialog.entity_combo.itemText(len(names) - 1) == "Stock movements"
 
 
 # --------------------------------------------------------------------------- read-only mode
@@ -1750,13 +1753,15 @@ def test_all_error_codes_lists_every_code_of_the_snapshot_export_and_import_serv
         "BUILT_IN_NOT_ALLOWED",
         "FILE_UNREADABLE",
         "STORAGE_REFUSED",
+        "LOT_WITHOUT_MOVEMENTS",
     }
     covered = (
         _own_constants(snapshots_module)
         | _own_constants(export_module)
         | _own_constants(importer_module)
     )
-    assert covered <= set(ALL_ERROR_CODES)
+    # LOT_WITHOUT_MOVEMENTS is a warning with its own count message, not an error label
+    assert covered - {"LOT_WITHOUT_MOVEMENTS"} <= set(ALL_ERROR_CODES)
     assert "REPORT_FAILED" in ALL_ERROR_CODES
     assert "READ_ONLY" in ALL_ERROR_CODES
 
@@ -1795,14 +1800,14 @@ def test_the_names_of_the_entities_origins_variants_and_states_are_translated(
             state_label(withdrawn=True),
             state_label(withdrawn=False),
         ]
-    assert len(names["en_US"]) == 16 + 4 + 2 + 2
+    assert len(names["en_US"]) == 19 + 4 + 2 + 2
     for position, english in enumerate(names["en_US"]):
         assert english.strip()
         assert names["pt_BR"][position] != english
         assert names["es_ES"][position] != english
-    assert names["en_US"][4] == "Staff"
-    assert names["pt_BR"][4] == "Pessoal"
-    assert names["es_ES"][4] == "Personal"
+    assert names["en_US"][5] == "Staff"
+    assert names["pt_BR"][5] == "Pessoal"
+    assert names["es_ES"][5] == "Personal"
 
 
 def test_a_snapshot_view_type_is_what_the_list_holds(app_context: AppContext, qtbot: QtBot) -> None:
@@ -2041,17 +2046,17 @@ def test_the_templates_of_every_entity_are_written_after_asking_about_existing_o
     fake_prompts.script("choose_folder", folder)
     workflow.write_templates()
 
-    assert _infos(fake_prompts) == [f"16 template files were written to {folder}."]
+    assert _infos(fake_prompts) == [f"19 template files were written to {folder}."]
     assert fake_prompts.calls_of("confirm") == []  # a plain, empty place: nothing to ask
     names = sorted(path.name for path in folder.iterdir())
-    assert len(names) == 16
+    assert len(names) == 19
     assert "staff_member-template.csv" in names
 
     (folder / "staff_member-template.csv").write_text("old", encoding="utf-8")
     fake_prompts.script("choose_folder", folder)
     workflow.write_templates()  # the fake answers "no" to the replacement question
     (question,) = fake_prompts.calls_of("confirm")
-    assert question.text == "16 existing template files in this folder will be replaced. Continue?"
+    assert question.text == "19 existing template files in this folder will be replaced. Continue?"
     assert (folder / "staff_member-template.csv").read_text(encoding="utf-8") == "old"
 
     fake_prompts.script("choose_folder", folder)

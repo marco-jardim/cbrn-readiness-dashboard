@@ -49,6 +49,7 @@ from cbrn_dashboard.services.exercises import ExercisesService
 from cbrn_dashboard.services.indicators import IndicatorService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import CertificateInput, PersonnelService, StaffInput
+from cbrn_dashboard.services.stock import InitialReceipt, LotInput, StockService
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
 
@@ -406,3 +407,136 @@ def test_budget_key_figures_are_built_from_the_exact_minor_units_when_known() ->
         "kf:BUDGET:allocated:BRL": float(Decimal("100000000000000.01")),
         "kf:BUDGET:executed:BRL": 0.03,
     }
+
+
+# --------------------------------------------------------------------------- stock (T11.8)
+
+
+def _stock_builder(
+    conn: DatabaseConnection,
+) -> tuple[ReportBuilder, PersonnelService, StockService, AlertService]:
+    """The builder with the stock service wired everywhere, plus the alert service it must match."""
+    clock = FixedClock.at("2026-03-05T12:00:00Z")
+    personnel = PersonnelService(conn, clock, _operator)
+    infrastructure = InfrastructureService(conn, clock, _operator)
+    exercises = ExercisesService(conn, clock, _operator)
+    budget = BudgetService(conn, clock, _operator)
+    stock = StockService(conn, clock, _operator)
+    indicators = IndicatorService(
+        conn,
+        clock,
+        _operator,
+        personnel=personnel,
+        infrastructure=infrastructure,
+        exercises=exercises,
+        budget=budget,
+        stock=stock,
+    )
+    alerts = AlertService(
+        personnel=personnel, infrastructure=infrastructure, indicators=indicators, stock=stock
+    )
+    dashboard = DashboardService(
+        indicators=indicators,
+        alerts=alerts,
+        personnel=personnel,
+        infrastructure=infrastructure,
+        exercises=exercises,
+        budget=budget,
+        stock=stock,
+    )
+    builder = ReportBuilder(
+        conn=conn,
+        clock=clock,
+        dashboard=dashboard,
+        personnel=personnel,
+        infrastructure=infrastructure,
+        config_loader=ConfigService(conn, clock, _operator).load,
+        budget=budget,
+        stock=stock,
+    )
+    return builder, personnel, stock, alerts
+
+
+def _seed_stock(stock: StockService) -> None:
+    """Critical 2 (DEMO-L002 expired on 2026-03-04, ANTIDOTE_BIOLOGICAL below its minimum 20) and
+    warning 1 (DEMO-L001 expires on 2026-06-03, the last day of the 90-day window)."""
+
+    def lot(code: str, lot_code: str, expires_on: str, quantity: int) -> None:
+        found = stock.get_type_by_code(code)
+        assert found is not None
+        stock.create_lot(
+            LotInput(type_id=found.id, lot_code=lot_code, expires_on=expires_on),
+            InitialReceipt(moved_on="2026-01-01", quantity=quantity),
+        )
+
+    lot("ANTIDOTE_CHEMICAL", "DEMO-L001", "2026-06-03", 10)
+    lot("ANTIDOTE_CHEMICAL", "DEMO-L002", "2026-03-04", 4)
+    biological = stock.get_type_by_code("ANTIDOTE_BIOLOGICAL")
+    assert biological is not None
+    stock.set_minimum(biological.id, 20)
+
+
+def test_the_stock_alerts_are_a_fourth_part_of_each_total(conn: DatabaseConnection) -> None:
+    builder, personnel, stock, _alerts = _stock_builder(conn)
+    _seed_worked_example(personnel)
+    _seed_stock(stock)
+
+    document = builder.build(AS_OF, ReportVariant.INTERNAL)
+    cells = _cells(document)
+
+    assert cells["alert:CRITICAL:stock"].value == 2.0
+    assert cells["alert:WARNING:stock"].value == 1.0
+    assert not cells["alert:CRITICAL:stock"].personnel_derived
+    assert cells["alert:WARNING"].total_of == (
+        "alert:WARNING:personnel",
+        "alert:WARNING:infrastructure",
+        "alert:WARNING:indicators",
+        "alert:WARNING:stock",
+    )
+    stock_rows = [a for a in document.alert_summary if a.source is AlertSource.STOCK]
+    assert [(a.severity, a.cell.key) for a in stock_rows] == [
+        (Severity.CRITICAL, "alert:CRITICAL:stock"),
+        (Severity.WARNING, "alert:WARNING:stock"),
+    ]
+
+
+def test_the_report_totals_equal_the_alert_service_counts(conn: DatabaseConnection) -> None:
+    builder, personnel, stock, alerts = _stock_builder(conn)
+    _seed_worked_example(personnel)
+    _seed_stock(stock)
+
+    cells = _cells(builder.build(AS_OF, ReportVariant.INTERNAL))
+    counts = alerts.counts(AS_OF)
+
+    assert cells["alert:CRITICAL"].value == float(counts[Severity.CRITICAL]) == 5.0  # 3 + 2
+    assert cells["alert:WARNING"].value == float(counts[Severity.WARNING]) == 16.0  # 15 + 1
+    assert cells["alert:INFO"].value == float(counts[Severity.INFO])
+
+
+def test_a_report_without_a_stock_service_counts_no_stock_alerts(conn: DatabaseConnection) -> None:
+    builder, personnel = _builder(conn)
+    _seed_worked_example(personnel)
+
+    cells = _cells(builder.build(AS_OF, ReportVariant.INTERNAL))
+
+    assert cells["alert:CRITICAL:stock"].value == 0.0
+    assert cells["alert:WARNING:stock"].value == 0.0
+
+
+def test_the_anonymised_report_keeps_the_stock_counts_and_still_adds_up(
+    conn: DatabaseConnection,
+) -> None:
+    builder, personnel, stock, _alerts = _stock_builder(conn)
+    _seed_worked_example(personnel)
+    _seed_stock(stock)
+
+    document = builder.build(AS_OF, ReportVariant.ANONYMISED)
+    cells = _cells(document)
+
+    for key, value in (("alert:CRITICAL:stock", 2.0), ("alert:WARNING:stock", 1.0)):
+        assert not cells[key].suppressed, key
+        assert cells[key].value == value, key
+    # the totals have a hidden personnel part, so they are hidden and nothing can be subtracted
+    assert cells["alert:CRITICAL"].suppressed
+    assert cells["alert:WARNING"].suppressed
+    assert_nothing_recoverable(document)

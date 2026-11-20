@@ -12,7 +12,8 @@ from typing import Any
 from PySide6.QtCore import QCoreApplication
 
 from cbrn_dashboard.domain.alerts import Alert, SubjectKind
-from cbrn_dashboard.domain.indicators import Module
+from cbrn_dashboard.domain.indicators import InvalidDimensionError, Module, decode_dimension
+from cbrn_dashboard.domain.stock import ANTIDOTE_PAGE_CATEGORIES
 from cbrn_dashboard.ui.alerts.labels import (
     alert_message,
     module_label,
@@ -36,19 +37,42 @@ _MODULE_PAGES: dict[str, str] = {
     Module.INFRASTRUCTURE.value: "infrastructure",
     Module.EXERCISES.value: "exercises",
     Module.BUDGET.value: "budget",
+    Module.STOCK.value: "infrastructure",
 }
+
+#: The page of the antidotes and decontaminants (T11.11); every other stock category stays on
+#: the Infrastructure page.
+ANTIDOTES_PAGE = "antidotes"
+
+_ANTIDOTE_CATEGORIES = frozenset(category.value for category in ANTIDOTE_PAGE_CATEGORIES)
+
+
+def _stock_page_key(alert: Alert) -> str:
+    """The page of a stock alert: by the category of its dimension (antidote or decontaminant)."""
+    try:
+        parts = decode_dimension(alert.dimension)
+    except InvalidDimensionError:
+        return _MODULE_PAGES[Module.STOCK.value]
+    if parts.get("category") in _ANTIDOTE_CATEGORIES:
+        return ANTIDOTES_PAGE
+    return _MODULE_PAGES[Module.STOCK.value]
 
 
 def page_key_for(alert: Alert) -> str:
     """The registry key of the page of the record an alert refers to.
 
     A staff member opens Personnel, an asset opens Infrastructure and an indicator opens the page
-    of its module. ``""`` when no page is known.
+    of its module. A lot, an item type and an indicator of the stock module open the page
+    ``antidotes`` for the categories antidote and decontaminant and Infrastructure for any other
+    category. ``""`` when no page is known.
     """
     if alert.subject_kind is SubjectKind.STAFF:
         return _MODULE_PAGES[Module.PERSONNEL.value]
     if alert.subject_kind is SubjectKind.ASSET:
         return _MODULE_PAGES[Module.INFRASTRUCTURE.value]
+    stock_subject = alert.subject_kind in (SubjectKind.LOT, SubjectKind.ITEM_TYPE)
+    if stock_subject or alert.module is Module.STOCK:
+        return _stock_page_key(alert)
     return _MODULE_PAGES.get(alert.module.value, "")
 
 

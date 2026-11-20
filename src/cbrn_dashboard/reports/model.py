@@ -42,6 +42,7 @@ from cbrn_dashboard.domain.alerts import (
     Severity,
     certificate_alerts,
     maintenance_alerts,
+    stock_alerts,
 )
 from cbrn_dashboard.domain.budget import (
     BudgetTotal,
@@ -172,12 +173,13 @@ class IndicatorRow:
 
 
 class AlertSource(StrEnum):
-    """Where the alerts of a count come from (P8-01): all sources, or one of the three."""
+    """Where the alerts of a count come from (P8-01): all sources, or one of the four."""
 
     ALL = "ALL"
     PERSONNEL = "PERSONNEL"
     INFRASTRUCTURE = "INFRASTRUCTURE"
     INDICATORS = "INDICATORS"
+    STOCK = "STOCK"
 
 
 @dataclass(frozen=True)
@@ -429,13 +431,16 @@ def _alert_summary(
     maintenance: list[Severity],
     tiles: tuple[Tile, ...],
     indicator_cells: dict[str, Cell],
+    stock: Sequence[Severity] = (),
 ) -> tuple[AlertCountRow, ...]:
     """The alert counts per severity, split by source (P8-01).
 
     A count that sums certificate alerts is personnel-derived and declares the per-level cells it
     sums; a count of indicator alerts declares the personnel count rows that can carry a status, so
-    that it is hidden whenever one of them is; the total declares its three parts. The INFO count
-    is maintenance only (``MAINT_SCHEDULE_UNKNOWN``) and is not personnel-derived.
+    that it is hidden whenever one of them is; the total declares its four parts. The stock part
+    counts the lot and low-stock alerts (``stock`` holds their severities, T11.8) and is not
+    personnel-derived. The INFO count is maintenance only (``MAINT_SCHEDULE_UNKNOWN``) and is not
+    personnel-derived.
     """
     watched = tuple(
         _indicator_key(tile.code, tile.dimension)
@@ -480,6 +485,14 @@ def _alert_summary(
                     total_of=watched,
                 ),
                 AlertSource.INDICATORS,
+            ),
+            AlertCountRow(
+                severity,
+                Cell(
+                    key=f"alert:{severity.value}:stock",
+                    value=float(sum(1 for item in stock if item is severity)),
+                ),
+                AlertSource.STOCK,
             ),
         )
         total = Cell(
@@ -566,6 +579,14 @@ class ReportBuilder:
             return None
         return self._budget.totals_for_year(fiscal_year_of(as_of), as_of)
 
+    def _stock_severities(self, as_of: date) -> list[Severity]:
+        """The severities of the stock alerts on ``as_of`` (none without a stock service)."""
+        if self._stock is None:
+            return []
+        types, lots, movements = self._stock.alert_inputs()
+        found = stock_alerts(types, lots, movements, as_of, self._stock.stock_rules())
+        return [alert.severity for alert in found]
+
     def _internal(self, as_of: date) -> ReportDocument:
         config = self._config_loader()
         data: DashboardData = self._dashboard.data(as_of)
@@ -615,6 +636,7 @@ class ReportBuilder:
             maintenance=maintenance_severities,
             tiles=tiles,
             indicator_cells=indicator_cells,
+            stock=self._stock_severities(as_of),
         )
         return ReportDocument(
             variant=ReportVariant.INTERNAL,

@@ -27,6 +27,9 @@ from tests.ui._alert_samples import (
     CERT_EXPIRED,
     CERT_EXPIRING,
     INDICATOR_WARNING,
+    LOT_EXPIRED,
+    LOT_EXPIRING,
+    LOW_STOCK,
     MAINT_OVERDUE,
     MAINT_SCHEDULE_UNKNOWN,
     MESSAGES,
@@ -369,7 +372,14 @@ def test_the_filter_entries_are_named_in_the_language(
     page = _page(app_context, qtbot)
     modules = [page.module_combo.itemText(i) for i in range(page.module_combo.count())]
     severities = [page.severity_combo.itemText(i) for i in range(page.severity_combo.count())]
-    assert modules == ["All modules", "Personnel", "Infrastructure", "Exercises", "Budget"]
+    assert modules == [
+        "All modules",
+        "Personnel",
+        "Infrastructure",
+        "Exercises",
+        "Budget",
+        "Stock",
+    ]
     assert severities == ["All severities", "Critical", "Warning", "Information"]
 
 
@@ -442,6 +452,56 @@ def test_activating_an_alert_switches_the_main_window_to_the_right_page(
         page.view.activated.emit(page.model.index(row, 0))
         assert window.pages.currentWidget() is window.page_widget(key)
         assert window.pages.currentWidget() is not page
+
+
+INFRA = "infrastructure"
+ANTIDOTE_DIM = "category=antidote;item=ANTIDOTE_CHEMICAL"
+STOCK_INDICATOR = replace(
+    INDICATOR_WARNING,
+    module=Module.STOCK,
+    subject_ref="STOCK_VALID_QTY",
+    dimension=ANTIDOTE_DIM,
+)
+
+
+@pytest.mark.parametrize(
+    ("alert", "key"),
+    [
+        (LOT_EXPIRED, "antidotes"),
+        (LOT_EXPIRING, "antidotes"),
+        (LOW_STOCK, "antidotes"),
+        (replace(LOT_EXPIRED, dimension="category=decontaminant;item=DECONTAMINANT"), "antidotes"),
+        (replace(LOT_EXPIRED, dimension="category=detector;item=DETECTOR_CHEMICAL"), INFRA),
+        (replace(LOT_EXPIRING, dimension="category=ppe;item=GLOVE"), "infrastructure"),
+        (replace(LOW_STOCK, dimension="category=other;item=OXYGEN_CYLINDER"), "infrastructure"),
+        (STOCK_INDICATOR, "antidotes"),
+        (replace(STOCK_INDICATOR, dimension="category=ppe;item=GLOVE"), "infrastructure"),
+        (replace(STOCK_INDICATOR, dimension="category=ppe"), "infrastructure"),
+        (replace(STOCK_INDICATOR, dimension=""), "infrastructure"),  # the module page
+        (replace(LOT_EXPIRED, dimension="not-a-dimension"), "infrastructure"),
+    ],
+)
+def test_a_stock_alert_opens_the_page_of_its_category(alert: Alert, key: str) -> None:
+    assert page_key_for(alert) == key
+
+
+def test_the_other_subjects_keep_their_pages_next_to_the_stock_ones() -> None:
+    assert page_key_for(MAINT_OVERDUE) == "infrastructure"
+    assert page_key_for(CERT_EXPIRED) == "personnel"
+    assert page_key_for(INDICATOR_WARNING) == "personnel"
+
+
+def test_activating_a_stock_alert_of_another_category_shows_infrastructure(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    glove = replace(LOT_EXPIRING, dimension="category=ppe;item=GLOVE")
+    _install(app_context, [glove])
+    host, page = _hosted(app_context, qtbot)
+
+    page.view.selectRow(0)
+    page.view.activated.emit(page.model.index(0, 0))
+
+    assert host.shown == ["infrastructure"]
 
 
 # --------------------------------------------------------------------------- language, services

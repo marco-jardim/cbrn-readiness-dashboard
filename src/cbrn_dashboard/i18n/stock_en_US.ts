@@ -503,5 +503,48 @@
         <source>Inactive</source>
         <translation>Inactive</translation>
     </message>
+    <message>
+        <source>Delete lot</source>
+        <translation>Delete lot</translation>
+    </message>
+    <message>
+        <source>Delete movement</source>
+        <translation>Delete movement</translation>
+    </message>
+    <message>
+        <source>Stock by item type at the as-of date</source>
+        <translation>Stock by item type at the as-of date</translation>
+    </message>
+    <message>
+        <source>Show empty lots</source>
+        <translation>Show empty lots</translation>
+    </message>
+    <message>
+        <source>The selected type is not a stock item type, so it has no lots.</source>
+        <translation>The selected type is not a stock item type, so it has no lots.</translation>
+    </message>
+    <message>
+        <source>Lots</source>
+        <translation>Lots</translation>
+    </message>
+    <message>
+        <source>Movements of the selected lot</source>
+        <translation>Movements of the selected lot</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n lot(s) shown</source>
+        <translation>
+            <numerusform>%n lot shown</numerusform>
+            <numerusform>%n lots shown</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Delete lot %1 together with all its movements? A lot that existed is closed with a disposal or a loss instead.</source>
+        <translation>Delete lot %1 together with all its movements? A lot that existed is closed with a disposal or a loss instead.</translation>
+    </message>
+    <message>
+        <source>Delete the selected movement of lot %1?</source>
+        <translation>Delete the selected movement of lot %1?</translation>
+    </message>
 </context>
 </TS>

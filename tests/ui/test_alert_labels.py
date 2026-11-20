@@ -26,10 +26,14 @@ from tests.ui._alert_samples import (
     CERT_EXPIRING,
     INDICATOR_CRITICAL,
     INDICATOR_WARNING,
+    LOT_EXPIRED,
+    LOT_EXPIRING,
     MAINT_DUE_SOON,
     MAINT_OVERDUE,
     MAINT_SCHEDULE_UNKNOWN,
     MESSAGES,
+    STOCK_ALERTS,
+    STOCK_MESSAGES,
 )
 
 pytestmark = pytest.mark.ui
@@ -107,7 +111,7 @@ PLURAL_BASES: dict[AlertKind, tuple[Alert, int]] = {
 
 
 def test_the_samples_cover_every_alert_kind() -> None:
-    assert {alert.kind.value for alert in ALERTS} == set(ALL_KIND_CODES)
+    assert {alert.kind.value for alert in [*ALERTS, *STOCK_ALERTS]} == set(ALL_KIND_CODES)
     assert set(ALL_KIND_CODES) == {
         "CERT_EXPIRED",
         "CERT_EXPIRING",
@@ -116,6 +120,9 @@ def test_the_samples_cover_every_alert_kind() -> None:
         "MAINT_SCHEDULE_UNKNOWN",
         "INDICATOR_WARNING",
         "INDICATOR_CRITICAL",
+        "LOT_EXPIRED",
+        "LOT_EXPIRING",
+        "LOW_STOCK",
     }
     assert {kind.value for kind in AlertKind} == set(ALL_KIND_CODES)
 
@@ -138,9 +145,60 @@ def test_every_kind_gives_a_message_with_every_placeholder_filled(
             assert alert.subject_ref in text
 
 
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_stock_messages_have_every_placeholder_filled(
+    app_context: AppContext, lang: str
+) -> None:
+    app_context.translator_manager.set_language(lang)
+    for alert, expected in zip(STOCK_ALERTS, STOCK_MESSAGES[lang], strict=True):
+        text = alert_message(alert, lang)
+        assert text == expected, alert.kind
+        assert "%" not in text, (lang, alert.kind, text)
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+@pytest.mark.parametrize("days", [1, 2])
+def test_the_stock_day_plurals_for_1_and_2_days(
+    app_context: AppContext, lang: str, days: int
+) -> None:
+    app_context.translator_manager.set_language(lang)
+    expired = alert_message(replace(LOT_EXPIRED, days_remaining=-days), lang)
+    expiring = alert_message(replace(LOT_EXPIRING, days_remaining=days), lang)
+    if lang == "en_US":
+        unit = "day" if days == 1 else "days"
+        assert expired == (
+            f"Lot DEMO-L003 of Chemical antidote expired {days} {unit} ago and still has stock."
+        )
+        assert expiring == f"Lot DEMO-L002 of Chemical antidote expires in {days} {unit}."
+    elif lang == "pt_BR":
+        unit = "dia" if days == 1 else "dias"
+        assert expired == (
+            f"O lote DEMO-L003 de Antídoto Químico venceu há {days} {unit} e ainda tem estoque."
+        )
+        assert expiring == f"O lote DEMO-L002 de Antídoto Químico vence em {days} {unit}."
+    else:
+        unit = "día" if days == 1 else "días"
+        assert expired == (
+            f"El lote DEMO-L003 de Antídoto químico caducó hace {days} {unit} "
+            "y aún tiene existencias."
+        )
+        assert expiring == f"El lote DEMO-L002 de Antídoto químico caduca en {days} {unit}."
+
+
+def test_a_user_defined_type_is_named_by_its_code_in_a_stock_message(
+    app_context: AppContext,
+) -> None:
+    alert = replace(LOT_EXPIRING, dimension="category=other;item=DEMO-ANTIDOTE-X")
+
+    assert alert_message(alert, "en_US") == "Lot DEMO-L002 of DEMO-ANTIDOTE-X expires in 20 days."
+
+
 def test_the_messages_differ_between_the_languages() -> None:
     for position in range(len(ALERTS)):
         texts = {MESSAGES[lang][position] for lang in LANGUAGES}
+        assert len(texts) == 3
+    for position in range(len(STOCK_ALERTS)):
+        texts = {STOCK_MESSAGES[lang][position] for lang in LANGUAGES}
         assert len(texts) == 3
 
 

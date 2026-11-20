@@ -225,6 +225,9 @@ def test_severity_table_matches_plan() -> None:
         AlertKind.MAINT_SCHEDULE_UNKNOWN: Severity.INFO,
         AlertKind.INDICATOR_WARNING: Severity.WARNING,
         AlertKind.INDICATOR_CRITICAL: Severity.CRITICAL,
+        AlertKind.LOT_EXPIRED: Severity.CRITICAL,
+        AlertKind.LOT_EXPIRING: Severity.WARNING,
+        AlertKind.LOW_STOCK: Severity.CRITICAL,
     }
     assert set(SEVERITY_OF) == set(AlertKind)
 
@@ -289,10 +292,18 @@ def run_all(scenario: Scenario, d: date = D) -> list[Alert]:
     )
 
 
+#: The kinds of the scenario: the stock kinds have their own tests (test_alerts_stock.py).
+NON_STOCK_KINDS = {
+    kind
+    for kind in AlertKind
+    if kind not in (AlertKind.LOT_EXPIRED, AlertKind.LOT_EXPIRING, AlertKind.LOW_STOCK)
+}
+
+
 def test_every_kind_is_produced_with_its_severity() -> None:
     alerts = run_all(full_scenario())
-    assert {a.kind for a in alerts} == set(AlertKind)
-    assert len(alerts) == len(AlertKind)
+    assert {a.kind for a in alerts} == NON_STOCK_KINDS
+    assert len(alerts) == len(NON_STOCK_KINDS)
     for alert in alerts:
         assert alert.severity is SEVERITY_OF[alert.kind]
 
@@ -831,7 +842,7 @@ def test_has_actionable_ignores_info_only() -> None:
 
 def test_all_alerts_of_a_past_date_use_the_data_of_that_date() -> None:
     scenario = full_scenario()
-    assert len(run_all(scenario, d=D)) == len(AlertKind)
+    assert len(run_all(scenario, d=D)) == len(NON_STOCK_KINDS)
     early = run_all(scenario, d=days(-1000))
     # The certificates were issued 400 days before D, so none counts that early; the maintenance
     # records are later too, so every asset in service has an unknown schedule.

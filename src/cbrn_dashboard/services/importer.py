@@ -37,6 +37,19 @@ Entities that do not use the service's create method as it is:
   ``ExercisesService.update_edition`` with the countries the edition has plus the new one.
 * ``ppe_certification``: ``add_certificate`` followed by ``set_no_renewal`` when the row carries a
   no-renewal date or reason.
+* ``stock_lot`` (T11.14): ``StockService.create_lot`` insists on an initial receipt, but the export
+  holds the movements as their own file (``stock_movement``, the receipt included). Same strategy
+  as for assets: the lot is validated by ``create_lot`` with a placeholder receipt (today, 1 unit)
+  inside a SAVEPOINT that is always rolled back, and written with ``stock_repo.insert_lot`` with
+  the values read back, and NO movement. The lots of a file have no movement until the
+  ``stock_movement`` file is imported: that count is the warning ``lots_without_movements``
+  (:data:`LOT_WITHOUT_MOVEMENTS`, a warning, not an error; the same for a dry run).
+* ``stock_movement``: ``StockService.record_movement``, which enforces the balance rule (a balance
+  is never negative) and the date rule (nothing after today). Rows are applied lot by lot in the
+  order date, inflows before outflows, file line, so the order of the file does not matter for a
+  file that is consistent as a whole; ``BALANCE_NEGATIVE`` and ``DATE_IN_FUTURE`` are reported on
+  the line of the movement that causes them. Each movement is checked against the movements the
+  lot already has in the database and against the rows applied before it.
 
 Rows of the built-in lists (``built_in = 1``) are never created: a built-in code that exists is a
 duplicate (``DUPLICATE_KEY``), any other row with ``built_in = 1`` is ``BUILT_IN_NOT_ALLOWED``.
@@ -55,6 +68,7 @@ from types import MappingProxyType
 
 from cbrn_dashboard import logging_setup
 from cbrn_dashboard.clock import Clock
+from cbrn_dashboard.domain.stock import SIGN
 from cbrn_dashboard.services.budget import BudgetService, EntryInput, SourceInput
 from cbrn_dashboard.services.errors import READ_ONLY, ServiceError
 from cbrn_dashboard.services.exercises import (
@@ -77,6 +91,13 @@ from cbrn_dashboard.services.personnel import (
     StaffInput,
     TrainingInput,
 )
+from cbrn_dashboard.services.stock import (
+    InitialReceipt,
+    LotInput,
+    MovementInput,
+    StockService,
+    StockTypeInput,
+)
 from cbrn_dashboard.storage import (
     budget_repo,
     csv_io,
@@ -84,17 +105,20 @@ from cbrn_dashboard.storage import (
     infrastructure_repo,
     personnel_repo,
     repository,
+    stock_repo,
 )
 from cbrn_dashboard.storage.csv_io import CsvFormatError, EntitySpec
 from cbrn_dashboard.storage.db import DatabaseConnection, transaction
 from cbrn_dashboard.storage.infrastructure_repo import AssetRow
 from cbrn_dashboard.storage.repository import RepositoryError, WriteContext
+from cbrn_dashboard.storage.stock_repo import StockLotRow
 
 __all__ = [
     "BUILT_IN_NOT_ALLOWED",
     "DUPLICATE_IN_FILE",
     "DUPLICATE_KEY",
     "FILE_UNREADABLE",
+    "LOT_WITHOUT_MOVEMENTS",
     "STORAGE_REFUSED",
     "UNKNOWN_REFERENCE",
     "ImportError",
@@ -114,6 +138,9 @@ BUILT_IN_NOT_ALLOWED = "BUILT_IN_NOT_ALLOWED"
 FILE_UNREADABLE = "FILE_UNREADABLE"
 #: The storage layer refused a row (a constraint no service check caught first).
 STORAGE_REFUSED = "STORAGE_REFUSED"
+#: WARNING (never an error): lots of a ``stock_lot`` file have no movement yet; the count is
+#: ``ImportReport.lots_without_movements`` (P8-12 pattern, as for assets without a status event).
+LOT_WITHOUT_MOVEMENTS = "LOT_WITHOUT_MOVEMENTS"
 
 #: The codes the module services use for "this natural key exists"; reported as DUPLICATE_KEY.
 _SERVICE_DUPLICATE_CODES = frozenset(
@@ -128,9 +155,14 @@ _SERVICE_DUPLICATE_CODES = frozenset(
         "DUPLICATE_MAINTENANCE",
         "DUPLICATE_ENTRY",
         "DUPLICATE_EXECUTION",
+        "DUPLICATE_LOT",
+        "DUPLICATE_MOVEMENT",
         DUPLICATE_KEY,
     }
 )
+
+#: The movement kinds that add to the balance (applied before the outflows of the same day).
+_INFLOW_KINDS = frozenset(kind.value for kind, sign in SIGN.items() if sign > 0)
 
 #: Service input field -> CSV column, for fields whose name differs from the column.
 _FIELD_ALIASES: Mapping[str, str] = MappingProxyType(
@@ -143,6 +175,7 @@ _FIELD_ALIASES: Mapping[str, str] = MappingProxyType(
         "countries": "country_code",
         "allocated_minor": "allocated",
         "amount_minor": "amount",
+        "unit_price_minor": "unit_price",
     }
 )
 
@@ -177,6 +210,10 @@ class ImportReport:
     #: Assets of an ``asset`` file that are in service today and have no status event (a warning,
     #: not an error: the CSV contract is unchanged; the count is the same for a dry run).
     assets_without_status_event: int = 0
+    #: Lots of a ``stock_lot`` file that have no movement yet (:data:`LOT_WITHOUT_MOVEMENTS`; a
+    #: warning, not an error; the same count for a dry run). They show no stock until the
+    #: ``stock_movement`` file is imported.
+    lots_without_movements: int = 0
 
     @property
     def ok(self) -> bool:
@@ -208,6 +245,8 @@ class _Env:
     infrastructure: InfrastructureService
     exercises: ExercisesService
     budget: BudgetService
+    stock: StockService
+    clock: Clock
     context: Callable[[], WriteContext]
 
 
@@ -582,6 +621,108 @@ def _import_execution(env: _Env, row: _Values) -> _Target:
     return _Target("budget_execution", entity_id=new_id)
 
 
+def _import_stock_type(env: _Env, row: _Values) -> _Target:
+    code = _required(row, "code")
+    _check_not_built_in(row, stock_repo.get_type_by_code(env.conn, code) is not None)
+    new_id = env.stock.create_type(
+        StockTypeInput(
+            code=code,
+            category=_required(row, "category"),
+            label_pt_br=_text(row, "label_pt_br"),
+            label_en_us=_text(row, "label_en_us"),
+            label_es_es=_text(row, "label_es_es"),
+            minimum_quantity=_integer(row, "minimum_quantity"),
+            active=_flag(row, "active"),
+        )
+    )
+    return _Target("stock_item_type", entity_id=new_id)
+
+
+def _stock_type_id(env: _Env, row: _Values) -> int:
+    found = stock_repo.get_type_by_code(env.conn, _required(row, "type_code"))
+    if found is None:
+        raise _unknown("type_code")
+    return found.id
+
+
+def _validated_lot(env: _Env, data: LotInput) -> StockLotRow:
+    """The lot as ``create_lot`` would store it; nothing stays written.
+
+    ``create_lot`` needs an initial receipt, which the lot file does not have (the movements are
+    their own file). The service is called with a placeholder receipt (today, one unit) inside a
+    SAVEPOINT that is always rolled back; the stored row is read back first. The lot, its
+    validation and its default currency are the service's; the receipt is thrown away with it.
+    """
+    stored: list[StockLotRow] = []
+    receipt = InitialReceipt(moved_on=env.clock.local_date(), quantity=1)
+    try:
+        with transaction(env.conn):
+            lot_id = env.stock.create_lot(data, receipt)
+            found = stock_repo.get_lot(env.conn, lot_id)
+            if found is not None:
+                stored.append(found)
+            raise _ValidationOnlyError
+    except _ValidationOnlyError:
+        pass
+    if not stored:  # pragma: no cover - create_lot returned an id that cannot be read back
+        raise ServiceError("NOT_FOUND", "lot_code")
+    return stored[0]
+
+
+def _import_stock_lot(env: _Env, row: _Values) -> _Target:
+    type_id = _stock_type_id(env, row)
+    lot_code = _required(row, "lot_code").strip()
+    if stock_repo.get_lot_by_code(env.conn, type_id, lot_code) is not None:
+        raise ServiceError(DUPLICATE_KEY, "lot_code")
+    checked = _validated_lot(
+        env,
+        LotInput(
+            type_id=type_id,
+            lot_code=lot_code,
+            expires_on=_text(row, "expires_on"),
+            unit_price_minor=_integer(row, "unit_price"),
+            currency=_text(row, "currency"),
+            notes=_text(row, "notes"),
+        ),
+    )
+    new_id = stock_repo.insert_lot(
+        env.context(),
+        type_id=checked.type_id,
+        lot_code=checked.lot_code,
+        expires_on=checked.expires_on,
+        unit_price_minor=checked.unit_price_minor,
+        currency=checked.currency,
+        notes=checked.notes,
+    )
+    return _Target("stock_lot", entity_id=new_id)
+
+
+def _import_stock_movement(env: _Env, row: _Values) -> _Target:
+    type_id = _stock_type_id(env, row)
+    lot = stock_repo.get_lot_by_code(env.conn, type_id, _required(row, "lot_code"))
+    if lot is None:
+        raise _unknown("lot_code")
+    moved_on = _required(row, "moved_on")
+    kind = _required(row, "kind")
+    quantity = _integer(row, "quantity")
+    reference = _required(row, "reference").strip()
+    if quantity is not None:
+        key = (lot.id, moved_on, kind, quantity, reference)
+        if stock_repo.get_movement_by_key(env.conn, *key) is not None:
+            raise ServiceError(DUPLICATE_KEY)
+    new_id = env.stock.record_movement(
+        lot.id,
+        MovementInput(
+            moved_on=moved_on,
+            kind=kind,
+            quantity=quantity,
+            reference=reference,
+            note=_text(row, "note"),
+        ),
+    )
+    return _Target("stock_movement", entity_id=new_id)
+
+
 #: The parsed row of each entity -> the module-service call (the inverse of ``export._LOADERS``).
 _IMPORTERS: Mapping[str, Callable[[_Env, _Values], _Target]] = MappingProxyType(
     {
@@ -589,6 +730,7 @@ _IMPORTERS: Mapping[str, Callable[[_Env, _Values], _Target]] = MappingProxyType(
         "asset_type": _import_asset_type,
         "evaluation_metric": _import_metric,
         "funding_source": _import_source,
+        "stock_item_type": _import_stock_type,
         "staff_member": _import_staff,
         "ppe_certification": _import_certificate,
         "training_record": _import_training,
@@ -601,6 +743,8 @@ _IMPORTERS: Mapping[str, Callable[[_Env, _Values], _Target]] = MappingProxyType(
         "evaluation_result": _import_result,
         "budget_entry": _import_entry,
         "budget_execution": _import_execution,
+        "stock_lot": _import_stock_lot,
+        "stock_movement": _import_stock_movement,
     }
 )
 
@@ -620,6 +764,25 @@ def _normalised(code: str, value: object) -> object:
 def _natural_key(spec: EntitySpec, values: _Values) -> tuple[object, ...]:
     """The natural key as the services compare it (text trimmed, NULL as the empty text)."""
     return tuple(_normalised(code, values.get(code)) for code in spec.natural_key)
+
+
+def _movement_order(row: csv_io.ImportRow) -> tuple[str, str, str, int, int]:
+    """The order a lot's movements are applied in: date, inflows before outflows, file line.
+
+    The rows of one lot stay together (type code, lot code first). Inside a day the inflows come
+    first, as in the running balance of the screen, so a file with an outflow above the receipt
+    that feeds it is still consistent; ``row.line`` makes the order total and the result the same
+    on every run. ``BALANCE_NEGATIVE`` then falls on the line of the outflow that overdraws a lot.
+    """
+    values = row.values
+    kind = values.get("kind")
+    return (
+        str(_normalised("type_code", values.get("type_code"))),
+        str(_normalised("lot_code", values.get("lot_code"))),
+        str(_normalised("moved_on", values.get("moved_on"))),
+        0 if isinstance(kind, str) and kind in _INFLOW_KINDS else 1,
+        row.line,
+    )
 
 
 def _column_of(spec: EntitySpec, field: str | None) -> str:
@@ -655,6 +818,7 @@ class ImportService:
         infrastructure: InfrastructureService,
         exercises: ExercisesService,
         budget: BudgetService,
+        stock: StockService,
     ) -> None:
         self._conn = conn
         self._clock = clock
@@ -665,6 +829,8 @@ class ImportService:
             infrastructure=infrastructure,
             exercises=exercises,
             budget=budget,
+            stock=stock,
+            clock=clock,
             context=self._context,
         )
 
@@ -731,17 +897,36 @@ class ImportService:
         created: list[int] = []
         imported = 0
         without_status = 0
+        without_movements = 0
         try:
             with transaction(self._conn):
                 imported = self._rows(spec, parsed, issues, created)
-                without_status = self._without_status_event(created)  # read before any rollback
+                # both warnings are read before any rollback
+                if spec.name == "asset":
+                    without_status = self._without_status_event(created)
+                elif spec.name == "stock_lot":
+                    without_movements = self._lots_without_movements(created)
                 if issues or not commit:
                     raise _RollbackError
         except _RollbackError:
             imported = 0
         return self._finish(
-            spec, total, imported, tuple(issues), commit=commit, without_status=without_status
+            spec,
+            total,
+            imported,
+            tuple(issues),
+            commit=commit,
+            without_status=without_status,
+            without_movements=without_movements,
         )
+
+    def _lots_without_movements(self, lot_ids: list[int]) -> int:
+        """How many of the lots just created have no movement (P8-12 pattern).
+
+        A lot comes without its receipt (see :func:`_validated_lot`), so until the movements are
+        imported it has no stock and is shown as not yet received.
+        """
+        return sum(1 for lot_id in lot_ids if not stock_repo.lot_in_use(self._conn, lot_id))
 
     def _without_status_event(self, asset_ids: list[int]) -> int:
         """How many of the assets just read are in service today and have no status event (P8-12).
@@ -771,7 +956,8 @@ class ImportService:
         handler = _IMPORTERS[spec.name]
         seen: set[tuple[object, ...]] = set()
         imported = 0
-        for row in parsed.rows:
+        todo: list[csv_io.ImportRow] = []
+        for row in parsed.rows:  # in file order: a duplicate is the LATER line
             if row.errors:
                 issues.extend(ImportError(e.line, e.column, e.code) for e in row.errors)
                 continue
@@ -780,6 +966,10 @@ class ImportService:
                 issues.append(ImportError(row.line, "", DUPLICATE_IN_FILE))
                 continue
             seen.add(key)
+            todo.append(row)
+        if spec.name == "stock_movement":
+            todo.sort(key=_movement_order)  # stable; see _movement_order
+        for row in todo:
             try:
                 with transaction(self._conn):
                     target = handler(self._env, row.values)
@@ -797,8 +987,9 @@ class ImportService:
                 issues.append(ImportError(row.line, "", STORAGE_REFUSED))
             else:
                 imported += 1
-                if spec.name == "asset" and target.entity_id is not None:
+                if spec.name in ("asset", "stock_lot") and target.entity_id is not None:
                     created.append(target.entity_id)
+        issues.sort(key=lambda issue: issue.line)  # report in line order, whatever ran first
         return imported
 
     def _finish(
@@ -810,6 +1001,7 @@ class ImportService:
         *,
         commit: bool,
         without_status: int = 0,
+        without_movements: int = 0,
     ) -> ImportReport:
         if commit:
             if errors:
@@ -822,4 +1014,5 @@ class ImportService:
             imported=imported,
             errors=errors,
             assets_without_status_event=without_status,
+            lots_without_movements=without_movements,
         )

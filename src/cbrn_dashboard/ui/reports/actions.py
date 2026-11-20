@@ -117,12 +117,14 @@ class ReportsWorkflow(QObject):
         infrastructure = services.infrastructure
         exercises: ExercisesService | None = services.exercises
         budget = services.budget
+        stock = services.stock
         if (
             conn is None
             or personnel is None
             or infrastructure is None
             or exercises is None
             or budget is None
+            or stock is None
         ):
             return None
         if self._importer is None:
@@ -134,6 +136,7 @@ class ReportsWorkflow(QObject):
                 infrastructure=infrastructure,
                 exercises=exercises,
                 budget=budget,
+                stock=stock,
             )
         return self._importer
 

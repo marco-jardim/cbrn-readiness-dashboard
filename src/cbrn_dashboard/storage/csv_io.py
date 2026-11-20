@@ -22,7 +22,8 @@ Qt-free; standard-library ``csv`` only. The format does not depend on the locale
 Every entity is declared as data (:class:`EntitySpec`, :data:`ENTITIES`): stable English column
 codes and the natural key that identifies a row. Rows refer to their parents by natural key, never
 by internal id; ids are not exported. The entities are listed in IMPORT ORDER: list entities first,
-then the entities that refer to them.
+then the entities that refer to them (the stock item types come with the lists, the stock lots and
+movements after the budget; T11.14).
 
 Rows handed to :func:`write_entity` are mappings from column code to value; the value of a MONEY
 column is an integer number of minor units. :func:`read_entity` is the strict reader for files that
@@ -257,6 +258,19 @@ ENTITIES: tuple[EntitySpec, ...] = (
         ("code",),
     ),
     EntitySpec(
+        "stock_item_type",
+        "stock_item_type",
+        (
+            _code("code", required=True),
+            _bool("built_in"),
+            _code("category", required=True),
+            *_labels(),
+            _int("minimum_quantity"),
+            _bool("active"),
+        ),
+        ("code",),
+    ),
+    EntitySpec(
         "staff_member",
         "staff_member",
         (
@@ -391,6 +405,33 @@ ENTITIES: tuple[EntitySpec, ...] = (
             _text("note"),
         ),
         ("fiscal_year", "source_code", "currency", "description", "executed_on", "amount"),
+    ),
+    EntitySpec(
+        "stock_lot",
+        "stock_lot",
+        (
+            _code("type_code", required=True),
+            _code("lot_code", required=True),
+            _date("expires_on"),
+            _money("unit_price"),
+            ColumnSpec("currency", ColumnKind.CURRENCY),
+            _text("notes"),
+        ),
+        ("type_code", "lot_code"),
+    ),
+    EntitySpec(
+        "stock_movement",
+        "stock_movement",
+        (
+            _code("type_code", required=True),
+            _code("lot_code", required=True),
+            _date("moved_on", required=True),
+            _code("kind", required=True),
+            _int("quantity", required=True),
+            _text("reference", required=True),  # NOT NULL in the database: '' when there is none
+            _text("note"),
+        ),
+        ("type_code", "lot_code", "moved_on", "kind", "quantity", "reference"),
     ),
 )
 

@@ -328,7 +328,11 @@ def test_an_execution_row_dated_after_today_exists_except_on_the_last_day_of_the
 
 def test_the_alerts_show_every_kind_and_every_severity(demo: Demo) -> None:
     alerts = demo.alerts.alerts(demo.today)
-    assert {alert.kind for alert in alerts} == set(AlertKind)
+    # the stock kinds join the demo with the stock demo data (T11.16)
+    stock_kinds = {"LOT_EXPIRED", "LOT_EXPIRING", "LOW_STOCK"}
+    assert {alert.kind for alert in alerts} >= {
+        kind for kind in AlertKind if kind.value not in stock_kinds
+    }
     assert {alert.severity for alert in alerts} == set(Severity)
     counts = demo.dashboard.data(demo.today).alert_counts
     assert all(counts[severity] > 0 for severity in Severity)
@@ -750,7 +754,9 @@ def test_the_walkthrough_status_table_is_the_statuses_of_the_dataset(demo: Demo)
 def test_the_walkthrough_alert_table_is_the_alerts_of_the_dataset(demo: Demo) -> None:
     alerts = demo.alerts.alerts(demo.today)
     rows = [cells for cells in _table_rows() if cells[0].strip("`") in AlertKind.__members__]
-    assert {cells[0].strip("`") for cells in rows} == set(AlertKind.__members__)
+    # the stock kinds join the walkthrough with the stock demo data (T11.16)
+    stock_kinds = {"LOT_EXPIRED", "LOT_EXPIRING", "LOW_STOCK"}
+    assert {cells[0].strip("`") for cells in rows} == set(AlertKind.__members__) - stock_kinds
     for cells in rows:
         kind, severity, example = cells[0].strip("`"), cells[1], cells[2]
         reference, _, level = example.partition(", ")

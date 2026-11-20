@@ -1,11 +1,11 @@
 # CSV files: export format and column codes
 
-The application writes the data of its modules (personnel, infrastructure, exercises, budget) as
-CSV files, one file per entity. The same files, with the same column codes, are the templates for
-the CSV import.
+The application writes the data of its modules (personnel, infrastructure, exercises, budget,
+stock) as CSV files, one file per entity. The same files, with the same column codes, are the
+templates for the CSV import.
 
 **The files contain internal data**: staff qualifications, the status and maintenance of
-infrastructure, and budget figures. They stay on the user's machine unless the operator moves them.
+infrastructure, budget figures, and stock quantities and prices. They stay on the user's machine unless the operator moves them.
 Treat them like the database itself: do not leave them on shared, network, cloud-synchronised or
 removable folders unless that is intended.
 
@@ -50,7 +50,8 @@ written as `''plain`; `DEMO-note` is written unchanged.
 Entities that other entities refer to come first. The export lists them, and the import reads them,
 in this order:
 
-1. `training_course`, `asset_type`, `evaluation_metric`, `funding_source` (the lists);
+1. `training_course`, `asset_type`, `evaluation_metric`, `funding_source`, `stock_item_type` (the
+   lists);
 2. `staff_member`;
 3. `ppe_certification`, `training_record`, `academic_degree`;
 4. `asset`;
@@ -58,7 +59,9 @@ in this order:
 6. `exercise_edition`;
 7. `exercise_country`, `evaluation_result`;
 8. `budget_entry`;
-9. `budget_execution`.
+9. `budget_execution`;
+10. `stock_lot`;
+11. `stock_movement`.
 
 ## Entities
 
@@ -123,6 +126,23 @@ Where budget money comes from (two built-in sources and the user-defined ones).
 | `label_en_us` | TEXT | no | no | Name in US English. |
 | `label_es_es` | TEXT | no | no | Name in Spanish. |
 | `active` | BOOL | no | yes | 1 when new entries may use the source. |
+
+### `stock_item_type`
+
+What is kept in stock (17 built-in types and the user-defined ones). A built-in type has empty
+labels: its name comes from the application. A user-defined type needs a Brazilian Portuguese
+label.
+
+| Column | Kind | Key | Required | Meaning |
+|---|---|---|---|---|
+| `code` | CODE | yes | yes | Type code, unique: letters, digits, dot, hyphen and underscore, starting with a letter or a digit. |
+| `built_in` | BOOL | no | yes | 1 for a type that comes with the application. |
+| `category` | CODE | no | yes | `antidote`, `decontaminant`, `detector`, `ppe` or `other`. |
+| `label_pt_br` | TEXT | no | no | Name in Brazilian Portuguese; required for a user-defined type. |
+| `label_en_us` | TEXT | no | no | Name in US English. |
+| `label_es_es` | TEXT | no | no | Name in Spanish. |
+| `minimum_quantity` | INTEGER | no | no | Minimum stock in units, 0 to 1000000000; empty means not set. |
+| `active` | BOOL | no | yes | 1 when new lots may use the type. |
 
 ### `staff_member`
 
@@ -273,6 +293,34 @@ One row per dated execution (spending) of a budget entry.
 | `amount` | MONEY | yes | yes | Executed amount in major units. |
 | `note` | TEXT | no | no | Free note. |
 
+### `stock_lot`
+
+One lot of one item type. The quantity of a lot is never a column: it is the sum of its movements
+(`stock_movement`).
+
+| Column | Kind | Key | Required | Meaning |
+|---|---|---|---|---|
+| `type_code` | CODE | yes | yes | `code` of the item type (`stock_item_type`). |
+| `lot_code` | CODE | yes | yes | Lot code, up to 64 characters; unique inside the type. |
+| `expires_on` | DATE | no | no | Last day of validity; empty means no expiry date. Required for antidote and decontaminant types. |
+| `unit_price` | MONEY | no | no | Price of one unit in major units; empty when not set. |
+| `currency` | CURRENCY | no | no | Currency of `unit_price`; needed when `unit_price` is filled, ignored when it is empty. |
+| `notes` | TEXT | no | no | Free notes. |
+
+### `stock_movement`
+
+One dated movement of a lot. The quantity is always positive; the kind gives the direction.
+
+| Column | Kind | Key | Required | Meaning |
+|---|---|---|---|---|
+| `type_code` | CODE | yes | yes | `code` of the item type of the lot (`stock_item_type`). |
+| `lot_code` | CODE | yes | yes | `lot_code` of the lot (`stock_lot`). |
+| `moved_on` | DATE | yes | yes | Date of the movement; not after today. |
+| `kind` | CODE | yes | yes | `receipt`, `adjustment_in` (these add to the stock), `issue`, `disposal`, `loss` or `adjustment_out` (these remove from it). |
+| `quantity` | INTEGER | yes | yes | Units, a whole number from 1 to 1000000. |
+| `reference` | TEXT | yes | yes | Short reference (delivery note, order); an empty reference is the empty text. |
+| `note` | TEXT | no | no | Free note; required for `adjustment_in` and `adjustment_out`. |
+
 ## Import rules
 
 The import (task T8.4) reads the same files the export writes. It serves the retroactive records
@@ -356,11 +404,31 @@ service: for example `VALID_UNTIL_BEFORE_ISSUED`, `END_BEFORE_START`, `ACTIVE_UN
 `SOURCE_INACTIVE`. The code is reported with the line and the column of the field. A row that
 uses an inactive course, type, metric or source is refused like on the screen; activate it first.
 
-Two entities need a note:
+Some entities need a note:
 
 * `asset` creates the asset only. The status history, including the first status on
   `in_service_from`, comes from `asset_status_event`; import that file next.
 * `exercise_country` adds one country to an existing edition per row.
+* `stock_item_type` follows the rule of the other lists: built-in types are never created or
+  changed by an import (an existing built-in code is `DUPLICATE_KEY`, any other row with
+  `built_in` = 1 is `BUILT_IN_NOT_ALLOWED`), so import the user-defined types only. A minimum
+  stock that comes with a type is stored as it is and does not confirm the placeholder P12.
+* `stock_lot` creates the lot only, with NO movement: the quantity of a lot comes from
+  `stock_movement`, which you import next. Until then the lots have no stock and show as not yet
+  received. The report of the file gives their number as the warning `LOT_WITHOUT_MOVEMENTS`
+  (`lots_without_movements`); it is a warning, never an error, and a dry run gives the same count.
+  The lot is validated like a lot entered on the screen (expiry date for antidotes and
+  decontaminants, price and currency, `TYPE_INACTIVE` for an inactive type: a lot of an inactive
+  type is refused, so activate the type first and deactivate it again after the import). A price
+  without a currency is `INVALID_CURRENCY`; a currency without a price is ignored.
+* `stock_movement` is written through the stock service, which keeps the balance of a lot from
+  going below zero on any date and refuses a date after today. The order of the rows in the file
+  does not matter: the movements of each lot are applied in the order of date, then inflows
+  (`receipt`, `adjustment_in`) before outflows, then file line, and each one is checked against the
+  movements the lot already has and the rows applied before it. `BALANCE_NEGATIVE` (column
+  `quantity`) and `DATE_IN_FUTURE` (column `moved_on`) are reported on the line of the movement that
+  causes them. An empty `reference` is allowed and is stored as the empty text; it is part of the
+  natural key. An adjustment without a `note` is `NOTE_REQUIRED`.
 
 ### All or nothing and the dry run
 
@@ -396,5 +464,8 @@ Two entities need a note:
 | `DUPLICATE_IN_FILE` | The natural key already occurred earlier in the same file. |
 | `DUPLICATE_KEY` | The natural key already exists in the database. |
 | `BUILT_IN_NOT_ALLOWED` | The row claims to be a built-in list entry that this version does not have. |
+| `BALANCE_NEGATIVE` | A stock movement would leave the balance of its lot below zero on some date (column `quantity`). |
+| `DATE_IN_FUTURE` | A stock movement is dated after today (column `moved_on`). |
+| `LOT_WITHOUT_MOVEMENTS` | WARNING, not an error: the lots of a `stock_lot` file have no movement yet; the file is still valid and the count is in the report. |
 | `FILE_UNREADABLE` | The file cannot be opened (reported as an exception, not as a row problem). |
 | any rule code | The module refused the value, for example `VALID_UNTIL_BEFORE_ISSUED`; reported on the column of the field. |

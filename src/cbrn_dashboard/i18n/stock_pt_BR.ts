@@ -503,5 +503,48 @@
         <source>Inactive</source>
         <translation type="unfinished">Inativo</translation>
     </message>
+    <message>
+        <source>Delete lot</source>
+        <translation type="unfinished">Excluir lote</translation>
+    </message>
+    <message>
+        <source>Delete movement</source>
+        <translation type="unfinished">Excluir movimentação</translation>
+    </message>
+    <message>
+        <source>Stock by item type at the as-of date</source>
+        <translation type="unfinished">Estoque por tipo de item na data de referência</translation>
+    </message>
+    <message>
+        <source>Show empty lots</source>
+        <translation type="unfinished">Mostrar lotes esgotados</translation>
+    </message>
+    <message>
+        <source>The selected type is not a stock item type, so it has no lots.</source>
+        <translation type="unfinished">O tipo selecionado não é um tipo de item de estoque, portanto não tem lotes.</translation>
+    </message>
+    <message>
+        <source>Lots</source>
+        <translation type="unfinished">Lotes</translation>
+    </message>
+    <message>
+        <source>Movements of the selected lot</source>
+        <translation type="unfinished">Movimentações do lote selecionado</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n lot(s) shown</source>
+        <translation type="unfinished">
+            <numerusform>%n lote exibido</numerusform>
+            <numerusform>%n lotes exibidos</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Delete lot %1 together with all its movements? A lot that existed is closed with a disposal or a loss instead.</source>
+        <translation type="unfinished">Excluir o lote %1 junto com todas as suas movimentações? Um lote que existiu é encerrado com um descarte ou uma perda.</translation>
+    </message>
+    <message>
+        <source>Delete the selected movement of lot %1?</source>
+        <translation type="unfinished">Excluir a movimentação selecionada do lote %1?</translation>
+    </message>
 </context>
 </TS>

@@ -144,6 +144,22 @@
         <translation type="unfinished">Taxa de execução orçamentária</translation>
     </message>
     <message>
+        <source>Valid stock</source>
+        <translation type="unfinished">Estoque válido</translation>
+    </message>
+    <message>
+        <source>Lots expiring soon</source>
+        <translation type="unfinished">Lotes a vencer</translation>
+    </message>
+    <message>
+        <source>Expired lots still in stock</source>
+        <translation type="unfinished">Lotes vencidos em estoque</translation>
+    </message>
+    <message>
+        <source>Item types below the minimum stock</source>
+        <translation type="unfinished">Itens abaixo do estoque mínimo</translation>
+    </message>
+    <message>
         <source>Count</source>
         <translation type="unfinished">Contagem</translation>
     </message>

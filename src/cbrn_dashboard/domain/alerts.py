@@ -21,6 +21,12 @@ Rules
   without a recorded next-due date means "no scheduled maintenance" and raises nothing (A06).
 * Indicators: one alert per reading with status ``WARNING`` or ``CRITICAL``. Readings without an
   enabled target are ``NO_TARGET`` and therefore never alert.
+* Stock (T11.8, D34, D35): a lot with stock on hand gives at most ONE alert, from the lot rows of
+  :mod:`cbrn_dashboard.domain.stock`: expired (``LOT_EXPIRED``, critical) or expiring inside the P11
+  window (``LOT_EXPIRING``, warning). An empty lot, a lot not yet received and a lot with no expiry
+  date never alert. An ACTIVE type with a minimum whose valid quantity is below it gives one
+  ``LOW_STOCK`` (critical) with no due date; an inactive type or a type without a minimum never
+  does.
 * Order: severity (critical, warning, info), then due date ascending with undated alerts last, then
   (module, kind, subject reference, dimension) so the order is fully deterministic.
 """
@@ -61,8 +67,21 @@ from cbrn_dashboard.domain.personnel import (
     is_no_renewal,
     is_valid,
 )
+from cbrn_dashboard.domain.stock import (
+    Lot,
+    LotStatus,
+    Movement,
+    StockRules,
+    StockType,
+    lot_rows,
+    type_summaries,
+)
 
 _LEVEL_KEY = "level"
+_CATEGORY_KEY = "category"
+_ITEM_KEY = "item"
+#: The stock rules of a caller that passes none (a frozen dataclass: safe as a default value).
+_DEFAULT_STOCK_RULES = StockRules()
 
 
 # --------------------------------------------------------------------------------------------
@@ -80,6 +99,9 @@ class AlertKind(StrEnum):
     MAINT_SCHEDULE_UNKNOWN = "MAINT_SCHEDULE_UNKNOWN"
     INDICATOR_WARNING = "INDICATOR_WARNING"
     INDICATOR_CRITICAL = "INDICATOR_CRITICAL"
+    LOT_EXPIRED = "LOT_EXPIRED"
+    LOT_EXPIRING = "LOT_EXPIRING"
+    LOW_STOCK = "LOW_STOCK"
 
 
 class Severity(StrEnum):
@@ -107,6 +129,9 @@ SEVERITY_OF: Mapping[AlertKind, Severity] = MappingProxyType(
         AlertKind.MAINT_SCHEDULE_UNKNOWN: Severity.INFO,
         AlertKind.INDICATOR_WARNING: Severity.WARNING,
         AlertKind.INDICATOR_CRITICAL: Severity.CRITICAL,
+        AlertKind.LOT_EXPIRED: Severity.CRITICAL,
+        AlertKind.LOT_EXPIRING: Severity.WARNING,
+        AlertKind.LOW_STOCK: Severity.CRITICAL,
     }
 )
 
@@ -117,6 +142,8 @@ class SubjectKind(StrEnum):
     STAFF = "STAFF"
     ASSET = "ASSET"
     INDICATOR = "INDICATOR"
+    LOT = "LOT"
+    ITEM_TYPE = "ITEM_TYPE"
 
 
 @dataclass(frozen=True)
@@ -127,7 +154,13 @@ class Alert:
     the staff or asset id for navigation (``None`` for indicators). ``dimension`` is ``level=A``
     for certificates, the indicator dimension for indicator alerts and ``""`` otherwise.
     ``days_remaining`` is signed (``days_between(d, due_on)``): negative when overdue or expired,
-    ``None`` when there is no date. ``value`` and ``threshold`` are set for indicator alerts only.
+    ``None`` when there is no date. ``value`` and ``threshold`` are set for indicator alerts and
+    for ``LOW_STOCK`` (valid quantity and minimum); a lot alert carries the quantity on hand as
+    ``value``.
+
+    For the stock subjects ``subject_ref`` is the lot code (``LOT``, ``subject_id`` the lot id) or
+    the type code (``ITEM_TYPE``, ``subject_id`` the type id) and ``dimension`` is
+    ``category=<c>;item=<code>``.
     """
 
     kind: AlertKind
@@ -264,6 +297,71 @@ def indicator_alerts(
     return alerts
 
 
+def stock_alerts(
+    types: Iterable[StockType],
+    lots: Iterable[Lot],
+    movements: Iterable[Movement],
+    d: date,
+    rules: StockRules,
+) -> list[Alert]:
+    """Lot alerts (at most one per lot) and low-stock alerts (at most one per type) on ``d``.
+
+    The status of a lot and the valid quantity of a type come from ``lot_rows`` and
+    ``type_summaries`` of :mod:`cbrn_dashboard.domain.stock`, so the alerts, the stock lists and the
+    indicators cannot disagree. A lot alert needs stock on hand and an expiry date. An unknown type
+    of a lot raises :class:`~cbrn_dashboard.domain.stock.StockDataError`.
+    """
+    type_list = list(types)
+    lot_list = list(lots)
+    movement_list = list(movements)
+    alerts: list[Alert] = []
+    for row in lot_rows(type_list, lot_list, movement_list, d, rules):
+        if row.on_hand <= 0 or row.expires_on is None:
+            continue
+        if row.status is LotStatus.EXPIRED:
+            kind = AlertKind.LOT_EXPIRED
+        elif row.status is LotStatus.EXPIRING:
+            kind = AlertKind.LOT_EXPIRING
+        else:
+            continue
+        alerts.append(
+            Alert(
+                kind=kind,
+                severity=SEVERITY_OF[kind],
+                module=Module.STOCK,
+                subject_kind=SubjectKind.LOT,
+                subject_ref=row.lot_code,
+                subject_id=row.lot_id,
+                dimension=encode_dimension(
+                    {_CATEGORY_KEY: row.category.value, _ITEM_KEY: row.type_code}
+                ),
+                due_on=row.expires_on,
+                days_remaining=days_between(d, row.expires_on),
+                value=float(row.on_hand),
+            )
+        )
+    for summary in type_summaries(type_list, lot_list, movement_list, d, rules):
+        if not summary.active or summary.minimum is None or not summary.below_minimum:
+            continue
+        kind = AlertKind.LOW_STOCK
+        alerts.append(
+            Alert(
+                kind=kind,
+                severity=SEVERITY_OF[kind],
+                module=Module.STOCK,
+                subject_kind=SubjectKind.ITEM_TYPE,
+                subject_ref=summary.type_code,
+                subject_id=summary.type_id,
+                dimension=encode_dimension(
+                    {_CATEGORY_KEY: summary.category.value, _ITEM_KEY: summary.type_code}
+                ),
+                value=float(summary.valid),
+                threshold=float(summary.minimum),
+            )
+        )
+    return alerts
+
+
 # --------------------------------------------------------------------------------------------
 # Ordering and summaries
 # --------------------------------------------------------------------------------------------
@@ -300,13 +398,20 @@ def all_alerts(
     readings: Iterable[IndicatorReading],
     registry: IndicatorRegistry,
     d: date,
+    stock_types: Iterable[StockType] = (),
+    stock_lots: Iterable[Lot] = (),
+    stock_movements: Iterable[Movement] = (),
+    stock_rules: StockRules = _DEFAULT_STOCK_RULES,
 ) -> list[Alert]:
-    """Certificate, maintenance and indicator alerts as of ``d``, sorted by :func:`sort_alerts`."""
+    """Certificate, maintenance, indicator and stock alerts as of ``d``, sorted by
+    :func:`sort_alerts`. The stock inputs default to none, so a caller without stock is unchanged.
+    """
     combined = certificate_alerts(staff, certs, d, personnel_rules)
     combined.extend(
         maintenance_alerts(assets, asset_types, status_events, maintenance, d, infrastructure_rules)
     )
     combined.extend(indicator_alerts(readings, registry))
+    combined.extend(stock_alerts(stock_types, stock_lots, stock_movements, d, stock_rules))
     return sort_alerts(combined)
 
 

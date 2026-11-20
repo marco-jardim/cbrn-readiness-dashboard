@@ -93,6 +93,65 @@ ALERTS: list[Alert] = [
     MAINT_SCHEDULE_UNKNOWN,
 ]
 
+LOT_EXPIRED = Alert(
+    kind=AlertKind.LOT_EXPIRED,
+    severity=Severity.CRITICAL,
+    module=Module.STOCK,
+    subject_kind=SubjectKind.LOT,
+    subject_ref="DEMO-L003",
+    subject_id=3,
+    dimension="category=antidote;item=ANTIDOTE_CHEMICAL",
+    due_on=date(2026, 2, 18),
+    days_remaining=-15,
+    value=4.0,
+)
+LOW_STOCK = Alert(
+    kind=AlertKind.LOW_STOCK,
+    severity=Severity.CRITICAL,
+    module=Module.STOCK,
+    subject_kind=SubjectKind.ITEM_TYPE,
+    subject_ref="ANTIDOTE_RAD_NUCLEAR",
+    subject_id=2,
+    dimension="category=antidote;item=ANTIDOTE_RAD_NUCLEAR",
+    value=8.0,
+    threshold=20.0,
+)
+LOT_EXPIRING = Alert(
+    kind=AlertKind.LOT_EXPIRING,
+    severity=Severity.WARNING,
+    module=Module.STOCK,
+    subject_kind=SubjectKind.LOT,
+    subject_ref="DEMO-L002",
+    subject_id=2,
+    dimension="category=antidote;item=ANTIDOTE_CHEMICAL",
+    due_on=date(2026, 3, 25),
+    days_remaining=20,
+    value=10.0,
+)
+
+#: The three stock alerts, in service order (kept apart so the page tests keep their row numbers).
+STOCK_ALERTS: list[Alert] = [LOT_EXPIRED, LOW_STOCK, LOT_EXPIRING]
+
+#: The message of each alert of :data:`STOCK_ALERTS`, per language.
+STOCK_MESSAGES: dict[str, list[str]] = {
+    "en_US": [
+        "Lot DEMO-L003 of Chemical antidote expired 15 days ago and still has stock.",
+        "Valid stock of Radiological and nuclear antidote is 8, below the minimum of 20.",
+        "Lot DEMO-L002 of Chemical antidote expires in 20 days.",
+    ],
+    "pt_BR": [
+        "O lote DEMO-L003 de Antídoto Químico venceu há 15 dias e ainda tem estoque.",
+        "O estoque válido de Antídoto Radiológico e Nuclear é 8, abaixo do mínimo de 20.",
+        "O lote DEMO-L002 de Antídoto Químico vence em 20 dias.",
+    ],
+    "es_ES": [
+        "El lote DEMO-L003 de Antídoto químico caducó hace 15 días y aún tiene existencias.",
+        "Las existencias válidas de Antídoto radiológico y nuclear son 8, por debajo del "
+        "mínimo de 20.",
+        "El lote DEMO-L002 de Antídoto químico caduca en 20 días.",
+    ],
+}
+
 #: The message of each alert of :data:`ALERTS`, per language.
 MESSAGES: dict[str, list[str]] = {
     "en_US": [

@@ -17,6 +17,7 @@ import pytest
 
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain.dates import format_utc_timestamp
+from cbrn_dashboard.domain.stock import SIGN, MovementKind
 from cbrn_dashboard.services import importer as importer_module
 from cbrn_dashboard.services.budget import BudgetService
 from cbrn_dashboard.services.errors import ServiceError
@@ -26,11 +27,13 @@ from cbrn_dashboard.services.importer import _IMPORTERS, ImportReport, ImportSer
 from cbrn_dashboard.services.importer import ImportError as ImportIssue
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
+from cbrn_dashboard.services.stock import StockService
 from cbrn_dashboard.storage import (
     budget_repo,
     exercises_repo,
     infrastructure_repo,
     personnel_repo,
+    stock_repo,
 )
 from cbrn_dashboard.storage.csv_io import (
     ENTITIES,
@@ -41,8 +44,10 @@ from cbrn_dashboard.storage.csv_io import (
     read_entity,
     read_import_file,
     template_file_name,
+    write_entity,
 )
 from cbrn_dashboard.storage.db import DatabaseConnection
+from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
 from cbrn_dashboard.storage.repository import ConstraintViolationError
 from tests.services.conftest import ChangeLogRows
 
@@ -58,6 +63,7 @@ EXPECTED_ROWS: dict[str, int] = {
     "asset_type": 2,
     "evaluation_metric": 2,
     "funding_source": 1,
+    "stock_item_type": 2,
     "staff_member": 3,
     "ppe_certification": 3,
     "training_record": 3,
@@ -70,10 +76,23 @@ EXPECTED_ROWS: dict[str, int] = {
     "evaluation_result": 3,
     "budget_entry": 4,
     "budget_execution": 4,
+    "stock_lot": 4,
+    "stock_movement": 7,
 }
 
 #: Entities whose table also holds built-in rows that the fixtures do not contain.
-WITH_BUILT_INS = ("asset_type", "funding_source")
+WITH_BUILT_INS = ("asset_type", "funding_source", "stock_item_type")
+
+STOCK_ENTITIES = ("stock_item_type", "stock_lot", "stock_movement")
+STOCK_LOT_HEADER = "type_code;lot_code;expires_on;unit_price;currency;notes"
+STOCK_MOVEMENT_HEADER = "type_code;lot_code;moved_on;kind;quantity;reference;note"
+#: The on-hand quantity of each fixture lot once its movements are imported.
+STOCK_BALANCES = {
+    ("DEMO-ANTIDOTE-X", "DEMO-L001"): 43,
+    ("DEMO-ANTIDOTE-X", "DEMO-L002"): 10,
+    ("DEMO-DETECTOR", "DEMO-L003"): 3,
+    ("ANTIDOTE_CHEMICAL", "DEMO-L004"): 7,
+}
 
 #: Tables with an integer ``id`` (the others are keyed by a natural key in ``change_log``).
 ID_TABLES = tuple(
@@ -105,6 +124,7 @@ def _build(conn: DatabaseConnection, clock: FixedClock) -> ImportService:
         infrastructure=InfrastructureService(conn, clock, operator),
         exercises=ExercisesService(conn, clock, operator),
         budget=BudgetService(conn, clock, operator),
+        stock=StockService(conn, clock, operator),
     )
 
 
@@ -842,7 +862,9 @@ def test_templates_are_header_only_files_that_match_the_documentation(
 ) -> None:
     paths = importer.write_all_templates(tmp_path / "templates")
     assert [path.name for path in paths] == [template_file_name(spec) for spec in ENTITIES]
-    assert paths[4].name == "staff_member-template.csv"
+    assert paths[5].name == "staff_member-template.csv"
+    last_two = [p.name for p in paths[-2:]]
+    assert last_two == ["stock_lot-template.csv", "stock_movement-template.csv"]
     documented = _documented_columns()
     for spec, path in zip(ENTITIES, paths, strict=True):
         data = path.read_bytes()
@@ -888,11 +910,282 @@ def test_the_documentation_lists_every_error_code() -> None:
         "DUPLICATE_IN_FILE",
         "DUPLICATE_KEY",
         "BUILT_IN_NOT_ALLOWED",
+        "BALANCE_NEGATIVE",
+        "DATE_IN_FUTURE",
+        "LOT_WITHOUT_MOVEMENTS",
         "FILE_UNREADABLE",
     )
     for code in codes:
         assert f"`{code}`" in text, code
     assert "dry run" in text
+
+
+# --------------------------------------------------------------------------- stock (T11.14)
+
+
+def _balances(conn: DatabaseConnection) -> dict[tuple[str, str], int]:
+    """On-hand quantity of every lot by (type code, lot code), from the stored movements."""
+    types = {row.id: row.code for row in stock_repo.list_types(conn)}
+    lots = {row.id: (types[row.type_id], row.lot_code) for row in stock_repo.list_lots(conn)}
+    totals = dict.fromkeys(lots.values(), 0)
+    for movement in stock_repo.list_movements(conn):
+        sign = SIGN[MovementKind(movement.kind)]
+        totals[lots[movement.lot_id]] += sign * movement.quantity
+    return totals
+
+
+def _prices(conn: DatabaseConnection) -> dict[str, tuple[int | None, str | None]]:
+    """The unit price (minor units) and currency of every lot by lot code."""
+    return {
+        row.lot_code: (row.unit_price_minor, row.currency) for row in stock_repo.list_lots(conn)
+    }
+
+
+def _import_lots(importer: ImportService) -> None:
+    for name in ("stock_item_type", "stock_lot"):
+        report = importer.import_file(name, _fixture(name))
+        assert report.ok, (name, report.errors)
+
+
+def test_the_stock_fixtures_import_with_the_expected_balances_and_prices(
+    importer: ImportService, db: DatabaseConnection
+) -> None:
+    for name in STOCK_ENTITIES:
+        report = importer.import_file(name, _fixture(name))
+        assert (report.errors, report.imported) == ((), EXPECTED_ROWS[name])
+    assert _balances(db) == STOCK_BALANCES
+    assert _prices(db) == {
+        "DEMO-L001": (1250, "BRL"),
+        "DEMO-L002": (325, "USD"),
+        "DEMO-L003": (None, None),
+        "DEMO-L004": (None, None),
+    }
+    notes = {row.lot_code: row.notes for row in stock_repo.list_lots(db)}
+    assert notes["DEMO-L003"] == "=1+1"  # the formula guard is removed
+    references = {row.reference for row in stock_repo.list_movements(db)}
+    assert references == {"DEMO-REF-9", "DEMO-DN-1", ""}  # an empty reference is the empty text
+    user_type = stock_repo.get_type_by_code(db, "DEMO-ANTIDOTE-X")
+    assert user_type is not None
+    assert (user_type.built_in, user_type.category, user_type.minimum_quantity) == (
+        False,
+        "antidote",
+        20,
+    )
+
+
+def test_the_order_of_the_movement_rows_does_not_matter(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    _import_lots(importer)
+    lines = _fixture("stock_movement").read_text(encoding="utf-8").splitlines()
+    text = "\n".join([lines[0], *reversed(lines[1:])]) + "\n"
+    report = importer.import_file("stock_movement", _write(tmp_path, "reversed.csv", text))
+    assert (report.errors, report.imported) == ((), 7)
+    assert _balances(db) == STOCK_BALANCES
+
+
+def test_lots_without_movements_are_a_warning_count_for_a_dry_run_and_the_import(
+    importer: ImportService, db: DatabaseConnection
+) -> None:
+    types = importer.import_file("stock_item_type", _fixture("stock_item_type"))
+    assert types.lots_without_movements == 0
+
+    dry = importer.dry_run("stock_lot", _fixture("stock_lot"))
+    assert (dry.ok, dry.imported, dry.lots_without_movements) == (True, 0, 4)
+    assert stock_repo.list_lots(db) == []
+
+    real = importer.import_file("stock_lot", _fixture("stock_lot"))
+    assert (real.ok, real.imported, real.lots_without_movements) == (True, 4, 4)
+    assert len(stock_repo.list_lots(db)) == 4
+    assert stock_repo.list_movements(db) == []  # no placeholder receipt is left behind
+
+    movements = importer.import_file("stock_movement", _fixture("stock_movement"))
+    assert (movements.ok, movements.lots_without_movements) == (True, 0)
+    assert importer_module.LOT_WITHOUT_MOVEMENTS == "LOT_WITHOUT_MOVEMENTS"
+
+
+def test_a_lot_is_validated_like_on_the_screen(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    assert importer.import_file("stock_item_type", _fixture("stock_item_type")).ok
+    rows = [
+        "DEMO-ANTIDOTE-X;DEMO-N1;;;;",  # an antidote needs an expiry date
+        "DEMO-DETECTOR;DEMO-N2;;1.00;;",  # a price needs a currency
+        "NO-SUCH-TYPE;DEMO-N3;;;;",
+        "DEMO-DETECTOR;DEMO-N4;;;;",
+        "DEMO-DETECTOR;DEMO-N4;;;;",
+    ]
+    path = _write(tmp_path, "lots.csv", "\n".join([STOCK_LOT_HEADER, *rows]) + "\n")
+    report = importer.import_file("stock_lot", path)
+    assert report.errors == (
+        _issue(2, "expires_on", "EXPIRY_REQUIRED"),
+        _issue(3, "unit_price", "INVALID_CURRENCY"),
+        _issue(4, "type_code", "UNKNOWN_REFERENCE"),
+        _issue(6, "", "DUPLICATE_IN_FILE"),
+    )
+    assert report.imported == 0
+    assert stock_repo.list_lots(db) == []
+
+
+def test_a_currency_without_a_price_is_ignored_and_a_priced_lot_keeps_its_currency(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    assert importer.import_file("stock_item_type", _fixture("stock_item_type")).ok
+    rows = ["DEMO-DETECTOR;DEMO-N5;;;USD;", "DEMO-DETECTOR;DEMO-N6;;0.50;EUR;"]
+    path = _write(tmp_path, "lots.csv", "\n".join([STOCK_LOT_HEADER, *rows]) + "\n")
+    assert importer.import_file("stock_lot", path).ok
+    assert _prices(db) == {"DEMO-N5": (None, None), "DEMO-N6": (50, "EUR")}
+
+
+def test_a_balance_violation_is_reported_on_its_own_line_and_nothing_is_written(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path, change_log_rows: ChangeLogRows
+) -> None:
+    _import_lots(importer)
+    rows = [
+        "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-20;issue;7;;",  # overdraws once the others are in
+        "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-10;receipt;10;;",
+        "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-12;issue;4;;",
+        "DEMO-ANTIDOTE-X;DEMO-L002;2026-02-01;receipt;5;;",
+    ]
+    path = _write(tmp_path, "m.csv", "\n".join([STOCK_MOVEMENT_HEADER, *rows]) + "\n")
+    before = _counts(db)
+    log_before = change_log_rows(db)
+    for run in (importer.dry_run, importer.import_file):
+        report = run("stock_movement", path)
+        assert report.errors == (_issue(2, "quantity", "BALANCE_NEGATIVE"),)
+        assert (report.total_rows, report.imported) == (4, 0)
+    assert _counts(db) == before
+    assert change_log_rows(db) == log_before
+    assert stock_repo.list_movements(db) == []
+
+
+def test_a_movement_in_the_future_is_reported_on_its_line_and_nothing_is_written(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    _import_lots(importer)
+    rows = [
+        "DEMO-ANTIDOTE-X;DEMO-L001;2026-03-05;receipt;10;;",  # today (the clock): allowed
+        "DEMO-ANTIDOTE-X;DEMO-L002;2026-03-06;receipt;10;;",
+    ]
+    path = _write(tmp_path, "m.csv", "\n".join([STOCK_MOVEMENT_HEADER, *rows]) + "\n")
+    report = importer.import_file("stock_movement", path)
+    assert report.errors == (_issue(3, "moved_on", "DATE_IN_FUTURE"),)
+    assert report.imported == 0
+    assert stock_repo.list_movements(db) == []
+
+
+def test_every_error_of_a_movement_file_is_listed_in_line_order(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    _import_lots(importer)
+    rows = [
+        "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-10;receipt;10;;",
+        "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-10;receipt;10;;",  # the same key again
+        "NO-SUCH-TYPE;DEMO-L001;2026-01-10;receipt;1;;",
+        "DEMO-ANTIDOTE-X;NO-SUCH-LOT;2026-01-10;receipt;1;;",
+        "DEMO-ANTIDOTE-X;DEMO-L002;2026-01-10;gift;1;;",
+        "DEMO-ANTIDOTE-X;DEMO-L002;2026-01-10;receipt;0;;",
+        "DEMO-ANTIDOTE-X;DEMO-L002;2026-01-10;adjustment_in;1;;",
+        "DEMO-ANTIDOTE-X;DEMO-L002;2026-01-1x;receipt;1;;",
+    ]
+    path = _write(tmp_path, "m.csv", "\n".join([STOCK_MOVEMENT_HEADER, *rows]) + "\n")
+    report = importer.import_file("stock_movement", path)
+    assert report.errors == (
+        _issue(3, "", "DUPLICATE_IN_FILE"),
+        _issue(4, "type_code", "UNKNOWN_REFERENCE"),
+        _issue(5, "lot_code", "UNKNOWN_REFERENCE"),
+        _issue(6, "kind", "INVALID_KIND"),
+        _issue(7, "quantity", "INVALID_QUANTITY"),
+        _issue(8, "note", "NOTE_REQUIRED"),
+        _issue(9, "moved_on", "INVALID_DATE"),
+    )
+    assert report.imported == 0
+    assert stock_repo.list_movements(db) == []
+
+
+def test_a_movement_that_already_exists_is_a_duplicate_key(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    _import_lots(importer)
+    row = "DEMO-ANTIDOTE-X;DEMO-L001;2026-01-10;receipt;10;;"
+    path = _write(tmp_path, "m.csv", f"{STOCK_MOVEMENT_HEADER}\n{row}\n")
+    assert importer.import_file("stock_movement", path).imported == 1
+    report = importer.import_file("stock_movement", path)
+    assert report.errors == (_issue(2, "", "DUPLICATE_KEY"),)
+    assert len(stock_repo.list_movements(db)) == 1
+
+
+def test_a_built_in_stock_type_cannot_be_created_or_altered(
+    importer: ImportService, db: DatabaseConnection, tmp_path: Path
+) -> None:
+    header = ";".join(_spec("stock_item_type").column_codes)
+    text = "\n".join(
+        [
+            header,
+            "ANTIDOTE_CHEMICAL;1;antidote;;;;;1",  # exists: a duplicate
+            "MYSTERY;1;other;Misterio;;;;1",  # claims to be built in
+            "ANTIDOTE_CHEMICAL;0;antidote;Outro nome;;;5;1",  # same code again
+            "DEMO-BAD;0;weapon;Ruim;;;;1",
+            "DEMO-NOLABEL;0;other;;;;;1",
+        ]
+    )
+    before = stock_repo.get_type_by_code(db, "ANTIDOTE_CHEMICAL")
+    path = _write(tmp_path, "t.csv", text + "\n")
+    report = importer.dry_run("stock_item_type", path)
+    assert report.errors == (
+        _issue(2, "", "DUPLICATE_KEY"),
+        _issue(3, "built_in", "BUILT_IN_NOT_ALLOWED"),
+        _issue(4, "", "DUPLICATE_IN_FILE"),
+        _issue(5, "category", "INVALID_CATEGORY"),
+        _issue(6, "label_pt_br", "LABEL_PT_BR_REQUIRED"),
+    )
+    assert importer.import_file("stock_item_type", path).imported == 0
+    assert stock_repo.get_type_by_code(db, "ANTIDOTE_CHEMICAL") == before
+
+
+def test_stock_export_then_import_into_an_empty_database_is_exact(
+    importer: ImportService,
+    db: DatabaseConnection,
+    clock: FixedClock,
+    tmp_path: Path,
+) -> None:
+    for name in STOCK_ENTITIES:
+        assert importer.import_file(name, _fixture(name)).ok
+    first = tmp_path / "first"
+    ExportService(db, clock).export_all(first)
+    lots_text = (first / "stock_lot.csv").read_text(encoding="utf-8-sig")
+    assert "DEMO-L001;2027-06-30;12.50;BRL;" in lots_text  # two currencies, written exactly
+    assert "DEMO-L002;2026-04-01;3.25;USD;" in lots_text
+
+    second_dir = tmp_path / "second"
+    second_dir.mkdir()
+    other = open_and_migrate(
+        second_dir / "second.sqlite3",
+        data_dir=second_dir,
+        identity=DatabaseIdentity.REAL,
+        backup=False,
+    )
+    try:
+        types_spec = _spec("stock_item_type")
+        all_types = read_entity(first / "stock_item_type.csv", types_spec)
+        user_types = [row for row in all_types if row["built_in"] is False]
+        assert len(user_types) == 2  # the 17 built-in types are already there
+        write_entity(second_dir / "stock_item_type.csv", types_spec, user_types)
+        files = {
+            "stock_item_type": second_dir / "stock_item_type.csv",
+            "stock_lot": first / "stock_lot.csv",
+            "stock_movement": first / "stock_movement.csv",
+        }
+        replica = _build(other, clock)
+        for name in STOCK_ENTITIES:
+            assert replica.import_file(name, files[name]).errors == (), name
+        assert _balances(other) == STOCK_BALANCES
+        again = tmp_path / "again"
+        ExportService(other, clock).export_all(again)
+    finally:
+        other.close()
+    for name in STOCK_ENTITIES:
+        assert (again / f"{name}.csv").read_bytes() == (first / f"{name}.csv").read_bytes(), name
 
 
 # --------------------------------------------------------------------------- refusals

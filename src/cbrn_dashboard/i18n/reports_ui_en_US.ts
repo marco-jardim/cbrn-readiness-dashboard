@@ -139,7 +139,7 @@
     </message>
     <message>
         <source>The data is read-only: nothing was changed.</source>
-        <extracomment>The label functions of the module pages, asked in turn for a code this UI has no label for. The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
+        <extracomment>The label functions of the module pages, asked in turn for a code this UI has no label for. The stock one is last: ``BALANCE_NEGATIVE``, ``DATE_IN_FUTURE``, ``DUPLICATE_LOT``... of an imported stock row are its own codes. The user chose no output file or folder yet (a code of this UI, not of a service). The user chose no file to import yet (a code of this UI, not of a service).</extracomment>
         <translation>The data is read-only: nothing was changed.</translation>
     </message>
     <message>
@@ -311,8 +311,20 @@
         <translation>This placeholder is not known.</translation>
     </message>
     <message>
+        <source>Stock item types</source>
+        <translation>Stock item types</translation>
+    </message>
+    <message>
         <source>PPE qualifications</source>
         <translation>PPE qualifications</translation>
+    </message>
+    <message>
+        <source>Stock lots</source>
+        <translation>Stock lots</translation>
+    </message>
+    <message>
+        <source>Stock movements</source>
+        <translation>Stock movements</translation>
     </message>
     <message>
         <source>The chosen location is on a network drive.</source>
@@ -488,6 +500,13 @@
     <message>
         <source>%1 problems found in %2 rows. Nothing is imported until they are fixed.</source>
         <translation>%1 problems found in %2 rows. Nothing is imported until they are fixed.</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n lot(s) have no movement yet and show no stock until their movements are imported.</source>
+        <translation>
+            <numerusform>%n lot has no movement yet and shows no stock until its movements are imported.</numerusform>
+            <numerusform>%n lots have no movement yet and show no stock until their movements are imported.</numerusform>
+        </translation>
     </message>
     <message>
         <source>CSV files (*.csv)</source>

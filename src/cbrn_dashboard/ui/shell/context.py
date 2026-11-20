@@ -91,7 +91,9 @@ def build_services(
         budget=budget,
         stock=stock,
     )
-    alerts = AlertService(personnel=personnel, infrastructure=infrastructure, indicators=indicators)
+    alerts = AlertService(
+        personnel=personnel, infrastructure=infrastructure, indicators=indicators, stock=stock
+    )
     dashboard = DashboardService(
         indicators=indicators,
         alerts=alerts,

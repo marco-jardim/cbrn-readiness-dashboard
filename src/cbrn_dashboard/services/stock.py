@@ -1037,6 +1037,10 @@ class StockService:
         types, lots, movements = self._domain_inputs()
         return tuple(types), tuple(lots), tuple(movements)
 
+    def stock_rules(self) -> StockRules:
+        """The rules of the alerts and views: the P11 expiry warning window from the settings."""
+        return self._rules()
+
     def indicator_values(self, as_of: date) -> list[IndicatorValue]:
         """The stock indicator values on ``as_of`` (input of the indicators, D35, D36).
 

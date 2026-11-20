@@ -33,6 +33,7 @@ from cbrn_dashboard.ui.dashboard.labels import (
 )
 from cbrn_dashboard.ui.shell.formatting import FormatError, format_number, format_percent
 from cbrn_dashboard.ui.shell.widgets import label_for
+from cbrn_dashboard.ui.stock.labels import code_label as stock_code_label
 
 __all__ = [
     "ALL_ERROR_CODES",
@@ -231,6 +232,38 @@ def _indicator_critical(alert: Alert, lang: str) -> str:
     return _fill(text, *_indicator_values(alert, lang))
 
 
+def _item_name(alert: Alert) -> str:
+    """The type of a stock alert in words: a built-in type is translated, any other as its code."""
+    try:
+        code = decode_dimension(alert.dimension).get("item", "")
+    except InvalidDimensionError:
+        code = ""
+    if not code and alert.subject_kind is SubjectKind.ITEM_TYPE:
+        code = alert.subject_ref
+    return stock_code_label(code) if code else NOT_RECORDED
+
+
+def _lot_expired(alert: Alert, lang: str) -> str:
+    text = QCoreApplication.translate(
+        "Alerts", "Lot %1 of %2 expired %n day(s) ago and still has stock.", None, _days(alert)
+    )
+    return _fill(text, alert.subject_ref, _item_name(alert))
+
+
+def _lot_expiring(alert: Alert, lang: str) -> str:
+    text = QCoreApplication.translate(
+        "Alerts", "Lot %1 of %2 expires in %n day(s).", None, _days(alert)
+    )
+    return _fill(text, alert.subject_ref, _item_name(alert))
+
+
+def _low_stock(alert: Alert, lang: str) -> str:
+    text = QCoreApplication.translate("Alerts", "Valid stock of %1 is %2, below the minimum of %3.")
+    return _fill(
+        text, _item_name(alert), _number(alert.value, lang), _number(alert.threshold, lang)
+    )
+
+
 _MESSAGES: dict[str, Callable[[Alert, str], str]] = {
     AlertKind.CERT_EXPIRED.value: _cert_expired,
     AlertKind.CERT_EXPIRING.value: _cert_expiring,
@@ -239,6 +272,9 @@ _MESSAGES: dict[str, Callable[[Alert, str], str]] = {
     AlertKind.MAINT_SCHEDULE_UNKNOWN.value: _maint_unknown,
     AlertKind.INDICATOR_WARNING.value: _indicator_warning,
     AlertKind.INDICATOR_CRITICAL.value: _indicator_critical,
+    AlertKind.LOT_EXPIRED.value: _lot_expired,
+    AlertKind.LOT_EXPIRING.value: _lot_expiring,
+    AlertKind.LOW_STOCK.value: _low_stock,
 }
 
 ALL_KIND_CODES: tuple[str, ...] = tuple(_MESSAGES)

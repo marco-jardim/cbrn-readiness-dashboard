@@ -144,6 +144,22 @@
         <translation>Budget execution rate</translation>
     </message>
     <message>
+        <source>Valid stock</source>
+        <translation>Valid stock</translation>
+    </message>
+    <message>
+        <source>Lots expiring soon</source>
+        <translation>Lots expiring soon</translation>
+    </message>
+    <message>
+        <source>Expired lots still in stock</source>
+        <translation>Expired lots still in stock</translation>
+    </message>
+    <message>
+        <source>Item types below the minimum stock</source>
+        <translation>Item types below the minimum stock</translation>
+    </message>
+    <message>
         <source>Count</source>
         <translation>Count</translation>
     </message>

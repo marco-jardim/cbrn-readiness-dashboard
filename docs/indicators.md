@@ -319,6 +319,9 @@ The alert kinds are codes; the interface builds the text.
 | `MAINT_SCHEDULE_UNKNOWN` | `INFO` | an in-service asset has neither an interval nor a recorded next-due date (an interval of 0 means "no scheduled maintenance" and raises nothing) |
 | `INDICATOR_WARNING` | `WARNING` | an indicator value crosses an enabled warning threshold |
 | `INDICATOR_CRITICAL` | `CRITICAL` | an indicator value crosses an enabled critical threshold |
+| `LOT_EXPIRED` | `CRITICAL` | a lot with stock on hand has an expiry date before the date (at most one alert per lot) |
+| `LOT_EXPIRING` | `WARNING` | a lot with stock on hand expires within the warning window (P11), the last day included |
+| `LOW_STOCK` | `CRITICAL` | an active item type with a minimum (P12) has a valid quantity strictly below it (no date) |
 
 Indicator alerts need a target, so with the default of no targets they never appear.
 

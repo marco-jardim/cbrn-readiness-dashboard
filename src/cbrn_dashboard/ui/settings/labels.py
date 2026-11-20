@@ -137,6 +137,14 @@ _INDICATOR_LABELS: dict[str, Callable[[], str]] = {
         "Settings", "Days since the latest exercise"
     ),
     "BUD_EXEC_RATE": lambda: QCoreApplication.translate("Settings", "Budget execution rate"),
+    "STOCK_VALID_QTY": lambda: QCoreApplication.translate("Settings", "Valid stock"),
+    "STOCK_LOTS_EXPIRING": lambda: QCoreApplication.translate("Settings", "Lots expiring soon"),
+    "STOCK_LOTS_EXPIRED": lambda: QCoreApplication.translate(
+        "Settings", "Expired lots still in stock"
+    ),
+    "STOCK_TYPES_BELOW_MIN": lambda: QCoreApplication.translate(
+        "Settings", "Item types below the minimum stock"
+    ),
 }
 
 # The indicator codes this module can name (the registry is checked against it by a test).

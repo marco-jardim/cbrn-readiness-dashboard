@@ -144,6 +144,22 @@
         <translation type="unfinished">Tasa de ejecución presupuestaria</translation>
     </message>
     <message>
+        <source>Valid stock</source>
+        <translation type="unfinished">Existencias válidas</translation>
+    </message>
+    <message>
+        <source>Lots expiring soon</source>
+        <translation type="unfinished">Lotes próximos a caducar</translation>
+    </message>
+    <message>
+        <source>Expired lots still in stock</source>
+        <translation type="unfinished">Lotes caducados en existencias</translation>
+    </message>
+    <message>
+        <source>Item types below the minimum stock</source>
+        <translation type="unfinished">Artículos por debajo de las existencias mínimas</translation>
+    </message>
+    <message>
         <source>Count</source>
         <translation type="unfinished">Recuento</translation>
     </message>
