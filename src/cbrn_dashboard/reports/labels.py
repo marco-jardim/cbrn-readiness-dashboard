@@ -28,8 +28,10 @@ from cbrn_dashboard.reports.message_keys import (
     DEGREE_STATUS_KEYS,
     EXERCISE_KIND_KEYS,
     FUNDING_SOURCE_KEYS,
+    LOT_STATUS_KEYS,
     PRELIMINARY_KEY,
     SHARED_AREAS,
+    STOCK_CATEGORY_KEYS,
     MessageKey,
     stock_type_key,
 )
@@ -322,6 +324,16 @@ class ReportTexts:
         key = stock_type_key(code)
         return code if key is None else self.lookup(key)
 
+    def stock_category(self, code: str) -> str:
+        """The name of a stock category (shared with the stock page); another code as itself."""
+        key = STOCK_CATEGORY_KEYS.get(code)
+        return code if key is None else self.lookup(key)
+
+    def lot_status(self, code: str) -> str:
+        """The label of a stock lot status (shared with the stock page)."""
+        key = LOT_STATUS_KEYS.get(code)
+        return code if key is None else self.lookup(key)
+
     def preliminary_notice(self, code: str) -> str:
         """The preliminary-version notice (I06, P07); another code is shown as itself."""
         return self.lookup(PRELIMINARY_KEY) if code == "PRELIMINARY" else code
@@ -358,6 +370,10 @@ class ReportTexts:
                 return self.indicator("STOCK_LOTS_EXPIRING")
             if name == "types_below_min":
                 return self.indicator("STOCK_TYPES_BELOW_MIN")
+            if name == "value_valid" and argument:
+                return fill(self.translate("Reports", "Value of valid stock (%1)"), argument)
+            if name == "value_expired" and argument:
+                return fill(self.translate("Reports", "Value of expired stock (%1)"), argument)
         return key
 
     def _personnel_cell(self, key: str, name: str, argument: str) -> str:

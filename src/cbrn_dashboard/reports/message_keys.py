@@ -19,8 +19,10 @@ __all__ = [
     "DEGREE_STATUS_KEYS",
     "EXERCISE_KIND_KEYS",
     "FUNDING_SOURCE_KEYS",
+    "LOT_STATUS_KEYS",
     "PRELIMINARY_KEY",
     "SHARED_AREAS",
+    "STOCK_CATEGORY_KEYS",
     "STOCK_TYPE_KEYS",
     "MessageKey",
     "all_shared_keys",
@@ -107,6 +109,24 @@ STOCK_TYPE_KEYS: Final[dict[str, MessageKey]] = {
     "ISOLATION_STRETCHER": ("Stock", "Bubble stretcher (isolation transport capsule)"),
 }
 
+#: ``StockCategory`` values; the source texts are the ones of ``ui/stock/labels.py``.
+STOCK_CATEGORY_KEYS: Final[dict[str, MessageKey]] = {
+    "antidote": ("Stock", "Antidote"),
+    "decontaminant": ("Stock", "Decontaminant"),
+    "detector": ("Stock", "Detector"),
+    "ppe": ("Stock", "PPE"),
+    "other": ("Stock", "Other"),
+}
+
+#: ``LotStatus`` values; the source texts are the ones of ``ui/stock/labels.py``.
+LOT_STATUS_KEYS: Final[dict[str, MessageKey]] = {
+    "VALID": ("Stock", "Valid"),
+    "EXPIRING": ("Stock", "Expiring soon"),
+    "EXPIRED": ("Stock", "Expired"),
+    "EMPTY": ("Stock", "Empty"),
+    "NOT_RECEIVED": ("Stock", "Not yet received"),
+}
+
 
 def stock_type_key(code: str) -> MessageKey | None:
     """The message key of a built-in stock item type, or ``None`` for any other code."""
@@ -123,6 +143,8 @@ def all_shared_keys() -> tuple[MessageKey, ...]:
         ASSET_TYPE_KEYS,
         FUNDING_SOURCE_KEYS,
         STOCK_TYPE_KEYS,
+        STOCK_CATEGORY_KEYS,
+        LOT_STATUS_KEYS,
     )
     keys = [PRELIMINARY_KEY]
     for table in tables:

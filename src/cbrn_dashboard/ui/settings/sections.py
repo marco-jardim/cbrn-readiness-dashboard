@@ -3,7 +3,8 @@
 
 * General: the user-interface language, the operator label (D05) and the institution and unit
   names (D18, a local-only placeholder).
-* Alerts: the certificate warning window (P01) and the maintenance warning window (P02).
+* Alerts: the certificate warning window (P01), the maintenance warning window (P02) and the
+  stock lot warning window before expiry (P11).
 * Targets: the stored indicator targets (P03), one row per (indicator, dimension).
 
 Every section reads and writes ONLY through ``context.services.config`` and
@@ -376,7 +377,7 @@ class GeneralSection(QWidget):
 
 
 class AlertsSection(QWidget):
-    """Settings -> Alerts: the certificate (P01) and maintenance (P02) warning windows in days."""
+    """Settings -> Alerts: the certificate (P01), maintenance (P02) and stock lot (P11) windows."""
 
     def __init__(self, context: AppContext, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -393,11 +394,16 @@ class AlertsSection(QWidget):
         self.maintenance_edit.setObjectName("maintenance_days_edit")
         self.maintenance_caption.setBuddy(self.maintenance_edit)
         self.maintenance_badge = PlaceholderBadge(context, self, "maintenance")
+        self.stock_caption = QLabel(self)
+        self.stock_edit = QLineEdit(self)
+        self.stock_edit.setObjectName("stock_days_edit")
+        self.stock_caption.setBuddy(self.stock_edit)
+        self.stock_badge = PlaceholderBadge(context, self, "stock")
         self.problem = ProblemNote(self, "alerts")
-        self._loaded: tuple[int, int] | None = None
+        self._loaded: tuple[int, int, int] | None = None
         self.save_button = QPushButton(self)
         self.save_button.setObjectName("alerts_save")
-        for target in (self.cert_edit, self.maintenance_edit, self.save_button):
+        for target in (self.cert_edit, self.maintenance_edit, self.stock_edit, self.save_button):
             context.register_edit_action(target)
 
         grid = QGridLayout()
@@ -409,6 +415,10 @@ class AlertsSection(QWidget):
         grid.addWidget(self.maintenance_edit, 1, 1)
         grid.addWidget(self.maintenance_badge.badge, 1, 2)
         grid.addWidget(self.maintenance_badge.confirm, 1, 3)
+        grid.addWidget(self.stock_caption, 2, 0)
+        grid.addWidget(self.stock_edit, 2, 1)
+        grid.addWidget(self.stock_badge.badge, 2, 2)
+        grid.addWidget(self.stock_badge.confirm, 2, 3)
         grid.setColumnStretch(4, 1)
         layout = QVBoxLayout(self)
         layout.addWidget(self.problem.label)
@@ -421,6 +431,7 @@ class AlertsSection(QWidget):
         self.save_button.clicked.connect(self.save)
         self.cert_badge.confirm.clicked.connect(self._confirm_cert)
         self.maintenance_badge.confirm.clicked.connect(self._confirm_maintenance)
+        self.stock_badge.confirm.clicked.connect(self._confirm_stock)
         context.data_changed.connect(self.refresh)
         follow_language(context, self.retranslate)
         self.retranslate()
@@ -437,14 +448,19 @@ class AlertsSection(QWidget):
         self.maintenance_caption.setText(
             QCoreApplication.translate("Settings", "Warn about maintenance due within (days)")
         )
+        self.stock_caption.setText(
+            QCoreApplication.translate("Settings", "Stock lots: warning before expiry (days)")
+        )
         self.save_button.setText(QCoreApplication.translate("Settings", "Save"))
         self.cert_badge.retranslate()
         self.maintenance_badge.retranslate()
+        self.stock_badge.retranslate()
         self.problem.retranslate()
         lang = current_language(self.context)
         if lang != self._lang:
             reformat_number(self.cert_edit, self._lang, lang)
             reformat_number(self.maintenance_edit, self._lang, lang)
+            reformat_number(self.stock_edit, self._lang, lang)
             self._lang = lang
 
     def changeEvent(self, event: QEvent) -> None:
@@ -454,12 +470,14 @@ class AlertsSection(QWidget):
 
     # ----- data
 
-    def _typed(self) -> tuple[int, int] | None:
+    def _typed(self) -> tuple[int, int, int] | None:
         """The typed windows as numbers (``None`` while one of them does not parse)."""
         lang = current_language(self.context)
         try:
-            return parse_whole(self.cert_edit.text(), lang), parse_whole(
-                self.maintenance_edit.text(), lang
+            return (
+                parse_whole(self.cert_edit.text(), lang),
+                parse_whole(self.maintenance_edit.text(), lang),
+                parse_whole(self.stock_edit.text(), lang),
             )
         except FormatError:
             return None
@@ -478,10 +496,15 @@ class AlertsSection(QWidget):
         lang = current_language(self.context)
         self.cert_edit.setText(format_number(config.cert_warning_days, lang))
         self.maintenance_edit.setText(format_number(config.maintenance_warning_days, lang))
-        self._loaded = (config.cert_warning_days, config.maintenance_warning_days)
+        self.stock_edit.setText(format_number(config.stock_expiry_warning_days, lang))
+        self._loaded = (
+            config.cert_warning_days,
+            config.maintenance_warning_days,
+            config.stock_expiry_warning_days,
+        )
 
     def refresh(self) -> None:
-        """Show the badges of P01 and P02 again, and the stored windows unless the form is dirty."""
+        """Show the badges of P01, P02 and P11 again, and the stored windows unless dirty."""
         config, problem = _read_config(self.context)
         self.problem.show_code(problem)
         lang = current_language(self.context)
@@ -489,7 +512,7 @@ class AlertsSection(QWidget):
             self._show(config)
         self._lang = lang
         enable = self.context.set_edit_enabled
-        for widget in (self.cert_edit, self.maintenance_edit, self.save_button):
+        for widget in (self.cert_edit, self.maintenance_edit, self.stock_edit, self.save_button):
             enable(widget, config is not None)
         editable = config is not None
         self.cert_badge.show_for(
@@ -498,13 +521,17 @@ class AlertsSection(QWidget):
         self.maintenance_badge.show_for(
             _badge_for_field(self.context, "maintenance_warning_days"), editable=editable
         )
+        self.stock_badge.show_for(
+            _badge_for_field(self.context, "stock_expiry_warning_days"), editable=editable
+        )
 
     def save(self) -> None:
-        """Store both windows; a number that does not parse is refused and nothing is written."""
+        """Store the windows; a number that does not parse is refused and nothing is written."""
         lang = current_language(self.context)
         try:
             cert = parse_whole(self.cert_edit.text(), lang)
             maintenance = parse_whole(self.maintenance_edit.text(), lang)
+            stock = parse_whole(self.stock_edit.text(), lang)
         except FormatError as error:
             show_error(self.context, self, error.code)
             return
@@ -512,7 +539,9 @@ class AlertsSection(QWidget):
             self.context,
             self,
             lambda config: config.with_changes(
-                cert_warning_days=cert, maintenance_warning_days=maintenance
+                cert_warning_days=cert,
+                maintenance_warning_days=maintenance,
+                stock_expiry_warning_days=stock,
             ),
         )
         if saved:
@@ -523,6 +552,9 @@ class AlertsSection(QWidget):
 
     def _confirm_maintenance(self) -> None:
         _confirm(self.context, self, self.maintenance_badge.placeholder)
+
+    def _confirm_stock(self) -> None:
+        _confirm(self.context, self, self.stock_badge.placeholder)
 
 
 # --------------------------------------------------------------------------- targets

@@ -356,7 +356,7 @@ class StockPanel(QWidget):
         if lot is not None:
             dialog = LotDialog(self.context, self, lot, self._categories)
             dialog.accepted.connect(self._dialog_saved)
-        _open(dialog)
+            _open(dialog)
 
     def delete_lot(self) -> None:
         selected = self.selected_lot()
@@ -386,7 +386,7 @@ class StockPanel(QWidget):
         if lot is not None:
             dialog = MovementDialog(self.context, self, lot)
             dialog.accepted.connect(self._dialog_saved)
-        _open(dialog)
+            _open(dialog)
 
     def edit_movement(self) -> None:
         selected = self.selected_lot()
@@ -397,7 +397,7 @@ class StockPanel(QWidget):
         if lot is not None:
             dialog = MovementDialog(self.context, self, lot, movement)
             dialog.accepted.connect(self._dialog_saved)
-        _open(dialog)
+            _open(dialog)
 
     def delete_movement(self) -> None:
         selected = self.selected_lot()

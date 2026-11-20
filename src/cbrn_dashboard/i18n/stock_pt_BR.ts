@@ -131,6 +131,7 @@
     </message>
     <message>
         <source>Add item type</source>
+        <extracomment>The placeholder of the minimum stock per item type (local only, no configuration field).</extracomment>
         <translation type="unfinished">Adicionar tipo de item</translation>
     </message>
     <message>
@@ -545,6 +546,39 @@
     <message>
         <source>Delete the selected movement of lot %1?</source>
         <translation type="unfinished">Excluir a movimentação selecionada do lote %1?</translation>
+    </message>
+    <message>
+        <source>Deactivate</source>
+        <translation type="unfinished">Desativar</translation>
+    </message>
+    <message>
+        <source>Activate</source>
+        <translation type="unfinished">Ativar</translation>
+    </message>
+    <message>
+        <source>Delete item type</source>
+        <translation type="unfinished">Excluir tipo de item</translation>
+    </message>
+    <message>
+        <source>Confirm</source>
+        <translation type="unfinished">Confirmar</translation>
+    </message>
+    <message>
+        <source>Stock item types</source>
+        <extracomment>Whether the badge of P12 is due (hidden without a readable configuration).</extracomment>
+        <translation type="unfinished">Tipos de item de estoque</translation>
+    </message>
+    <message>
+        <source>The minimum stock of the item types is a placeholder until you confirm it or set a minimum.</source>
+        <translation type="unfinished">O estoque mínimo dos tipos de item é um valor provisório até você confirmá-lo ou definir um mínimo.</translation>
+    </message>
+    <message>
+        <source>Placeholder - to be confirmed</source>
+        <translation type="unfinished">Valor provisório - a confirmar</translation>
+    </message>
+    <message>
+        <source>Delete item type %1?</source>
+        <translation type="unfinished">Excluir o tipo de item %1?</translation>
     </message>
 </context>
 </TS>

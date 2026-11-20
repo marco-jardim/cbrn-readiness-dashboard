@@ -178,7 +178,7 @@ def test_the_page_renders_every_registered_section_under_its_group(
     assert page.section_keys("alerts") == ("settings.alerts",)
     assert page.section_keys("targets") == ("settings.targets",)
     assert page.section_keys("personnel") == ("personnel.rules",)
-    assert page.section_keys("infrastructure") == ("infrastructure.types",)
+    assert page.section_keys("infrastructure") == ("infrastructure.types", "stock.types")
     assert page.section_keys("exercises") == ("exercises.metrics",)
     assert page.section_keys("budget") == ("budget.sources",)
     assert isinstance(page.section_widget("settings.general"), GeneralSection)
@@ -347,18 +347,95 @@ def test_the_alert_windows_are_stored_and_the_badges_follow_the_change(
 ) -> None:
     section = AlertsSection(app_context)
     qtbot.addWidget(section)
-    assert (section.cert_edit.text(), section.maintenance_edit.text()) == ("90", "30")
+    assert (
+        section.cert_edit.text(),
+        section.maintenance_edit.text(),
+        section.stock_edit.text(),
+    ) == ("90", "30", "90")
     assert not section.cert_badge.badge.isHidden()
     assert not section.maintenance_badge.badge.isHidden()
+    assert not section.stock_badge.badge.isHidden()
     section.cert_edit.setText("120")
     section.maintenance_edit.setText("45")
+    section.stock_edit.setText("60")
     section.save_button.click()
     stored = _config(app_context).load()
-    assert (stored.cert_warning_days, stored.maintenance_warning_days) == (120, 45)
+    assert (
+        stored.cert_warning_days,
+        stored.maintenance_warning_days,
+        stored.stock_expiry_warning_days,
+    ) == (120, 45, 60)
     assert section.cert_badge.badge.isHidden()
     assert section.maintenance_badge.badge.isHidden()
+    assert section.stock_badge.badge.isHidden()
     assert _config(app_context).needs_badge("P01") is False
     assert _config(app_context).needs_badge("P02") is False
+    assert _config(app_context).needs_badge("P11") is False
+
+
+def test_the_stock_window_is_saved_and_read_by_the_stock_rules(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    stock = app_context.services.stock
+    assert stock is not None
+    section = AlertsSection(app_context)
+    qtbot.addWidget(section)
+    assert stock.stock_rules().expiry_warning_days == 90
+
+    section.stock_edit.setText("45")
+    section.save()
+
+    assert _config(app_context).load().stock_expiry_warning_days == 45
+    assert stock.stock_rules().expiry_warning_days == 45  # the next evaluation uses it
+    assert section.stock_edit.text() == "45"
+    assert section.stock_badge.badge.isHidden()
+    assert not section.cert_badge.badge.isHidden()  # the other windows were not touched
+
+
+def test_confirming_the_stock_window_keeps_the_value_and_the_other_badges(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    section = AlertsSection(app_context)
+    qtbot.addWidget(section)
+
+    section.stock_badge.confirm.click()
+
+    assert section.stock_badge.badge.isHidden()
+    assert section.stock_badge.confirm.isHidden()
+    assert not section.cert_badge.badge.isHidden()
+    assert _config(app_context).needs_badge("P11") is False
+    assert _config(app_context).needs_badge("P01") is True
+    assert _config(app_context).load().stock_expiry_warning_days == 90
+
+
+@pytest.mark.parametrize(
+    ("typed", "code"),
+    [
+        ("abc", "INVALID_NUMBER"),
+        ("", "EMPTY"),
+        ("-5", "NEGATIVE_DAYS"),
+        ("99999", "VALUE_TOO_LARGE"),
+    ],
+)
+def test_an_invalid_stock_window_is_refused_and_nothing_is_written(
+    app_context: AppContext,
+    fake_prompts: FakePrompts,
+    qtbot: QtBot,
+    typed: str,
+    code: str,
+) -> None:
+    section = AlertsSection(app_context)
+    qtbot.addWidget(section)
+    rows = _log_rows(app_context)
+    section.stock_edit.setText(typed)
+
+    section.save()
+
+    assert _warnings(fake_prompts) == [error_label(code)]
+    assert section.stock_edit.text() == typed
+    assert _config(app_context).load().stock_expiry_warning_days == 90
+    assert _config(app_context).needs_badge("P11") is True
+    assert _log_rows(app_context) == rows
 
 
 def test_confirming_one_window_hides_only_its_badge_and_keeps_the_value(
@@ -669,11 +746,13 @@ def test_read_only_mode_disables_every_edit(app_context: AppContext, qtbot: QtBo
         alerts.save_button,
         alerts.cert_badge.confirm,
         alerts.maintenance_badge.confirm,
+        alerts.stock_edit,
+        alerts.stock_badge.confirm,
         targets.badge.confirm,
         *targets._actions,
     ]
     registered = app_context.edit_targets()
-    assert len(controls) == 15
+    assert len(controls) == 17
     for control in controls:
         assert control in registered
         assert not control.isEnabled()
@@ -693,6 +772,7 @@ def test_the_sections_build_without_services(app_context: AppContext, qtbot: QtB
         general.operator_edit,
         general.save_button,
         alerts.cert_edit,
+        alerts.stock_edit,
         alerts.save_button,
         targets.add_action,
     ):
@@ -700,6 +780,7 @@ def test_the_sections_build_without_services(app_context: AppContext, qtbot: QtB
     assert general.language_combo.isEnabled()
     assert general.names_badge.badge.isHidden()
     assert alerts.cert_badge.badge.isHidden()
+    assert alerts.stock_badge.badge.isHidden()
     assert targets.badge.badge.isHidden()
     assert targets.model.rowCount() == 0
     dialog = demo_target_dialog(app_context, None)
@@ -789,7 +870,7 @@ def test_the_walk_with_data_and_hidden_badges(pseudo_context: AppContext, qtbot:
     _put_target(pseudo_context, "PERS_CERT_VALID", "level=A", 10, 5)
     _put_target(pseudo_context, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA", 0.9, 0.7)
     config = _config(pseudo_context)
-    for placeholder in ("P01", "P02", "P03", "D18"):
+    for placeholder in ("P01", "P02", "P03", "P11", "P12", "D18"):
         config.confirm(placeholder)
     with registry.registered(
         registry.SettingsSectionSpec(

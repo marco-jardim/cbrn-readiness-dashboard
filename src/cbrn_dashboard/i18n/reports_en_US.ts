@@ -174,6 +174,14 @@
         <translation>Level %1</translation>
     </message>
     <message>
+        <source>Value of valid stock (%1)</source>
+        <translation>Value of valid stock (%1)</translation>
+    </message>
+    <message>
+        <source>Value of expired stock (%1)</source>
+        <translation>Value of expired stock (%1)</translation>
+    </message>
+    <message>
         <source>Active staff</source>
         <translation>Active staff</translation>
     </message>
@@ -312,6 +320,26 @@
     <message>
         <source>Days overdue</source>
         <translation>Days overdue</translation>
+    </message>
+    <message>
+        <source>Expired or expiring lots with stock</source>
+        <translation>Expired or expiring lots with stock</translation>
+    </message>
+    <message>
+        <source>Item type</source>
+        <translation>Item type</translation>
+    </message>
+    <message>
+        <source>Lot</source>
+        <translation>Lot</translation>
+    </message>
+    <message>
+        <source>Expires on</source>
+        <translation>Expires on</translation>
+    </message>
+    <message>
+        <source>On hand</source>
+        <translation>On hand</translation>
     </message>
     <message>
         <source>CBRN Readiness Report</source>

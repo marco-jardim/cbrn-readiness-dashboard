@@ -51,6 +51,7 @@ from cbrn_dashboard.ui.dashboard.page import (
 from cbrn_dashboard.ui.shell.charts import PALETTE, ChartKind, read_back
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
+from cbrn_dashboard.ui.shell.main_window import MainWindow
 from tests.ui._fakes import FakePrompts
 from tests.ui._walk import assert_fully_translated, find_untranslated
 from tests.ui.test_accessibility import tab_order_mismatch
@@ -806,6 +807,78 @@ def test_read_only_mode_disables_the_snapshot_action(
     page.record_snapshot()  # even a direct call writes nothing
     assert snapshots.list_snapshots() == []
     assert fake_prompts.calls == []
+
+
+class _Host(QWidget):
+    """A top-level widget with the ``show_page`` of the main window; it records the keys."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.shown: list[str] = []
+
+    def show_page(self, key: str) -> None:
+        self.shown.append(key)
+
+
+def test_the_antidotes_action_asks_the_window_for_the_antidotes_page(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    host = _Host()
+    qtbot.addWidget(host)
+    page = DashboardPage(app_context, host)
+    assert page.antidotes_action.text() == QCoreApplication.translate(
+        "Dashboard", "Open antidotes and decontaminants"
+    )
+    assert page.antidotes_action.isEnabled()
+    page.antidotes_action.trigger()
+    assert host.shown == ["antidotes"]
+    assert page.open_antidotes() is True
+    assert host.shown == ["antidotes", "antidotes"]
+
+
+def test_the_antidotes_action_stays_enabled_in_read_only_mode(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    app_context.read_only = True
+    host = _Host()
+    qtbot.addWidget(host)
+    page = DashboardPage(app_context, host)
+    # A navigation action: not an edit action, so read-only mode does not switch it off.
+    assert page.antidotes_action not in app_context.edit_targets()
+    assert page.snapshot_action in app_context.edit_targets()
+    assert not page.snapshot_action.isEnabled()
+    assert page.antidotes_action.isEnabled()
+    page.refresh()
+    assert page.antidotes_action.isEnabled()
+    page.antidotes_action.trigger()
+    assert host.shown == ["antidotes"]
+
+
+def test_the_antidotes_action_does_nothing_without_a_window_that_shows_pages(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    page = _page(app_context, qtbot)
+    assert page.open_antidotes() is False
+
+
+def test_the_antidotes_action_switches_the_window(app_context: AppContext, qtbot: QtBot) -> None:
+    window = MainWindow(app_context)
+    qtbot.addWidget(window)
+    page = window.page_widget("dashboard")
+    assert isinstance(page, DashboardPage)
+    window.show_page("dashboard")
+    page.antidotes_action.trigger()
+    assert window.pages.currentWidget() is window.page_widget("antidotes")
+
+
+def test_the_antidotes_action_follows_the_language(app_context: AppContext, qtbot: QtBot) -> None:
+    page = _page(app_context, qtbot)
+    app_context.translator_manager.set_language("pt_BR")
+    assert page.antidotes_action.text() == "Abrir ant\u00eddotos e descontaminantes"
+    app_context.translator_manager.set_language("es_ES")
+    assert page.antidotes_action.text() == "Abrir ant\u00eddotos y descontaminantes"
+    app_context.translator_manager.set_language("en_US")
+    assert page.antidotes_action.text() == "Open antidotes and decontaminants"
 
 
 # --------------------------------------------------------------------------- without services

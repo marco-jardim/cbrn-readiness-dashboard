@@ -55,8 +55,9 @@ nos arquivos e pastas que você escolhe.
      validados institucionalmente.". O aviso de proteção de dados não aparece no modo de demonstração.
      O banco de demonstração é um arquivo separado, `demo\demo.sqlite3`, dentro de `C:\Temp\cbrn-teste`.
 2. Observe a navegação ("Navegação").
-   - Resultado esperado: as oito páginas existem, nesta ordem: **Painel**, **Pessoal**,
-     **Infraestrutura**, **Exercícios**, **Orçamento**, **Alertas**, **Relatórios** e
+   - Resultado esperado: as nove páginas existem, nesta ordem: **Painel**, **Pessoal**,
+     **Infraestrutura**, **Antídotos e descontaminantes**, **Exercícios**, **Orçamento**,
+      **Alertas**, **Relatórios** e
      **Configurações**.
 3. Feche o programa e abra-o de novo com o mesmo comando, no mesmo dia.
    - Resultado esperado: o banco é reaberto sem gerar nada de novo e sem a pergunta sobre recriar os
@@ -133,6 +134,41 @@ nos arquivos e pastas que você escolhe.
    data passada. Se o formulário pedir outros campos, use valores fictícios.
    - Resultado esperado: o ativo aparece na lista. Se a tela recusar um valor, anote a mensagem
      exata; ela deve explicar o problema e não alterar nada.
+
+## 4A. Página Antídotos e descontaminantes
+
+A página guarda apenas dados de gestão (quantidades, lotes, validades, preços e movimentações). Use
+somente dados fictícios, com códigos de lote como `TESTE-L01`; não insira dados reais nem qualquer
+informação clínica.
+
+1. Abra **Antídotos e descontaminantes**.
+   - Resultado esperado: o cabeçalho "Situação em" com a data de referência e a nota "Dados de gestão:
+     quantidades, lotes, validades e preços.". Há um filtro "Tipo" e três abas: "Lotes e
+     movimentações", "Aprazamento de vencimentos" e "Alertas".
+2. Abra o filtro "Tipo".
+   - Resultado esperado: a primeira entrada é "Todos os antídotos e descontaminantes"; as demais são
+     apenas tipos de antídoto e de descontaminante, nenhum detector, EPI ou outro tipo.
+3. Na aba "Lotes e movimentações", use "Adicionar lote" para criar um lote fictício `TESTE-L01` de um
+   antídoto, com validade daqui a 60 dias, data de recebimento hoje e quantidade inicial 20.
+   - Resultado esperado: o lote aparece com quantidade 20 e a situação "Válido" (ou "A vencer", se a
+     validade estiver dentro do prazo de aviso); o resumo do tipo mostra 20 como estoque válido.
+4. Selecione o lote e use "Registrar movimentação" para uma saída de 5 unidades.
+   - Resultado esperado: a quantidade passa a 15 e a lista de movimentações mostra a entrada de +20 e a
+     saída de -5, com o saldo após cada uma. Uma saída maior que o saldo é recusada com uma mensagem,
+     sem alterar nada.
+5. Abra a aba "Aprazamento de vencimentos" e troque o "Horizonte" entre 6, 12 e 24 meses.
+   - Resultado esperado: o lote aparece no período do mês de sua validade (nome do mês e ano no idioma
+     da interface) ou em "Mais tarde" se a validade estiver além do horizonte; lotes sem estoque não
+     aparecem.
+6. Crie um lote fictício `TESTE-L02` com validade já passada e estoque maior que zero, abra a aba
+   "Alertas" e selecione o alerta desse lote. Use "Abrir registro".
+   - Resultado esperado: o alerta de lote vencido aparece; "Abrir registro" volta à aba "Lotes e
+     movimentações" com o lote `TESTE-L02` selecionado.
+7. No Painel, use "Abrir antídotos e descontaminantes".
+   - Resultado esperado: a janela mostra a página **Antídotos e descontaminantes**.
+8. No modo somente leitura (seção 15), abra esta página.
+   - Resultado esperado: "Adicionar lote", "Registrar movimentação" e as demais ações de edição estão
+     desativadas; os filtros, as abas e "Abrir registro" continuam funcionando.
 
 ## 5. Página Exercícios
 
@@ -310,7 +346,7 @@ demonstração forem recriados.
 4. Escolha English, feche o programa e abra-o de novo com o mesmo comando do passo 1.1.
    - Resultado esperado: o programa abre em inglês (a escolha foi guardada nas preferências). Volte
      para Português ao terminar.
-5. Em cada idioma, abra as oito páginas e a ajuda.
+5. Em cada idioma, abra as nove páginas e a ajuda.
    - Resultado esperado: nenhum texto em outro idioma no meio da tela e nenhum texto cortado. A
      tradução é um rascunho: textos faltantes ou termos estranhos são **achados a anotar** (a
      terminologia está pendente de revisão, Q14).

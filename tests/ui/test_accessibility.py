@@ -361,6 +361,7 @@ STATUS_COLUMNS = frozenset(
         ("AssetsModel", "status"),
         ("HistoryModel", "details"),
         ("LotsModel", "status"),
+        ("ScheduleModel", "status"),
         ("SummaryModel", "below_minimum"),
         ("StaffModel", "level_a"),
         ("StaffModel", "level_b"),
@@ -379,6 +380,7 @@ NOT_A_READINESS_STATUS = frozenset(
     {
         ("DegreesModel", "status"),
         ("TypesModel", "status"),
+        ("StockTypesModel", "status"),
         ("CoursesModel", "status"),
         ("SourcesModel", "status"),
         ("MetricsModel", "status"),

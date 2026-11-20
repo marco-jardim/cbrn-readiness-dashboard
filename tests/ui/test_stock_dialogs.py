@@ -51,7 +51,12 @@ from cbrn_dashboard.services.stock import (
 )
 from cbrn_dashboard.ui.shell import registry
 from cbrn_dashboard.ui.shell.context import AppContext
-from cbrn_dashboard.ui.shell.formatting import format_amount, parse_amount, to_qdate
+from cbrn_dashboard.ui.shell.formatting import (
+    format_amount,
+    format_month,
+    parse_amount,
+    to_qdate,
+)
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from cbrn_dashboard.ui.stock.dialogs import (
     LotDialog,
@@ -80,7 +85,6 @@ from cbrn_dashboard.ui.stock.models import (
     StockTypesModel,
     SummaryModel,
     below_minimum_look,
-    month_text,
     signed_text,
 )
 from tests.ui._fakes import FakePrompts
@@ -531,9 +535,9 @@ def test_the_schedule_model_lists_the_lots_by_period(app_context: AppContext) ->
 
 def test_month_names_follow_the_language() -> None:
     month = date(2026, 4, 1)
-    assert month_text(month, "en_US") == "April 2026"
-    assert month_text(month, "pt_BR") == "Abril 2026"
-    assert month_text(month, "es_ES") == "Abril 2026"
+    assert format_month(month, "en_US") == "April 2026"
+    assert format_month(month, "pt_BR") == "Abril 2026"
+    assert format_month(month, "es_ES") == "Abril 2026"
 
 
 def test_the_types_model_lists_built_in_and_user_types(app_context: AppContext) -> None:

@@ -174,6 +174,14 @@
         <translation type="unfinished">Nível %1</translation>
     </message>
     <message>
+        <source>Value of valid stock (%1)</source>
+        <translation type="unfinished">Valor do estoque válido (%1)</translation>
+    </message>
+    <message>
+        <source>Value of expired stock (%1)</source>
+        <translation type="unfinished">Valor do estoque vencido (%1)</translation>
+    </message>
+    <message>
         <source>Active staff</source>
         <translation type="unfinished">Pessoal ativo</translation>
     </message>
@@ -312,6 +320,26 @@
     <message>
         <source>Days overdue</source>
         <translation type="unfinished">Dias de atraso</translation>
+    </message>
+    <message>
+        <source>Expired or expiring lots with stock</source>
+        <translation type="unfinished">Lotes vencidos ou a vencer com estoque</translation>
+    </message>
+    <message>
+        <source>Item type</source>
+        <translation type="unfinished">Tipo de item</translation>
+    </message>
+    <message>
+        <source>Lot</source>
+        <translation type="unfinished">Lote</translation>
+    </message>
+    <message>
+        <source>Expires on</source>
+        <translation type="unfinished">Vence em</translation>
+    </message>
+    <message>
+        <source>On hand</source>
+        <translation type="unfinished">Em estoque</translation>
     </message>
     <message>
         <source>CBRN Readiness Report</source>

@@ -152,6 +152,16 @@ def format_iso_date_text(iso: str, lang: str) -> str:
     return format_date(value, lang)
 
 
+def format_month(value: date, lang: str) -> str:
+    """Format the month of ``value`` as the month name and the year, capitalised (``March 2026``).
+
+    The month name comes from the locale data of Qt, which writes it in lower case in pt-BR and
+    es-ES; the first letter is raised here. The day of ``value`` is ignored.
+    """
+    text = locale_for(lang).toString(to_qdate(value), "MMMM yyyy")
+    return text[:1].upper() + text[1:]
+
+
 def _date_regex(pattern: str) -> re.Pattern[str]:
     body = (
         re.escape(pattern)

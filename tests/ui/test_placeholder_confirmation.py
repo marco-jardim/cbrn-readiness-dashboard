@@ -21,6 +21,7 @@ from cbrn_dashboard.ui.reports.page import ReportsSettingsSection, SnapshotsSett
 from cbrn_dashboard.ui.settings.dialogs import TargetDialog
 from cbrn_dashboard.ui.settings.sections import AlertsSection, GeneralSection, TargetsSection
 from cbrn_dashboard.ui.shell.context import AppContext
+from cbrn_dashboard.ui.stock.settings import StockTypeSettingsDialog, StockTypesSection
 from tests.ui._fakes import FakePrompts
 
 pytestmark = pytest.mark.ui
@@ -68,8 +69,60 @@ def test_the_alerts_section_confirms_only_the_window_that_changed(
 
     assert section.cert_badge.badge.isHidden()
     assert _shown(section.maintenance_badge.badge)
+    assert _shown(section.stock_badge.badge)
     assert _config(app_context).needs_badge("P01") is False
     assert _config(app_context).needs_badge("P02") is True
+    assert _config(app_context).needs_badge("P11") is True
+
+
+def test_the_alerts_section_confirms_p11_when_the_stock_window_changes(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    section = AlertsSection(app_context)
+    qtbot.addWidget(section)
+    assert _shown(section.stock_badge.badge)
+
+    section.stock_edit.setText("120")
+    section.save()
+
+    assert section.stock_badge.badge.isHidden()
+    assert section.stock_badge.confirm.isHidden()
+    assert _shown(section.cert_badge.badge)  # P01 was not touched
+    assert _config(app_context).needs_badge("P11") is False
+    assert _config(app_context).needs_badge("P01") is True
+
+
+def test_the_stock_types_section_confirms_p12_when_a_minimum_is_set(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    section = StockTypesSection(app_context)
+    qtbot.addWidget(section)
+    assert _shown(section.badge_label)
+    assert _config(app_context).needs_badge("P12") is True
+    section.view.selectRow(0)
+    section.edit_action.trigger()
+    shown = [d for d in section.findChildren(StockTypeSettingsDialog) if d.isVisible()]
+    assert len(shown) == 1
+    shown[0].minimum_spin.setValue(12)
+
+    shown[0].accept()
+
+    assert section.badge_label.isHidden()
+    assert section.confirm_button.isHidden()
+    assert _config(app_context).needs_badge("P12") is False
+
+
+def test_the_stock_types_section_confirms_p12_with_its_button(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    section = StockTypesSection(app_context)
+    qtbot.addWidget(section)
+
+    section.confirm_action.trigger()
+
+    assert section.badge_label.isHidden()
+    assert section.confirm_button.isHidden()
+    assert _config(app_context).needs_badge("P12") is False
 
 
 def test_the_targets_section_confirms_p03_when_a_target_is_switched(

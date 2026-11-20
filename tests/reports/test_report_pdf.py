@@ -22,6 +22,7 @@ from cbrn_dashboard import i18n
 from cbrn_dashboard.domain.alerts import Severity
 from cbrn_dashboard.domain.indicators import Direction, IndicatorStatus, Module, UnitKind
 from cbrn_dashboard.domain.personnel import CertStatus, PpeLevel
+from cbrn_dashboard.domain.stock import LotStatus
 from cbrn_dashboard.reports.anonymise import anonymise
 from cbrn_dashboard.reports.labels import (
     CHART_SERIES_KEYS,
@@ -34,7 +35,9 @@ from cbrn_dashboard.reports.message_keys import (
     CERT_STATUS_KEYS,
     DEGREE_LEVEL_KEYS,
     FUNDING_SOURCE_KEYS,
+    LOT_STATUS_KEYS,
     PRELIMINARY_KEY,
+    STOCK_CATEGORY_KEYS,
     all_shared_keys,
 )
 from cbrn_dashboard.reports.model import (
@@ -49,6 +52,7 @@ from cbrn_dashboard.reports.model import (
     ReportSeries,
     ReportVariant,
     StaffListRow,
+    StockLotListRow,
 )
 from cbrn_dashboard.reports.pdf import (
     REPORT_FAILED,
@@ -300,6 +304,96 @@ def test_internal_variant_without_handling_notice_prints_no_empty_notice(qm_dir:
     layout = _layout(replace(_internal(), handling_notice=""), "en_US", qm_dir)
 
     assert "Handling notice" not in layout.text
+
+
+# --------------------------------------------------------------------------- stock
+
+
+def _with_stock(document: ReportDocument) -> ReportDocument:
+    """The document with a stock group and two lots (fictitious codes)."""
+    group = KeyFigureGroup(
+        Module.STOCK,
+        (
+            Cell("kf:STOCK:lots_expired", 2.0),
+            Cell("kf:STOCK:lots_expiring", 1.0),
+            Cell("kf:STOCK:types_below_min", 3.0),
+            Cell("kf:STOCK:value_valid:BRL", 1234.5, is_count=False, internal_only=True),
+            Cell("kf:STOCK:value_expired:USD", 99.0, is_count=False, internal_only=True),
+        ),
+    )
+    lots = (
+        StockLotListRow("ANTIDOTE_CHEMICAL", "FIC-LOT-1", date(2026, 2, 1), 4, LotStatus.EXPIRED),
+        StockLotListRow("FIC-OWN-TYPE", "FIC-LOT-2", date(2026, 3, 20), 1250, LotStatus.EXPIRING),
+    )
+    return replace(document, key_figures=(*document.key_figures, group), stock_lots=lots)
+
+
+def test_the_internal_report_has_the_stock_figures_and_the_lot_section(qm_dir: Path) -> None:
+    layout = _layout(_with_stock(_internal()), "en_US", qm_dir)
+
+    lines = layout.text.splitlines()
+    assert "Expired or expiring lots with stock" in lines
+    assert _row(layout, "Expired lots still in stock").endswith("| 2")
+    assert _row(layout, "Item types below the minimum stock").endswith("| 3")
+    assert "1,234.50" in _row(layout, "Value of valid stock (BRL)")
+    assert "99.00" in _row(layout, "Value of expired stock (USD)")
+    first = _row(layout, "Chemical antidote | FIC-LOT-1 |")
+    assert first.endswith("| 4 | Expired")
+    second = _row(layout, "FIC-OWN-TYPE | FIC-LOT-2 |")  # a user type shows its code
+    assert second.endswith("| 1,250 | Expiring soon")
+    assert "Item type | Lot | Expires on | On hand | Status" in lines
+
+
+def test_the_lot_section_is_translated_and_uses_the_stock_catalogue(qm_dir: Path) -> None:
+    english = _layout(_with_stock(_internal()), "en_US", qm_dir)
+    portuguese = _layout(_with_stock(_internal()), "pt_BR", qm_dir)
+
+    row_en = _row(english, "Chemical antidote | FIC-LOT-1 |")
+    row_pt = next(line for line in portuguese.text.splitlines() if "FIC-LOT-1" in line)
+    assert not row_pt.startswith("Chemical antidote")
+    assert not row_pt.endswith("Expired")
+    assert row_pt != row_en
+
+
+def test_a_stock_report_without_lots_prints_none_and_one_without_stock_no_section(
+    qm_dir: Path,
+) -> None:
+    empty = replace(_with_stock(_internal()), stock_lots=())
+    layout = _layout(empty, "en_US", qm_dir)
+    lines = layout.text.splitlines()
+    heading = lines.index("Expired or expiring lots with stock")
+    assert lines[heading + 1] == "None."
+
+    plain = _layout(_internal(), "en_US", qm_dir)
+    assert "Expired or expiring lots with stock" not in plain.text
+
+
+def test_the_anonymised_report_prints_the_stock_counts_only(qm_dir: Path) -> None:
+    document = _with_stock(_internal())
+    layout = _layout(anonymise(document), "en_US", qm_dir)
+
+    assert "Expired or expiring lots with stock" not in layout.text
+    assert "Value of" not in layout.text
+    assert "1,234.50" not in layout.text
+    assert "FIC-LOT" not in layout.text
+    assert "FIC-OWN-TYPE" not in layout.text
+    assert _row(layout, "Expired lots still in stock").endswith("| 2")
+    assert _row(layout, "Item types below the minimum stock").endswith("| 3")
+
+    leaky = replace(anonymise(document), stock_lots=document.stock_lots)
+    assert "FIC-LOT" not in _layout(leaky, "en_US", qm_dir).text  # the renderer checks the variant
+
+
+def test_the_stock_codes_have_labels_in_every_language(qm_dir: Path) -> None:
+    for language in i18n.LANGUAGES:
+        texts = ReportTexts(language, qm_dir)
+        for code in STOCK_CATEGORY_KEYS:
+            assert texts.stock_category(code) != code, (language, code)
+        for code in LOT_STATUS_KEYS:
+            assert texts.lot_status(code) != code, (language, code)
+    assert ReportTexts("en_US", qm_dir).lot_status("EXPIRING") == "Expiring soon"
+    assert ReportTexts("en_US", qm_dir).stock_category("ppe") == "PPE"
+    assert ReportTexts("en_US", qm_dir).stock_category("NOPE") == "NOPE"
 
 
 # --------------------------------------------------------------------------- suppression

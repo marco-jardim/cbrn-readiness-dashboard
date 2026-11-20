@@ -27,7 +27,7 @@ from cbrn_dashboard.domain.stock import (
 from cbrn_dashboard.services.stock import MovementView, StockTypeView
 from cbrn_dashboard.ui.budget.models import money_text
 from cbrn_dashboard.ui.dashboard.labels import status_pixmap
-from cbrn_dashboard.ui.shell.formatting import format_date, format_number, locale_for, to_qdate
+from cbrn_dashboard.ui.shell.formatting import format_date, format_month, format_number
 from cbrn_dashboard.ui.shell.widgets import Column, ModuleTableModel
 from cbrn_dashboard.ui.stock.labels import (
     category_label,
@@ -51,7 +51,6 @@ __all__ = [
     "below_minimum_look",
     "below_minimum_text",
     "minimum_text",
-    "month_text",
     "period_text",
     "signed_text",
 ]
@@ -114,16 +113,6 @@ def signed_text(value: int, lang: str) -> str:
     return format_number(0, lang)
 
 
-def month_text(month: date, lang: str) -> str:
-    """The month and year of ``month`` in the language, capitalised ("March 2026").
-
-    The month name comes from the locale data of Qt. T11.11 may replace it with a shared
-    ``format_month`` without changing the models.
-    """
-    text = locale_for(lang).toString(to_qdate(month), "MMMM yyyy")
-    return text[:1].upper() + text[1:]
-
-
 def period_text(kind: ScheduleBucketKind, month: date | None, lang: str) -> str:
     """The period of an expiry-schedule bucket."""
     if kind is ScheduleBucketKind.EXPIRED:
@@ -132,7 +121,7 @@ def period_text(kind: ScheduleBucketKind, month: date | None, lang: str) -> str:
         return QCoreApplication.translate("Stock", "Later")
     if kind is ScheduleBucketKind.NO_EXPIRY:
         return QCoreApplication.translate("Stock", "No expiry date")
-    return NOT_RECORDED if month is None else month_text(month, lang)
+    return NOT_RECORDED if month is None else format_month(month, lang)
 
 
 def _date_text(value: date | None, lang: str) -> str:

@@ -139,7 +139,7 @@ has none marked. The count was made over the `.ts` files in `src/cbrn_dashboard/
 message, one `type="unfinished"` translation); a test compares it with the files. Nothing changed
 in the catalogues since 1.0.2.
 
-- Messages still marked unfinished: 2412 (1206 in the pt-BR catalogues and 1206 in the es-ES
+- Messages still marked unfinished: 2474 (1237 in the pt-BR catalogues and 1237 in the es-ES
   catalogues), pending terminology review (Q14)
 
 ### Known limits
@@ -320,7 +320,7 @@ has none marked. The count was made over the `.ts` files in `src/cbrn_dashboard/
 message, one `type="unfinished"` translation); a test compares it with the files. Nothing changed
 in the catalogues since 1.0.1.
 
-- Messages still marked unfinished: 2412 (1206 in the pt-BR catalogues and 1206 in the es-ES
+- Messages still marked unfinished: 2474 (1237 in the pt-BR catalogues and 1237 in the es-ES
   catalogues), pending terminology review (Q14)
 
 ### Known limits
@@ -506,7 +506,7 @@ and their messages are still marked `unfinished`; the en-US catalogue is the sou
 has none marked. The count was made over the `.ts` files in `src/cbrn_dashboard/i18n` (one
 message, one `type="unfinished"` translation); a test compares it with the files.
 
-- Messages still marked unfinished: 2412 (1206 in the pt-BR catalogues and 1206 in the es-ES
+- Messages still marked unfinished: 2474 (1237 in the pt-BR catalogues and 1237 in the es-ES
   catalogues), pending terminology review (Q14)
 
 ### Known limits

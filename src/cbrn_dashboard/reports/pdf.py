@@ -66,7 +66,7 @@ from PySide6.QtGui import (
 )
 
 from cbrn_dashboard.domain.budget import currency_decimals
-from cbrn_dashboard.domain.indicators import UnitKind
+from cbrn_dashboard.domain.indicators import Module, UnitKind
 from cbrn_dashboard.reports.labels import ReportTexts, fill
 from cbrn_dashboard.reports.model import (
     Cell,
@@ -112,6 +112,7 @@ _BODY_POINTS: Final = 10.0
 _FOOTER_POINTS: Final = 8.0
 _WATERMARK_POINTS: Final = 40.0
 _BUDGET_FIGURE_PREFIX: Final = "kf:BUDGET:"
+_STOCK_VALUE_PREFIX: Final = "kf:STOCK:value_"
 _EMPTY: Final = "-"  # a value that does not apply (a date or threshold that is not set)
 _DEMO_TOKEN: Final = "DEMO"  # in the PDF title of a demo document, whatever the language
 
@@ -188,7 +189,7 @@ class _Format:
             return self.marker(threshold)
         if cell.value is None:
             return self._texts.translate("Reports", "No data")
-        if cell.key.startswith(_BUDGET_FIGURE_PREFIX):
+        if cell.key.startswith((_BUDGET_FIGURE_PREFIX, _STOCK_VALUE_PREFIX)):
             return self.money(cell.value, cell.key.rsplit(":", 1)[-1])
         return self.whole(cell.value) if cell.is_count else self.number(cell.value)
 
@@ -494,6 +495,37 @@ def _add_lists(doc: _Doc, document: ReportDocument, texts: ReportTexts, fmt: _Fo
         doc.paragraph(texts.translate("Reports", "None."))
 
 
+def _add_stock_lots(doc: _Doc, document: ReportDocument, texts: ReportTexts, fmt: _Format) -> None:
+    """The expired and expiring lots with stock (a report that has stock figures; internal)."""
+    has_stock = any(group.module is Module.STOCK for group in document.key_figures)
+    if not document.stock_lots and not has_stock:
+        return
+    doc.heading(2, texts.translate("Reports", "Expired or expiring lots with stock"))
+    if not document.stock_lots:
+        doc.paragraph(texts.translate("Reports", "None."))
+        return
+    doc.table(
+        (
+            texts.translate("Reports", "Item type"),
+            texts.translate("Reports", "Lot"),
+            texts.translate("Reports", "Expires on"),
+            texts.translate("Reports", "On hand"),
+            texts.translate("Reports", "Status"),
+        ),
+        [
+            (
+                texts.stock_type(row.type_code),
+                row.lot_code,
+                fmt.day(row.expires_on),
+                fmt.whole(float(row.on_hand)),
+                texts.lot_status(row.status.value),
+            )
+            for row in document.stock_lots
+        ],
+        right=(3,),
+    )
+
+
 def build_layout(
     document: ReportDocument, texts: ReportTexts, *, resolution: int = RESOLUTION
 ) -> ReportLayout:
@@ -541,6 +573,7 @@ def build_layout(
     _add_charts(doc, document, texts)
     if internal:
         _add_lists(doc, document, texts, fmt)
+        _add_stock_lots(doc, document, texts, fmt)
 
     return ReportLayout(
         language=texts.language,

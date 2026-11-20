@@ -18,6 +18,7 @@ from typing import Protocol
 from PySide6.QtWidgets import QDialog, QWidget
 
 from cbrn_dashboard.ui.alerts import page as alerts_page
+from cbrn_dashboard.ui.antidotes import page as antidotes_page
 from cbrn_dashboard.ui.backup import page as backup_page
 from cbrn_dashboard.ui.budget import page as budget_page
 from cbrn_dashboard.ui.dashboard import page as dashboard_page
@@ -30,6 +31,7 @@ from cbrn_dashboard.ui.shell import about as about_dialog
 from cbrn_dashboard.ui.shell import help as help_viewer
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.stock import dialogs as stock_dialogs
+from cbrn_dashboard.ui.stock import settings as stock_settings
 
 __all__ = [
     "DIALOGS",
@@ -113,6 +115,7 @@ PAGES: tuple[PageSpec, ...] = (
     PageSpec("dashboard", 5, dashboard_page.page_title, dashboard_page.create_page),
     PageSpec("personnel", 10, personnel_page.page_title, personnel_page.create_page),
     PageSpec("infrastructure", 20, infrastructure_page.page_title, infrastructure_page.create_page),
+    PageSpec("antidotes", 25, antidotes_page.page_title, antidotes_page.create_page),
     PageSpec("exercises", 30, exercises_page.page_title, exercises_page.create_page),
     PageSpec("budget", 40, budget_page.page_title, budget_page.create_page),
     PageSpec("alerts", 50, alerts_page.page_title, alerts_page.create_page),
@@ -151,6 +154,12 @@ SETTINGS_SECTIONS: tuple[SettingsSectionSpec, ...] = (
         "infrastructure",
         infrastructure_page.settings_section_title,
         infrastructure_page.create_settings_section,
+    ),
+    SettingsSectionSpec(
+        "stock.types",
+        "infrastructure",
+        stock_settings.settings_section_title,
+        stock_settings.create_settings_section,
     ),
     SettingsSectionSpec(
         "exercises.metrics",

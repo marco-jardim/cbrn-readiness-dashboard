@@ -344,6 +344,10 @@
         <translation type="unfinished">Avisar sobre manutenções previstas em até (dias)</translation>
     </message>
     <message>
+        <source>Stock lots: warning before expiry (days)</source>
+        <translation type="unfinished">Lotes de estoque: antecedência do alerta de vencimento (dias)</translation>
+    </message>
+    <message>
         <source>Enable or disable target</source>
         <translation type="unfinished">Ativar ou desativar meta</translation>
     </message>

@@ -286,6 +286,13 @@ class DashboardPage(QWidget):
             lambda: QCoreApplication.translate("Dashboard", "Record snapshot"),
             self.record_snapshot,
         )
+        # A navigation action: it changes no data, so it is NOT made with make_edit_action and
+        # stays enabled in read-only mode.
+        self.antidotes_action = EditAction(
+            self,
+            lambda: QCoreApplication.translate("Dashboard", "Open antidotes and decontaminants"),
+        )
+        self.antidotes_action.triggered.connect(self.open_antidotes)
 
         self.alerts_box = QGroupBox(self)
         self.alerts_box.setObjectName("alerts_box")
@@ -332,7 +339,7 @@ class DashboardPage(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.as_of_label)
-        layout.addLayout(action_row((self.snapshot_action,), self))
+        layout.addLayout(action_row((self.snapshot_action, self.antidotes_action), self))
         layout.addWidget(self.empty_label)
         layout.addWidget(self.scroll_area, 1)
 
@@ -346,6 +353,7 @@ class DashboardPage(QWidget):
 
     def _static_texts(self) -> None:
         self.snapshot_action.retranslate()
+        self.antidotes_action.retranslate()
         self.alerts_box.setTitle(QCoreApplication.translate("Dashboard", "Alerts"))
         self.tiles_caption.setText(QCoreApplication.translate("Dashboard", "Indicators"))
         self.charts_caption.setText(QCoreApplication.translate("Dashboard", "Charts"))
@@ -516,6 +524,24 @@ class DashboardPage(QWidget):
 
     def _update_actions(self) -> None:
         self.context.set_edit_enabled(self.snapshot_action, self._snapshots() is not None)
+
+    def open_antidotes(self) -> bool:
+        """Show the page "antidotes" in the main window; ``False`` when it is not registered.
+
+        Pattern of the Alerts page: the key is looked up in the registry and the top-level
+        widget of this page (the main window) switches to it. It changes no data.
+        """
+        # Imported here: the registry imports this module to register the page.
+        from cbrn_dashboard.ui.shell import registry
+
+        key = "antidotes"
+        if key not in {spec.key for spec in registry.pages()}:
+            return False
+        show_page = getattr(self.window(), "show_page", None)
+        if callable(show_page):
+            show_page(key)
+            return True
+        return False
 
     def record_snapshot(self) -> None:
         """Record a manual snapshot of the as-of date; a past date is recorded as retroactive."""

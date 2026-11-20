@@ -4,7 +4,8 @@
 :func:`anonymise` is a pure function: it never mutates its input and returns a new document of the
 ``ANONYMISED`` variant. What it keeps and what it drops:
 
-* COUNTS ONLY. The retraining list and the overdue-asset list are dropped; so are the operator
+* COUNTS ONLY. The retraining list, the overdue-asset list and the stock-lot list are dropped; so
+  are the operator
   label, the handling notice and, in the header, the institution and unit names (the PDF metadata
   must carry no operator label, institution name or identifier). The model holds no notes,
   descriptions or references, only codes and numbers.
@@ -41,8 +42,10 @@
 * INTERNAL-ONLY CONTENT (D37). A cell with ``internal_only=True`` (the per-type stock quantities
   and values), an indicator row whose value cell is internal-only and a chart marked internal-only
   are dropped, not suppressed: no value, key, category or label of them remains. The stock lot
-  counts, below-minimum counts and stock alert counts are kept. No ``total_of`` may name an
-  internal-only cell (a test checks it).
+  counts, below-minimum counts and stock alert counts are kept (``kf:STOCK:lots_expired``,
+  ``lots_expiring``, ``types_below_min``); the value of the valid and of the expired stock per
+  currency is dropped, and so is the stock-lot list (``stock_lots`` is empty). No ``total_of`` may
+  name an internal-only cell (a test checks it).
 
 Covered: every staff-derived count that appears in a declared sum; the tests check that every
 visible total has only visible parts and that no hidden personnel cell is part of a visible total.
@@ -188,4 +191,5 @@ def anonymise(document: ReportDocument) -> ReportDocument:
         retraining=(),
         overdue_assets=(),
         preliminary_notice_code=document.preliminary_notice_code,
+        stock_lots=(),
     )

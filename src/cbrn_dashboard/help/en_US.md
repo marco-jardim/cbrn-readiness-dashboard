@@ -49,6 +49,19 @@ You can add, edit, retire and delete assets, change the status of an asset, reco
 
 The asset types and the availability rule, which decides whether degraded units count as available, are kept in Settings.
 
+## Antidotes and decontaminants
+<!-- topic: antidotes -->
+
+The Antidotes and decontaminants page shows the stock of the antidote and decontaminant item types, by lot, for the as-of date. It holds management data only: quantities, lots, expiry dates, prices and movements. It has no fields for doses, indications or protocols, and the lot codes and notes must not contain clinical information.
+
+A type filter above the tabs limits the page to one item type. The page has three tabs:
+
+- Lots and movements: a summary for each item type, the lots with their quantity, status and days to expiry, and the dated movements of the selected lot (receipts, issues, disposals, losses and adjustments). A lot is created with its first receipt, and the quantity on any date is the sum of the movements up to that date. The balance of a lot can never become negative.
+- Expiry schedule: the lots that still have stock, grouped by period of expiry: expired, one period for each month of the horizon (6, 12 or 24 months), later, and without an expiry date.
+- Alerts: the stock alerts of these item types for the as-of date. "Open record" selects the lot in the first tab, or sets the type filter for an alert about an item type.
+
+Adding, editing and deleting lots and movements change data, so they are switched off in read-only mode. The expiry warning period and the minimum stock of each type are kept in Settings. The Dashboard has a shortcut to this page.
+
 ## Exercises
 <!-- topic: exercises -->
 

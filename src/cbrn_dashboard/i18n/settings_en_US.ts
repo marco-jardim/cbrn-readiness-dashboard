@@ -344,6 +344,10 @@
         <translation>Warn about maintenance due within (days)</translation>
     </message>
     <message>
+        <source>Stock lots: warning before expiry (days)</source>
+        <translation>Stock lots: warning before expiry (days)</translation>
+    </message>
+    <message>
         <source>Enable or disable target</source>
         <translation>Enable or disable target</translation>
     </message>

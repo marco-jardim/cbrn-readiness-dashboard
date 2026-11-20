@@ -7,8 +7,8 @@ translations). Two variants are built from the same figures:
 
 * ``INTERNAL`` - the full report for the committee, DIRSA and the Air Force Command (R11, R12):
   header with the institution and unit names, the locally set handling notice, key figures, the
-  indicator table, the alert summary and the two lists (staff identifiers needing retraining,
-  overdue asset tags);
+  indicator table, the alert summary and the three lists (staff identifiers needing retraining,
+  overdue asset tags, expired and expiring stock lots with stock on hand);
 * ``ANONYMISED`` - the aggregated report (R13) for internal use, made by
   :func:`cbrn_dashboard.reports.anonymise.anonymise` from the internal document: counts only, with
   small-count suppression (A11).
@@ -60,6 +60,7 @@ from cbrn_dashboard.domain.indicators import (
     encode_dimension,
 )
 from cbrn_dashboard.domain.personnel import CertStatus, PpeLevel, is_active
+from cbrn_dashboard.domain.stock import LotRow, LotStatus, StockValue, TypeSummary
 from cbrn_dashboard.services.budget import BudgetService
 from cbrn_dashboard.services.dashboard import (
     CHART_BUDGET_PREFIX,
@@ -91,6 +92,7 @@ __all__ = [
     "ReportSeries",
     "ReportVariant",
     "StaffListRow",
+    "StockLotListRow",
 ]
 
 #: The code of the preliminary notice (I06, P07); the wording lives in the translations.
@@ -233,6 +235,17 @@ class AssetListRow:
 
 
 @dataclass(frozen=True)
+class StockLotListRow:
+    """An expired or expiring lot with stock on hand (internal variant only, D37)."""
+
+    type_code: str
+    lot_code: str
+    expires_on: date | None
+    on_hand: int
+    status: LotStatus
+
+
+@dataclass(frozen=True)
 class ReportDocument:
     """The report for one as-of date and variant."""
 
@@ -248,6 +261,8 @@ class ReportDocument:
     retraining: tuple[StaffListRow, ...]
     overdue_assets: tuple[AssetListRow, ...]
     preliminary_notice_code: str = PRELIMINARY_NOTICE_CODE
+    #: The expired and expiring lots with stock (internal variant only; empty when anonymised).
+    stock_lots: tuple[StockLotListRow, ...] = ()
 
 
 # --------------------------------------------------------------------------- builder helpers
@@ -423,6 +438,52 @@ def _budget_figures(
     return KeyFigureGroup(Module.BUDGET, tuple(cells))
 
 
+def _stock_figures(summaries: Sequence[TypeSummary], value: StockValue) -> KeyFigureGroup:
+    """The stock key figures: the three counts, then the value per currency (never added up).
+
+    The counts are kept in the anonymised report (D37). The valid and the expired value are
+    internal only and not counts: the exact minor units of the domain value are converted once for
+    display, like the budget figures.
+    """
+    cells: list[Cell] = [
+        Cell(key="kf:STOCK:lots_expired", value=float(sum(s.lots_expired for s in summaries))),
+        Cell(key="kf:STOCK:lots_expiring", value=float(sum(s.lots_expiring for s in summaries))),
+        Cell(
+            key="kf:STOCK:types_below_min",
+            value=float(sum(1 for s in summaries if s.active and s.below_minimum)),
+        ),
+    ]
+    for currency, amount in value.by_currency.items():
+        try:
+            decimals = currency_decimals(currency)
+        except InvalidCurrencyError:
+            decimals = _DEFAULT_CURRENCY_DECIMALS
+        for name, minor in (("valid", amount.valid_minor), ("expired", amount.expired_minor)):
+            cells.append(
+                Cell(
+                    key=f"kf:STOCK:value_{name}:{currency}",
+                    value=float(Decimal(minor).scaleb(-decimals)),
+                    is_count=False,
+                    internal_only=True,
+                )
+            )
+    return KeyFigureGroup(Module.STOCK, tuple(cells))
+
+
+def _stock_lot_list(rows: Sequence[LotRow]) -> tuple[StockLotListRow, ...]:
+    """The expired and expiring lots with stock on hand, by expiry date, type and lot code."""
+    listed = [
+        row
+        for row in rows
+        if row.on_hand > 0 and row.status in (LotStatus.EXPIRED, LotStatus.EXPIRING)
+    ]
+    listed.sort(key=lambda row: (row.expires_on or date.max, row.type_code, row.lot_code))
+    return tuple(
+        StockLotListRow(row.type_code, row.lot_code, row.expires_on, row.on_hand, row.status)
+        for row in listed
+    )
+
+
 def _alert_summary(
     *,
     expiring: int,
@@ -587,6 +648,15 @@ class ReportBuilder:
         found = stock_alerts(types, lots, movements, as_of, self._stock.stock_rules())
         return [alert.severity for alert in found]
 
+    def _stock_content(
+        self, as_of: date
+    ) -> tuple[tuple[KeyFigureGroup, ...], tuple[StockLotListRow, ...]]:
+        """The stock key figures and the lot list (nothing without a stock service)."""
+        if self._stock is None:
+            return (), ()
+        group = _stock_figures(self._stock.type_summaries(as_of), self._stock.stock_value(as_of))
+        return (group,), _stock_lot_list(self._stock.lot_rows(as_of))
+
     def _internal(self, as_of: date) -> ReportDocument:
         config = self._config_loader()
         data: DashboardData = self._dashboard.data(as_of)
@@ -638,6 +708,7 @@ class ReportBuilder:
             indicator_cells=indicator_cells,
             stock=self._stock_severities(as_of),
         )
+        stock_figures, stock_lots = self._stock_content(as_of)
         return ReportDocument(
             variant=ReportVariant.INTERNAL,
             header=ReportHeader(
@@ -656,6 +727,7 @@ class ReportBuilder:
                 infrastructure,
                 _exercise_figures(tiles),
                 _budget_figures(data.charts, self._budget_totals(as_of)),
+                *stock_figures,
             ),
             indicators=indicators,
             alert_summary=alerts,
@@ -668,4 +740,5 @@ class ReportBuilder:
                 AssetListRow(row.tag, row.type_code, row.due_on, row.days_to_due)
                 for row in lists.overdue
             ),
+            stock_lots=stock_lots,
         )

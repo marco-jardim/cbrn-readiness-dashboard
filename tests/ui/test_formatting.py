@@ -80,6 +80,27 @@ def test_format_date(lang: str, expected: str, pattern: str) -> None:
     assert fmt.format_iso_date_text("2026-03-05", lang) == expected
 
 
+@pytest.mark.parametrize(
+    ("lang", "value", "expected"),
+    [
+        ("en_US", date(2026, 3, 5), "March 2026"),
+        ("pt_BR", date(2026, 3, 5), "Mar\u00e7o 2026"),
+        ("es_ES", date(2026, 3, 5), "Marzo 2026"),
+        ("en_US", date(2026, 12, 31), "December 2026"),
+        ("pt_BR", date(2027, 1, 1), "Janeiro 2027"),
+        ("es_ES", date(2027, 1, 1), "Enero 2027"),
+    ],
+)
+def test_format_month(lang: str, value: date, expected: str) -> None:
+    """The month name of Qt with the first letter raised, and the four-digit year."""
+    assert fmt.format_month(value, lang) == expected
+
+
+def test_format_month_ignores_the_day_and_accepts_bcp47() -> None:
+    first = fmt.format_month(date(2026, 3, 1), "en_US")
+    assert first == fmt.format_month(date(2026, 3, 31), "en-US") == "March 2026"
+
+
 @pytest.mark.parametrize("iso", ["", "2026-3-5", "2026-02-30", "05/03/2026", "20260305", "x" * 10])
 def test_format_iso_date_text_rejects_garbage(iso: str) -> None:
     with pytest.raises(FormatError) as info:

@@ -49,6 +49,19 @@ A página Infraestrutura lista os ativos por tipo e etiqueta com sua situação 
 
 Os tipos de ativo e a regra de disponibilidade, que decide se unidades degradadas contam como disponíveis, ficam em Configurações.
 
+## Antídotos e descontaminantes
+<!-- topic: antidotes -->
+
+A página Antídotos e descontaminantes mostra o estoque dos tipos de item antídoto e descontaminante, por lote, na data de referência. Ela guarda apenas dados de gestão: quantidades, lotes, validades, preços e movimentações. Não há campos para doses, indicações ou protocolos, e os códigos de lote e as observações não devem conter informações clínicas.
+
+Um filtro de tipo acima das abas limita a página a um tipo de item. A página tem três abas:
+
+- Lotes e movimentações: um resumo de cada tipo de item, os lotes com sua quantidade, situação e dias até o vencimento, e as movimentações datadas do lote selecionado (entradas, saídas, descartes, perdas e ajustes). Um lote é criado com sua primeira entrada, e a quantidade em qualquer data é a soma das movimentações até essa data. O saldo de um lote nunca pode ficar negativo.
+- Aprazamento de vencimentos: os lotes que ainda têm estoque, agrupados por período de vencimento: vencidos, um período para cada mês do horizonte (6, 12 ou 24 meses), mais tarde e sem data de validade.
+- Alertas: os alertas de estoque desses tipos de item na data de referência. "Abrir registro" seleciona o lote na primeira aba, ou define o filtro de tipo para um alerta sobre um tipo de item.
+
+Adicionar, editar e excluir lotes e movimentações altera dados, por isso fica desativado no modo somente leitura. O prazo de aviso de vencimento e o estoque mínimo de cada tipo ficam em Configurações. O Painel tem um atalho para esta página.
+
 ## Exercícios
 <!-- topic: exercises -->
 

@@ -67,6 +67,7 @@ PAGE_TITLES = {
     "dashboard": "Painel",
     "personnel": "Pessoal",
     "infrastructure": "Infraestrutura",
+    "antidotes": "Ant\u00eddotos e descontaminantes",
     "exercises": "Exerc\u00edcios",
     "budget": "Or\u00e7amento",
     "alerts": "Alertas",

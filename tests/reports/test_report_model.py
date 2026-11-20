@@ -24,6 +24,7 @@ from cbrn_dashboard.domain.alerts import Severity
 from cbrn_dashboard.domain.indicators import IndicatorStatus, Module
 from cbrn_dashboard.domain.infrastructure import AssetStatus
 from cbrn_dashboard.domain.personnel import PpeLevel
+from cbrn_dashboard.domain.stock import LotStatus
 from cbrn_dashboard.reports.anonymise import anonymise
 from cbrn_dashboard.reports.model import (
     PRELIMINARY_NOTICE_CODE,
@@ -35,6 +36,7 @@ from cbrn_dashboard.reports.model import (
     ReportDocument,
     ReportHeader,
     ReportVariant,
+    StockLotListRow,
 )
 from cbrn_dashboard.services.alerts import AlertService
 from cbrn_dashboard.services.budget import BudgetService, EntryInput
@@ -54,6 +56,12 @@ from cbrn_dashboard.services.personnel import (
     PersonnelService,
     StaffInput,
     TrainingInput,
+)
+from cbrn_dashboard.services.stock import (
+    InitialReceipt,
+    LotInput,
+    MovementInput,
+    StockService,
 )
 from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import DatabaseConnection
@@ -749,6 +757,150 @@ def test_anonymise_does_not_mutate_its_input_and_is_idempotent(world: World) -> 
     assert internal.retraining and internal.header.institution_name == INSTITUTION
     assert once is not internal
     assert anonymise(once) == once
+
+
+# --------------------------------------------------------------------------- stock (T11.15)
+
+STOCK_LOT_CODES = ("FIC-L1", "FIC-L2", "FIC-L3", "FIC-L4", "FIC-D1")
+
+
+def _lot(
+    service: StockService,
+    type_id: int,
+    code: str,
+    expires: str,
+    qty: int,
+    unit_price_minor: int | None = None,
+    currency: str | None = None,
+) -> int:
+    lot = LotInput(type_id, code, expires, unit_price_minor, currency)
+    return service.create_lot(lot, InitialReceipt("2026-01-05", qty))
+
+
+@pytest.fixture
+def stock_world(world: World, clock: FixedClock) -> World:
+    """The seeded world plus fictitious stock, read on AS_OF (2026-03-05, warning window 90 days).
+
+    ANTIDOTE_CHEMICAL (minimum 100): FIC-L1 expired 2026-02-01, 4 x 2 500 BRL; FIC-L2 expiring
+    2026-04-01, 10 x 1 250 BRL; FIC-L3 valid to 2027-03-01, 7 x 100 USD; FIC-L4 expired but empty
+    (3 received, 3 disposed of). DECONTAMINANT: FIC-D1 expiring 2026-05-01, 2 on hand, no price.
+    So: lots expired 1, lots expiring 2, types below the minimum 1 (valid 17 < 100);
+    value BRL valid 125.00 and expired 100.00, USD valid 7.00 and expired 0.00.
+    """
+    stock = StockService(world.conn, clock, _operator)
+    antidote = stock.get_type_by_code("ANTIDOTE_CHEMICAL")
+    decon = stock.get_type_by_code("DECONTAMINANT")
+    assert antidote is not None and decon is not None
+    _lot(stock, antidote.id, "FIC-L1", "2026-02-01", 4, unit_price_minor=2500, currency="BRL")
+    _lot(stock, antidote.id, "FIC-L2", "2026-04-01", 10, unit_price_minor=1250, currency="BRL")
+    _lot(stock, antidote.id, "FIC-L3", "2027-03-01", 7, unit_price_minor=100, currency="USD")
+    empty = _lot(stock, antidote.id, "FIC-L4", "2026-02-01", 3)
+    stock.record_movement(empty, MovementInput("2026-01-20", "disposal", 3))
+    _lot(stock, decon.id, "FIC-D1", "2026-05-01", 2)
+    stock.set_minimum(antidote.id, 100)
+    builder = ReportBuilder(
+        conn=world.conn,
+        clock=clock,
+        dashboard=world.dashboard,
+        personnel=world.personnel,
+        infrastructure=InfrastructureService(world.conn, clock, _operator),
+        config_loader=world.config.load,
+        app_version=VERSION,
+        stock=stock,
+    )
+    return dataclasses.replace(world, builder=builder)
+
+
+def _all_report_cells(document: ReportDocument) -> list[Cell]:
+    cells = [c for group in document.key_figures for c in group.cells]
+    cells.extend(row.value for row in document.indicators)
+    cells.extend(alert.cell for alert in document.alert_summary)
+    cells.extend(_chart_cells(document))
+    return cells
+
+
+def test_a_report_without_a_stock_service_has_no_stock_content(world: World) -> None:
+    document = world.builder.build(AS_OF, ReportVariant.INTERNAL)
+
+    assert Module.STOCK not in [g.module for g in document.key_figures]
+    assert document.stock_lots == ()
+
+
+def test_internal_stock_key_figures_and_money_per_currency(stock_world: World) -> None:
+    document = stock_world.builder.build(AS_OF, ReportVariant.INTERNAL)
+
+    assert [g.module for g in document.key_figures][-1] is Module.STOCK
+    group = _group(document, Module.STOCK)
+    assert [(c.key, c.value) for c in group.cells] == [
+        ("kf:STOCK:lots_expired", 1.0),
+        ("kf:STOCK:lots_expiring", 2.0),
+        ("kf:STOCK:types_below_min", 1.0),
+        ("kf:STOCK:value_valid:BRL", 125.0),
+        ("kf:STOCK:value_expired:BRL", 100.0),
+        ("kf:STOCK:value_valid:USD", 7.0),
+        ("kf:STOCK:value_expired:USD", 0.0),
+    ]
+    counts = group.cells[:3]
+    money = group.cells[3:]
+    assert all(c.is_count and not c.internal_only and not c.personnel_derived for c in counts)
+    assert all(not c.is_count and c.internal_only for c in money)
+    # two currencies are never added: every value cell names its currency
+    assert all(c.key.count(":") == 3 for c in money)
+
+
+def test_internal_stock_lot_list_has_the_expired_and_expiring_lots_with_stock(
+    stock_world: World,
+) -> None:
+    document = stock_world.builder.build(AS_OF, ReportVariant.INTERNAL)
+
+    assert document.stock_lots == (
+        StockLotListRow("ANTIDOTE_CHEMICAL", "FIC-L1", date(2026, 2, 1), 4, LotStatus.EXPIRED),
+        StockLotListRow("ANTIDOTE_CHEMICAL", "FIC-L2", date(2026, 4, 1), 10, LotStatus.EXPIRING),
+        StockLotListRow("DECONTAMINANT", "FIC-D1", date(2026, 5, 1), 2, LotStatus.EXPIRING),
+    )  # not the valid lot FIC-L3, not the empty FIC-L4
+
+
+def test_anonymised_stock_has_the_counts_only(stock_world: World) -> None:
+    internal = stock_world.builder.build(AS_OF, ReportVariant.INTERNAL)
+    document = stock_world.builder.build(AS_OF, ReportVariant.ANONYMISED)
+
+    assert document == anonymise(internal)
+    assert document.stock_lots == ()
+    group = _group(document, Module.STOCK)
+    assert [(c.key, c.value, c.suppressed) for c in group.cells] == [
+        ("kf:STOCK:lots_expired", 1.0, False),
+        ("kf:STOCK:lots_expiring", 2.0, False),
+        ("kf:STOCK:types_below_min", 1.0, False),
+    ]
+    assert not [c for c in _all_report_cells(document) if c.internal_only]
+    assert not [r for r in document.indicators if r.code == "STOCK_VALID_QTY"]
+    assert "stock_antidotes_by_item" not in [chart.key for chart in document.charts]
+    stock_alerts = [a for a in document.alert_summary if a.source is AlertSource.STOCK]
+    assert len(stock_alerts) == 2  # the stock alert counts stay (critical and warning)
+    assert not any(a.cell.suppressed for a in stock_alerts)
+
+
+def test_anonymised_stock_has_no_quantity_value_or_lot_code(stock_world: World) -> None:
+    document = stock_world.builder.build(AS_OF, ReportVariant.ANONYMISED)
+
+    text = " ".join(_strings(document))
+    for forbidden in (*STOCK_LOT_CODES, "ANTIDOTE_CHEMICAL", "DECONTAMINANT", "value_"):
+        assert forbidden not in text, forbidden
+
+
+def test_no_total_of_contains_an_internal_only_cell(stock_world: World, world: World) -> None:
+    for source in (stock_world, world):
+        for variant in ReportVariant:
+            cells = _all_report_cells(source.builder.build(AS_OF, variant))
+            internal = {c.key for c in cells if c.internal_only}
+            for cell in cells:
+                assert not set(cell.total_of) & internal, (variant, cell.key)
+    internal_keys = {
+        c.key
+        for c in _all_report_cells(stock_world.builder.build(AS_OF, ReportVariant.INTERNAL))
+        if c.internal_only
+    }
+    assert "kf:STOCK:value_valid:BRL" in internal_keys
 
 
 # --------------------------------------------------------------------------- the rules alone

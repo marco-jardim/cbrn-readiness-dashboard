@@ -404,6 +404,10 @@
         <translation>Record snapshot</translation>
     </message>
     <message>
+        <source>Open antidotes and decontaminants</source>
+        <translation>Open antidotes and decontaminants</translation>
+    </message>
+    <message>
         <source>Alerts</source>
         <translation>Alerts</translation>
     </message>

@@ -344,6 +344,10 @@
         <translation type="unfinished">Avisar de los mantenimientos previstos en un máximo de (días)</translation>
     </message>
     <message>
+        <source>Stock lots: warning before expiry (days)</source>
+        <translation type="unfinished">Lotes de existencias: antelación del aviso de caducidad (días)</translation>
+    </message>
+    <message>
         <source>Enable or disable target</source>
         <translation type="unfinished">Activar o desactivar objetivo</translation>
     </message>

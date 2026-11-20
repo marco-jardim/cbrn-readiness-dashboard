@@ -49,6 +49,19 @@ Se pueden añadir, editar, dar de baja y eliminar activos, cambiar el estado de 
 
 Los tipos de activo y la regla de disponibilidad, que decide si las unidades degradadas cuentan como disponibles, se mantienen en Ajustes.
 
+## Antídotos y descontaminantes
+<!-- topic: antidotes -->
+
+La página Antídotos y descontaminantes muestra las existencias de los tipos de artículo antídoto y descontaminante, por lote, en la fecha de referencia. Guarda solo datos de gestión: cantidades, lotes, fechas de caducidad, precios y movimientos. No hay campos para dosis, indicaciones ni protocolos, y los códigos de lote y las notas no deben contener información clínica.
+
+Un filtro de tipo sobre las pestañas limita la página a un tipo de artículo. La página tiene tres pestañas:
+
+- Lotes y movimientos: un resumen de cada tipo de artículo, los lotes con su cantidad, estado y días hasta la caducidad, y los movimientos fechados del lote seleccionado (entradas, salidas, eliminaciones, pérdidas y ajustes). Un lote se crea con su primera entrada, y la cantidad en cualquier fecha es la suma de los movimientos hasta esa fecha. El saldo de un lote nunca puede quedar negativo.
+- Calendario de caducidades: los lotes que aún tienen existencias, agrupados por período de caducidad: caducados, un período por cada mes del horizonte (6, 12 o 24 meses), más adelante y sin fecha de caducidad.
+- Alertas: las alertas de existencias de esos tipos de artículo en la fecha de referencia. "Abrir registro" selecciona el lote en la primera pestaña, o define el filtro de tipo para una alerta sobre un tipo de artículo.
+
+Añadir, editar y eliminar lotes y movimientos modifica datos, por lo que queda desactivado en el modo de solo lectura. El plazo de aviso de caducidad y las existencias mínimas de cada tipo se mantienen en Ajustes. El Panel tiene un acceso directo a esta página.
+
 ## Ejercicios
 <!-- topic: exercises -->
 

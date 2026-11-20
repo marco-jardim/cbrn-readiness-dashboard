@@ -404,6 +404,10 @@
         <translation type="unfinished">Registrar instantánea</translation>
     </message>
     <message>
+        <source>Open antidotes and decontaminants</source>
+        <translation type="unfinished">Abrir antídotos y descontaminantes</translation>
+    </message>
+    <message>
         <source>Alerts</source>
         <translation type="unfinished">Alertas</translation>
     </message>

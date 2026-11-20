@@ -19,6 +19,7 @@ from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain.alerts import AlertKind, Severity
 from cbrn_dashboard.domain.indicators import IndicatorStatus
 from cbrn_dashboard.ui.alerts.page import AlertsPage
+from cbrn_dashboard.ui.antidotes.page import AntidotesPage
 from cbrn_dashboard.ui.budget.page import BudgetPage
 from cbrn_dashboard.ui.dashboard.page import DashboardPage
 from cbrn_dashboard.ui.exercises.page import ExercisesPage
@@ -42,6 +43,7 @@ PAGE_KEYS = (
     "dashboard",
     "personnel",
     "infrastructure",
+    "antidotes",
     "exercises",
     "budget",
     "alerts",
@@ -58,6 +60,7 @@ MINIMUM_ROWS = {
     "dashboard": 20,
     "personnel": 5,
     "infrastructure": 7,
+    "antidotes": 0,  # the demo stock arrives with T11.16, which raises this to its lot count
     "exercises": 8,
     "budget": 6,
     "alerts": 7,
@@ -88,6 +91,8 @@ def _row_count(page: QWidget) -> int:
         return page.staff_model.rowCount()
     if isinstance(page, InfrastructurePage):
         return page.assets_model.rowCount()
+    if isinstance(page, AntidotesPage):
+        return page.panel.lots_model.rowCount()
     if isinstance(page, ExercisesPage):
         return page.editions_model.rowCount()
     if isinstance(page, BudgetPage):

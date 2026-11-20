@@ -131,6 +131,7 @@
     </message>
     <message>
         <source>Add item type</source>
+        <extracomment>The placeholder of the minimum stock per item type (local only, no configuration field).</extracomment>
         <translation>Add item type</translation>
     </message>
     <message>
@@ -545,6 +546,39 @@
     <message>
         <source>Delete the selected movement of lot %1?</source>
         <translation>Delete the selected movement of lot %1?</translation>
+    </message>
+    <message>
+        <source>Deactivate</source>
+        <translation>Deactivate</translation>
+    </message>
+    <message>
+        <source>Activate</source>
+        <translation>Activate</translation>
+    </message>
+    <message>
+        <source>Delete item type</source>
+        <translation>Delete item type</translation>
+    </message>
+    <message>
+        <source>Confirm</source>
+        <translation>Confirm</translation>
+    </message>
+    <message>
+        <source>Stock item types</source>
+        <extracomment>Whether the badge of P12 is due (hidden without a readable configuration).</extracomment>
+        <translation>Stock item types</translation>
+    </message>
+    <message>
+        <source>The minimum stock of the item types is a placeholder until you confirm it or set a minimum.</source>
+        <translation>The minimum stock of the item types is a placeholder until you confirm it or set a minimum.</translation>
+    </message>
+    <message>
+        <source>Placeholder - to be confirmed</source>
+        <translation>Placeholder - to be confirmed</translation>
+    </message>
+    <message>
+        <source>Delete item type %1?</source>
+        <translation>Delete item type %1?</translation>
     </message>
 </context>
 </TS>

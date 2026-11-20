@@ -504,6 +504,25 @@ def test_activating_a_stock_alert_of_another_category_shows_infrastructure(
     assert host.shown == ["infrastructure"]
 
 
+@pytest.mark.parametrize("alert", [LOT_EXPIRED, LOT_EXPIRING, LOW_STOCK])
+def test_activating_a_stock_antidote_alert_switches_the_main_window_to_antidotes(
+    app_context: AppContext, qtbot: QtBot, alert: Alert
+) -> None:
+    _install(app_context, [alert])
+    assert "antidotes" in {spec.key for spec in registry.pages()}
+    spec = registry.PageSpec("alerts_under_test", 999, page_title, create_page)
+    with registry.registered(spec):
+        window = MainWindow(app_context)
+        qtbot.addWidget(window)
+        page = window.page_widget("alerts_under_test")
+        assert isinstance(page, AlertsPage)
+        window.show_page("alerts_under_test")
+
+        page.view.selectRow(0)
+        page.view.activated.emit(page.model.index(0, 0))
+        assert window.pages.currentWidget() is window.page_widget("antidotes")
+
+
 # --------------------------------------------------------------------------- language, services
 
 
