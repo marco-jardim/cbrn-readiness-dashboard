@@ -10,10 +10,10 @@ veja [data-protection.md](data-protection.md) (em inglês).
 
 ## 1. Situação deste guia
 
-A versão na árvore de código é `1.0.2`, e é a última versão **publicada**: ela foi publicada no
-GitHub em 2026-11-14, com a tag
+A versão na árvore de código é `1.1.0`; ela está em preparação e não foi publicada (sem tag). A
+última versão **publicada** é a 1.0.2: foi publicada no GitHub em 2026-11-14, com a tag
 `v1.0.2`: [página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2).
-A versão anterior, a 1.0.1, foi publicada em 2026-11-13
+A versão anterior a ela, a 1.0.1, foi publicada em 2026-11-13
 ([página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1)).
 O fluxo de publicação (`.github/workflows/release.yml`) só roda quando uma tag `vX.Y.Z` é enviada,
 monta o pacote e cria uma versão em *rascunho* que uma pessoa publica (a 1.0.0 foi montada do mesmo

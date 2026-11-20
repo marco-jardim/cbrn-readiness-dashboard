@@ -10,10 +10,11 @@ zip's first-run notes (`README-first-run.*.txt`) is shorter and says the same.
 
 ## 1. Status of this guide
 
-The version in the source tree is `1.0.2`, and it is the latest **published** release: it was
-published on GitHub on 2026-11-14, as the tag `v1.0.2`:
+The version in the source tree is `1.1.0`; it is in preparation and not published (no tag). The
+latest **published** release is 1.0.2: it was published on GitHub on 2026-11-14, as the tag
+`v1.0.2`:
 [release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2).
-The previous release, 1.0.1, was published on 2026-11-13
+The release before it, 1.0.1, was published on 2026-11-13
 ([release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1)).
 The release workflow (`.github/workflows/release.yml`) runs only when a tag `vX.Y.Z` is pushed,
 builds the bundle, and creates a *draft* release that a person publishes (version 1.0.0 was built

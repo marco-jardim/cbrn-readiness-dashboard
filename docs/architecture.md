@@ -524,8 +524,9 @@ fictitious.
   `SIGNPATH_PROJECT_SLUG` and `SIGNPATH_SIGNING_POLICY_SLUG` (optionally
   `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`) and the secret `SIGNPATH_API_TOKEN`; it is not active
   until the project is accepted by SignPath. See [CODE-SIGNING-POLICY.md](../CODE-SIGNING-POLICY.md).
-- The version in the source is `1.0.2`, single-sourced in `__init__.py` (hatch reads it, and
-  `uv.lock` records none). The last published release is 1.0.2, on GitHub on 2026-11-14 as the
+- The version in the source is `1.1.0` (in preparation, not published), single-sourced in
+  `__init__.py` (hatch reads it, and `uv.lock` records none). The last published release is 1.0.2,
+  on GitHub on 2026-11-14 as the
   tag `v1.0.2` (installer, zip and the Qt and PySide6 sources), before the manual test
   (`docs/smoke-test.pt-BR.md`, `docs/manual-test-script.pt-BR.md`), which is still pending; see
   `CHANGELOG.md`. (1.0.1, published on 2026-11-13, has the zip only; the draft of 1.0.0 was never
