@@ -9,8 +9,8 @@ row for the lot and one for every movement, so this module logs nothing by hand.
 checks no business rule: that is the service's job (``services/stock.py``). It also holds the one
 place where rows become domain objects.
 
-The movement functions here are the ones the initial receipt of a lot needs (insert) and the reads;
-recording, correcting and deleting later movements is added by T11.6 on top of the same row type.
+The movement functions cover the reads, the natural-key lookup and insert, update and delete of one
+movement (T11.6); the service checks the balance rule before it calls them.
 """
 
 from __future__ import annotations
@@ -29,10 +29,12 @@ __all__ = [
     "StockMovementRow",
     "StockTypeRow",
     "delete_lot",
+    "delete_movement",
     "delete_type",
     "get_lot",
     "get_lot_by_code",
     "get_movement",
+    "get_movement_by_key",
     "get_type",
     "get_type_by_code",
     "insert_lot",
@@ -47,6 +49,7 @@ __all__ = [
     "type_in_use",
     "type_to_domain",
     "update_lot",
+    "update_movement",
     "update_type",
 ]
 
@@ -400,6 +403,49 @@ def insert_movement(
         "note": note,
     }
     return _new_id(insert(ctx, _MOVEMENT, values))
+
+
+def get_movement_by_key(
+    conn: DatabaseConnection,
+    lot_id: int,
+    moved_on: str,
+    kind: str,
+    quantity: int,
+    reference: str,
+) -> StockMovementRow | None:
+    """The movement with this natural key (lot, date, kind, quantity, reference), if any."""
+    sql = (
+        f"SELECT {_MOVEMENT_COLUMNS} FROM stock_movement "
+        "WHERE lot_id = ? AND moved_on = ? AND kind = ? AND quantity = ? AND reference = ?"
+    )
+    row = conn.execute(sql, (lot_id, moved_on, kind, quantity, reference)).fetchone()
+    return None if row is None else _movement_row(row)
+
+
+def update_movement(
+    ctx: WriteContext,
+    movement_id: int,
+    *,
+    moved_on: str,
+    kind: str,
+    quantity: int,
+    reference: str,
+    note: str | None,
+) -> bool:
+    """Set every editable column (never the lot); returns whether anything changed."""
+    changes: dict[str, object] = {
+        "moved_on": moved_on,
+        "kind": kind,
+        "quantity": quantity,
+        "reference": reference,
+        "note": note,
+    }
+    return update(ctx, _MOVEMENT, movement_id, changes)
+
+
+def delete_movement(ctx: WriteContext, movement_id: int) -> int:
+    """Delete one movement (logged as a ``delete`` row); returns the number of rows deleted."""
+    return delete(ctx, _MOVEMENT, movement_id)
 
 
 # --------------------------------------------------------------------------- domain converters

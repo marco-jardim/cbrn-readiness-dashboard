@@ -2324,7 +2324,7 @@ Rules that hold for every task of the phase:
 - Check: `uv run pytest tests/storage/test_stock_repo.py tests/services/test_stock_service.py`
 
 **T11.6 — Movements, balance rule and as-of views** (M) · Depends on: T11.5
-- Files: `services/stock.py`, `storage/stock_repo.py`, `tests/services/test_stock_service.py` (extend), `tests/services/test_stock_balance.py`.
+- Files: `services/stock.py`, `storage/stock_repo.py`, `tests/services/test_stock_service.py` (extend), `tests/services/test_stock_movements.py`.
 - Work:
   - Add, edit and delete movements. A quantity is from 1 to 1,000,000 (`INVALID_QUANTITY`); an adjustment needs a note (`NOTE_REQUIRED`); a date after `Clock.local_date()` is refused (`DATE_IN_FUTURE`, with the injected clock); a duplicate is `DUPLICATE_MOVEMENT`.
   - The balance is never negative (D33): on every insert, update and delete, backdated ones included, the change is applied in memory first and refused with `BALANCE_NEGATIVE` (field `quantity`, or the movement id for a delete) when `first_negative_day` is not None, before anything is written. The last movement of a lot cannot be deleted (`ONLY_MOVEMENT`; like `ONLY_STATUS_EVENT` in T3.3). A real lot is closed with a disposal or a loss and then shows as empty.
@@ -2336,7 +2336,7 @@ Rules that hold for every task of the phase:
   - a movement dated tomorrow is refused; one dated today is accepted;
   - the views for a date before the first receipt show the lot as not received;
   - every refusal leaves the database as it was.
-- Check: `uv run pytest tests/services/test_stock_service.py tests/services/test_stock_balance.py`
+- Check: `uv run pytest tests/services/test_stock_service.py tests/services/test_stock_movements.py`
 
 **T11.7 — Stock indicators, `Module.STOCK`, snapshot hash and wiring** (M) · Depends on: T11.6, T6.1, T8.1
 - Files: `domain/stock.py`, `domain/indicators.py`, `domain/registry.py` (one `PROVIDERS` line), `services/indicators.py`, `services/dashboard.py`, `services/snapshots.py`, `ui/shell/context.py`, `demo/stack.py`, `ui/reports/actions.py`, `ui/dashboard/labels.py`, `docs/indicators.md`, `tests/meta/test_docs.py`, `tests/domain/test_stock.py`, `tests/domain/test_indicators.py`, `tests/ui/test_dashboard_page.py`, `tests/ui/test_alert_labels.py`, `tests/reports/test_report_pdf.py`, `tests/services/test_stock_indicators.py`, `tests/services/test_snapshots.py`.

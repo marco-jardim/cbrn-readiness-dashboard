@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Stock service: item types and lots (PLAN.md T11.5; movements and views come with T11.6).
+"""Stock service: item types, lots, movements and as-of views (PLAN.md T11.5 and T11.6).
 
 Qt-free. The rules about *values* (quantity, validity, status, minimum) live in ``domain/stock.py``;
 the rules about *input* live here and are reported as
@@ -20,20 +20,49 @@ confirm the P12 placeholder in the same transaction.
 
 A lot is created together with its initial receipt movement (D33) in one transaction. Stock is
 management data only (D19, D38): there is no clinical field anywhere.
+
+Movements (T11.6): a quantity from 1 to :data:`MAX_QUANTITY`, a note for an adjustment, no date
+after the injected clock's local date, no duplicate (lot, date, kind, quantity, reference). The
+balance of a lot is never negative (D33): every insert, update and delete is applied to the lot's
+movements in memory first and refused with ``BALANCE_NEGATIVE`` when ``first_negative_day`` finds a
+negative
+day, before anything is written. The last movement of a lot cannot be deleted (``ONLY_MOVEMENT``);
+a real lot is closed with a disposal or a loss. Movements on a lot of an inactive type stay allowed.
+
+The as-of views (lot rows, type summaries, value, expiry schedule) only load the rows, convert them
+and delegate to ``domain/stock.py``; ``alert_inputs`` hands the domain records to the alert and
+indicator services.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 
 from cbrn_dashboard.clock import Clock
+from cbrn_dashboard.domain import stock as rules
 from cbrn_dashboard.domain.budget import is_valid_currency
 from cbrn_dashboard.domain.config import ConfigError, ReadinessConfig
 from cbrn_dashboard.domain.dates import InvalidDateError, format_iso_date, parse_iso_date
-from cbrn_dashboard.domain.stock import EXPIRY_REQUIRED_CATEGORIES, MovementKind, StockCategory
+from cbrn_dashboard.domain.stock import (
+    EXPIRY_REQUIRED_CATEGORIES,
+    SIGN,
+    Lot,
+    LotRow,
+    Movement,
+    MovementKind,
+    ScheduleBucket,
+    StockCategory,
+    StockDataError,
+    StockRules,
+    StockType,
+    StockValue,
+    TypeSummary,
+    first_negative_day,
+    signed_quantity,
+)
 from cbrn_dashboard.services.budget import INVALID_AMOUNT, INVALID_CURRENCY, MAX_MINOR
 from cbrn_dashboard.services.config import CORRUPT_SETTING
 from cbrn_dashboard.services.errors import (
@@ -61,31 +90,40 @@ from cbrn_dashboard.storage import stock_repo as repo
 from cbrn_dashboard.storage.db import DatabaseConnection, ReadOnlyDatabaseError, transaction
 from cbrn_dashboard.storage.repository import ForeignKeyError, RowNotFoundError, WriteContext
 from cbrn_dashboard.storage.settings_repo import load_config
-from cbrn_dashboard.storage.stock_repo import StockLotRow, StockTypeRow
+from cbrn_dashboard.storage.stock_repo import StockLotRow, StockMovementRow, StockTypeRow
 
 __all__ = [
+    "BALANCE_NEGATIVE",
     "BUILT_IN_TYPE",
     "CATEGORY_IMMUTABLE",
     "CODE_IMMUTABLE",
     "DATE_IN_FUTURE",
     "DUPLICATE_CODE",
     "DUPLICATE_LOT",
+    "DUPLICATE_MOVEMENT",
     "EXPIRY_REQUIRED",
     "INITIAL_RECEIPT_REQUIRED",
     "INVALID_AMOUNT",
     "INVALID_CATEGORY",
     "INVALID_CURRENCY",
+    "INVALID_KIND",
+    "INVALID_MONTHS",
     "INVALID_QUANTITY",
     "LABEL_PT_BR_REQUIRED",
     "LOT_CODE_MAX_LENGTH",
     "MAX_MINIMUM",
     "MAX_QUANTITY",
+    "NOTE_REQUIRED",
+    "ONLY_MOVEMENT",
     "TEXT_TOO_LONG",
     "TYPE_INACTIVE",
     "TYPE_IN_USE",
     "InitialReceipt",
     "LotInput",
     "LotView",
+    "MovementInput",
+    "MovementView",
+    "StockDataQuality",
     "StockService",
     "StockTypeInput",
     "StockTypeView",
@@ -108,6 +146,18 @@ EXPIRY_REQUIRED = "EXPIRY_REQUIRED"
 DUPLICATE_LOT = "DUPLICATE_LOT"
 #: A movement is dated after the injected clock's local date.
 DATE_IN_FUTURE = "DATE_IN_FUTURE"
+#: The change would make the end-of-day balance of the lot negative on some date (D33).
+BALANCE_NEGATIVE = "BALANCE_NEGATIVE"
+#: An adjustment (in or out) has no note.
+NOTE_REQUIRED = "NOTE_REQUIRED"
+#: The lot already has a movement with this date, kind, quantity and reference.
+DUPLICATE_MOVEMENT = "DUPLICATE_MOVEMENT"
+#: The last movement of a lot cannot be deleted: close the lot with a disposal or a loss.
+ONLY_MOVEMENT = "ONLY_MOVEMENT"
+#: The kind is not one of the six of ``MovementKind``.
+INVALID_KIND = "INVALID_KIND"
+#: The horizon of the expiry schedule is not from 1 to 60 months.
+INVALID_MONTHS = "INVALID_MONTHS"
 
 #: Longest lot code, in characters.
 LOT_CODE_MAX_LENGTH = 64
@@ -191,6 +241,55 @@ class LotView:
     notes: str | None
 
 
+@dataclass(frozen=True)
+class MovementInput:
+    """The editable fields of a movement: strict ISO date (or ``date``), kind, quantity 1..1e6.
+
+    The lot of a movement never changes. An adjustment needs a ``note``; an empty ``reference``
+    is stored as ``''``.
+    """
+
+    moved_on: str | date | None
+    kind: MovementKind | str | None
+    quantity: int | None
+    reference: str | None = None
+    note: str | None = None
+
+
+@dataclass(frozen=True)
+class MovementView:
+    """A stored movement with its signed quantity and the balance of the lot after it.
+
+    Movements are ordered by date; inside one day the inflows come before the outflows (the order
+    inside a day does not matter for the rule), then by id. So ``balance_after`` is never negative.
+    """
+
+    id: int
+    lot_id: int
+    moved_on: date
+    kind: MovementKind
+    quantity: int
+    signed_quantity: int
+    balance_after: int
+    reference: str
+    note: str | None
+
+
+@dataclass(frozen=True)
+class StockDataQuality:
+    """Simple data-quality findings of the stock on a date (lot ids, ordered).
+
+    ``lots_without_movements``: lots with no movement at all (a lot made through the service always
+    has its receipt; this finds the ones that came from elsewhere). ``lots_without_price``: lots
+    with stock on hand on ``as_of`` and no price (or no currency); their value is missing from the
+    stock value, as ``StockValue.unpriced_lots`` counts.
+    """
+
+    as_of: date
+    lots_without_movements: tuple[int, ...]
+    lots_without_price: tuple[int, ...]
+
+
 def stock_type_label(view: StockTypeView, lang: str) -> str:
     """The label of ``view`` in ``lang`` (``pt_BR``, ``en_US`` or ``es_ES``; ``-`` too).
 
@@ -241,6 +340,19 @@ class _ReceiptFields:
     note: str | None
 
 
+@dataclass(frozen=True)
+class _MovementFields:
+    moved_on: date
+    kind: MovementKind
+    quantity: int
+    reference: str
+    note: str | None
+
+
+#: The kinds that need a note.
+_ADJUSTMENTS = frozenset({MovementKind.ADJUSTMENT_IN, MovementKind.ADJUSTMENT_OUT})
+
+
 def _clean(text: str | None) -> str | None:
     """Strip a free-text field; blank becomes ``None``."""
     if text is None:
@@ -261,6 +373,16 @@ def _parse_category(value: object) -> StockCategory:
     if isinstance(value, str) and value in {category.value for category in StockCategory}:
         return StockCategory(value)
     raise ServiceError(INVALID_CATEGORY, "category")
+
+
+def _parse_kind(value: object) -> MovementKind:
+    if value is None:
+        raise ServiceError(REQUIRED, "kind")
+    if isinstance(value, MovementKind):
+        return value
+    if isinstance(value, str) and value in {kind.value for kind in MovementKind}:
+        return MovementKind(value)
+    raise ServiceError(INVALID_KIND, "kind")
 
 
 def _minimum(value: object) -> int | None:
@@ -338,6 +460,34 @@ def _type_view(row: StockTypeRow) -> StockTypeView:
     )
 
 
+def _display_order(row: StockMovementRow) -> tuple[str, int, int]:
+    """Date, inflows before outflows, id: the order of the running balance shown to the user."""
+    return (row.moved_on, 0 if SIGN[MovementKind(row.kind)] > 0 else 1, row.id)
+
+
+def _movement_views(rows: Iterable[StockMovementRow]) -> list[MovementView]:
+    views: list[MovementView] = []
+    balance = 0
+    for row in sorted(rows, key=_display_order):
+        movement = repo.movement_to_domain(row)
+        signed = signed_quantity(movement)
+        balance += signed
+        views.append(
+            MovementView(
+                id=row.id,
+                lot_id=row.lot_id,
+                moved_on=movement.moved_on,
+                kind=movement.kind,
+                quantity=row.quantity,
+                signed_quantity=signed,
+                balance_after=balance,
+                reference=row.reference,
+                note=row.note,
+            )
+        )
+    return views
+
+
 def _lot_view(row: StockLotRow, type_codes: dict[int, str]) -> LotView:
     return LotView(
         id=row.id,
@@ -355,7 +505,7 @@ def _lot_view(row: StockLotRow, type_codes: dict[int, str]) -> LotView:
 
 
 class StockService:
-    """Create, change, delete and read stock item types and lots."""
+    """Create, change, delete and read stock types, lots and movements; the as-of views."""
 
     def __init__(
         self,
@@ -711,3 +861,235 @@ class StockService:
     def get_lot(self, lot_id: int) -> LotView:
         """One lot; ``NOT_FOUND`` when it does not exist."""
         return _lot_view(self._lot_row(lot_id), self._type_codes())
+
+    # ----- movements: validation
+
+    def _movement_row(self, movement_id: int) -> StockMovementRow:
+        row = repo.get_movement(self._conn, movement_id)
+        if row is None:
+            raise ServiceError(NOT_FOUND, "movement_id")
+        return row
+
+    def _validate_movement(
+        self, lot_id: int, movement_id: int | None, data: MovementInput
+    ) -> _MovementFields:
+        """Check the input of a movement of ``lot_id``; ``movement_id`` is the one being edited."""
+        moved_on = _parse_date(data.moved_on, "moved_on")
+        kind = _parse_kind(data.kind)
+        quantity = _quantity(data.quantity, "quantity")
+        note = _clean(data.note)
+        if kind in _ADJUSTMENTS:
+            require(note is not None, NOTE_REQUIRED, "note")
+        require(moved_on <= self._clock.local_date(), DATE_IN_FUTURE, "moved_on")
+        reference = (data.reference or "").strip()
+        existing = repo.get_movement_by_key(
+            self._conn, lot_id, format_iso_date(moved_on), kind.value, quantity, reference
+        )
+        require(existing is None or existing.id == movement_id, DUPLICATE_MOVEMENT, "moved_on")
+        return _MovementFields(
+            moved_on=moved_on, kind=kind, quantity=quantity, reference=reference, note=note
+        )
+
+    def _require_balance(
+        self,
+        lot_id: int,
+        field: str,
+        *,
+        without: int | None = None,
+        added: Movement | None = None,
+    ) -> None:
+        """Refuse with ``BALANCE_NEGATIVE`` when the change would leave a negative balance.
+
+        The change is the lot's stored movements with ``without`` left out and ``added`` put in,
+        applied in memory only: nothing is written here.
+        """
+        movements = [
+            repo.movement_to_domain(row)
+            for row in repo.list_movements(self._conn, lot_id)
+            if row.id != without
+        ]
+        if added is not None:
+            movements.append(added)
+        require(first_negative_day(movements) is None, BALANCE_NEGATIVE, field)
+
+    # ----- movements: writes
+
+    def record_movement(self, lot_id: int, data: MovementInput) -> int:
+        """Record a movement of a lot (backdated ones too); returns its id.
+
+        Errors: ``NOT_FOUND`` (``lot_id``), ``REQUIRED``/``INVALID_DATE``, ``INVALID_KIND``,
+        ``INVALID_QUANTITY``, ``NOTE_REQUIRED`` (adjustments), ``DATE_IN_FUTURE``,
+        ``DUPLICATE_MOVEMENT`` and ``BALANCE_NEGATIVE`` (field ``quantity``). Allowed for a lot of
+        an inactive type. A refusal writes nothing.
+        """
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            self._lot_row(lot_id)
+            fields = self._validate_movement(lot_id, None, data)
+            self._require_balance(
+                lot_id,
+                "quantity",
+                added=Movement(
+                    id=0,
+                    lot_id=lot_id,
+                    moved_on=fields.moved_on,
+                    kind=fields.kind,
+                    quantity=fields.quantity,
+                ),
+            )
+            return repo.insert_movement(
+                self._ctx(),
+                lot_id=lot_id,
+                moved_on=format_iso_date(fields.moved_on),
+                kind=fields.kind.value,
+                quantity=fields.quantity,
+                reference=fields.reference,
+                note=fields.note,
+            )
+
+    def update_movement(self, movement_id: int, data: MovementInput) -> None:
+        """Correct a movement (date, kind, quantity, reference, note); its lot stays the same.
+
+        The same errors as :meth:`record_movement`; ``BALANCE_NEGATIVE`` when the corrected movement
+        would make the balance negative on any date (field ``quantity``).
+        """
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            current = self._movement_row(movement_id)
+            fields = self._validate_movement(current.lot_id, movement_id, data)
+            self._require_balance(
+                current.lot_id,
+                "quantity",
+                without=movement_id,
+                added=Movement(
+                    id=movement_id,
+                    lot_id=current.lot_id,
+                    moved_on=fields.moved_on,
+                    kind=fields.kind,
+                    quantity=fields.quantity,
+                ),
+            )
+            repo.update_movement(
+                self._ctx(),
+                movement_id,
+                moved_on=format_iso_date(fields.moved_on),
+                kind=fields.kind.value,
+                quantity=fields.quantity,
+                reference=fields.reference,
+                note=fields.note,
+            )
+
+    def delete_movement(self, movement_id: int) -> None:
+        """Delete a movement (a correction).
+
+        ``ONLY_MOVEMENT`` for the last movement of a lot (close the lot with a disposal or a loss);
+        ``BALANCE_NEGATIVE`` (field ``movement_id``) when later outflows depend on it.
+        """
+        self._require_writable()
+        with _translated(), transaction(self._conn):
+            row = self._movement_row(movement_id)
+            only = len(repo.list_movements(self._conn, row.lot_id)) <= 1
+            require(not only, ONLY_MOVEMENT, "movement_id")
+            self._require_balance(row.lot_id, "movement_id", without=movement_id)
+            repo.delete_movement(self._ctx(), movement_id)
+
+    # ----- movements: reads
+
+    def movements(self, lot_id: int) -> list[MovementView]:
+        """The movements of a lot with the balance after each; ``NOT_FOUND`` for an unknown lot."""
+        self._lot_row(lot_id)
+        return _movement_views(repo.list_movements(self._conn, lot_id))
+
+    # ----- as-of views (the rules live in domain/stock.py)
+
+    def _rules(self) -> StockRules:
+        return StockRules(expiry_warning_days=self._config().stock_expiry_warning_days)
+
+    def _domain_inputs(
+        self, categories: Iterable[StockCategory | str] | None = None
+    ) -> tuple[list[StockType], list[Lot], list[Movement]]:
+        """Types, lots and movements as domain records, limited to ``categories`` when given.
+
+        Types of every state (inactive ones too); a lot and its movements are kept with their type.
+        """
+        wanted = None if categories is None else {_parse_category(item) for item in categories}
+        type_rows = [
+            row
+            for row in repo.list_types(self._conn)
+            if wanted is None or StockCategory(row.category) in wanted
+        ]
+        types = [repo.type_to_domain(row) for row in type_rows]
+        type_codes = {row.id: row.code for row in repo.list_types(self._conn)}
+        kept_ids = {row.id for row in type_rows}
+        lot_rows = [row for row in repo.list_lots(self._conn) if row.type_id in kept_ids]
+        lots = [repo.lot_to_domain(row, type_codes) for row in lot_rows]
+        lot_ids = {lot.id for lot in lots}
+        movements = [
+            repo.movement_to_domain(row)
+            for row in repo.list_movements(self._conn)
+            if row.lot_id in lot_ids
+        ]
+        return types, lots, movements
+
+    def alert_inputs(self) -> tuple[tuple[StockType, ...], tuple[Lot, ...], tuple[Movement, ...]]:
+        """Every type, lot and movement as domain records, for the alert and indicator services."""
+        types, lots, movements = self._domain_inputs()
+        return tuple(types), tuple(lots), tuple(movements)
+
+    def lot_rows(
+        self, as_of: date, categories: Iterable[StockCategory | str] | None = None
+    ) -> tuple[LotRow, ...]:
+        """One row per lot as read on ``as_of`` (domain ``lot_rows``), optionally by category.
+
+        A date before the first receipt shows the lot as ``NOT_RECEIVED``.
+        """
+        types, lots, movements = self._domain_inputs(categories)
+        return rules.lot_rows(types, lots, movements, as_of, self._rules())
+
+    def type_summaries(
+        self, as_of: date, categories: Iterable[StockCategory | str] | None = None
+    ) -> tuple[TypeSummary, ...]:
+        """One summary per type as read on ``as_of`` (domain ``type_summaries``)."""
+        types, lots, movements = self._domain_inputs(categories)
+        return rules.type_summaries(types, lots, movements, as_of, self._rules())
+
+    def expiry_schedule(
+        self,
+        as_of: date,
+        months: int = 12,
+        categories: Iterable[StockCategory | str] | None = None,
+    ) -> tuple[ScheduleBucket, ...]:
+        """The expiry schedule of the lots with stock (domain ``expiry_schedule``).
+
+        ``INVALID_MONTHS`` (field ``months``) unless ``months`` is from 1 to 60.
+        """
+        rows = self.lot_rows(as_of, categories)
+        try:
+            return rules.expiry_schedule(rows, as_of, months)
+        except StockDataError as exc:
+            raise ServiceError(INVALID_MONTHS, "months") from exc
+
+    def stock_value(
+        self, as_of: date, categories: Iterable[StockCategory | str] | None = None
+    ) -> StockValue:
+        """The value per currency on ``as_of`` (domain ``stock_value``); currencies stay apart."""
+        return rules.stock_value(self.lot_rows(as_of, categories))
+
+    def data_quality(self, as_of: date) -> StockDataQuality:
+        """Lots without any movement and lots with stock on hand and no price on ``as_of``."""
+        types, lots, movements = self._domain_inputs()
+        with_movements = {movement.lot_id for movement in movements}
+        rows = rules.lot_rows(types, lots, movements, as_of, self._rules())
+        return StockDataQuality(
+            as_of=as_of,
+            lots_without_movements=tuple(
+                sorted(lot.id for lot in lots if lot.id not in with_movements)
+            ),
+            lots_without_price=tuple(
+                sorted(
+                    row.lot_id
+                    for row in rows
+                    if row.on_hand > 0 and (row.value_minor is None or row.currency is None)
+                )
+            ),
+        )
