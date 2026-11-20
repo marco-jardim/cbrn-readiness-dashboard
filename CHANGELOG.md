@@ -59,6 +59,7 @@ sensitive):
 - `P07` - wording of the preliminary-version notice
 - `P08` - pro-rating of the budget execution target
 - `P09` - backup reminder period
+- `P11` - warning window before a stock lot expires
 - `A02` - PPE levels counted independently
 - `A04` - PPE qualification validity period per level
 - `A05` - degraded assets count as unavailable
@@ -75,17 +76,20 @@ installation in Settings only):
 - `P03` - indicator targets (local-only)
 - `P10` - handling notice of the internal report (local-only)
 - `D18` - institution and unit names (local-only)
+- `P12` - minimum stock per item type (local-only)
 
 ### Assumptions without a setting
 
-The assumptions A01, A03, A12, A13 and A14 carry no flag and are listed only through the open
-question each depends on:
+The assumptions A01, A03, A12, A13, A14, A15 and A16 carry no flag and are listed only through the
+open question each depends on:
 
 - A01 depends on Q5
 - A03 depends on Q2
 - A12 depends on Q12
 - A13 depends on Q7
 - A14 depends on Q4 and Q5
+- A15 depends on Q26
+- A16 depends on Q25
 
 ### Open questions
 

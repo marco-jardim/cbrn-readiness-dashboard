@@ -264,7 +264,7 @@ Every value that needs confirmation is declared in `domain/config.py` with a cod
 flag is the release-level truth. There are two kinds:
 
 - `local_only`: targets (P03), institution and unit names (D18) and the report handling notice
-  (P10). They never get a code default, their flag is never cleared in code, and they are
+  (P10) and the minimum stock per item type (P12). They never get a code default, their flag is never cleared in code, and they are
   confirmed per installation in Settings only.
 - `generic_default`: all the others. The flag may be cleared, and the default changed, only by a
   release commit when the project owner judges that the value is not sensitive.
@@ -295,13 +295,16 @@ column "Code flag" says `set` while the flag in the code is set.
 | A10 | `generic_default` | none (the status is per degree) | completed | set | Q3 |
 | A11 | `generic_default` | `small_count_threshold` | 5 | set | Q10 |
 | D18 | `local_only` | `institution_name`, `unit_name` | empty | set | Q17 |
+| P11 | `generic_default` | `stock_expiry_warning_days` | 90 days | set | Q28 |
+| P12 | `local_only` | none (the minimum lives in the stock item type table) | no minimum | set | Q26 |
 
 The configuration also holds `operator_label` (D05), which is not a placeholder.
 
 The assumptions without a setting carry no flag: A01 (available means in service and working, not
 free), A03 (the counting qualification), A12 (one operator, or people taking turns on one machine),
-A13 (the exercise kinds CBRAMED, EXBRAMED and other) and A14 (a person or an asset has one active
-interval; someone who returns is a new record).
+A13 (the exercise kinds CBRAMED, EXBRAMED and other), A14 (a person or an asset has one active
+interval; someone who returns is a new record), A15 (stock quantities are whole units of issue,
+with no unit column) and A16 (the category of each built-in stock item type).
 
 ### Open questions behind the placeholders
 
@@ -322,3 +325,5 @@ each one that a placeholder waits for is:
 | Q11 | information security |
 | Q15 | preliminary notice |
 | Q17 | report headers |
+| Q26 | units of issue and minimum stock |
+| Q28 | stock expiry rules |

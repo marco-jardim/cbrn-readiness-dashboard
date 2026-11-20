@@ -58,7 +58,7 @@ LAST_PUBLISHED_DATE = "2026-11-14"
 QUESTION_NUMBERS = range(1, 30)
 
 #: The local-only placeholders (PLAN.md 3.5): flagged in code, never given a code default.
-LOCAL_ONLY_IDS = ("P03", "P10", "D18")
+LOCAL_ONLY_IDS = ("P03", "P10", "D18", "P12")
 
 #: Every registered page (registry key) and its Brazilian Portuguese navigation title. The manual
 #: test script must name each title; a new page makes the registry test below fail until it is
@@ -76,7 +76,7 @@ PAGE_TITLES = {
 
 #: The A-items without a setting (PLAN.md 3.5): assumptions, listed in the changelog as open
 #: questions only.
-ASSUMPTIONS_WITHOUT_SETTING = {"A01", "A03", "A12", "A13", "A14"}
+ASSUMPTIONS_WITHOUT_SETTING = {"A01", "A03", "A12", "A13", "A14", "A15", "A16"}
 
 #: The three status phrases of an open question (PLAN.md section 12).
 STATUS_FORM = re.compile(

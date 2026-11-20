@@ -77,6 +77,7 @@ _DAY_FIELDS: tuple[str, ...] = (
     "cert_warning_days",
     "maintenance_warning_days",
     "backup_reminder_days",
+    "stock_expiry_warning_days",
 )
 _BOOL_FIELDS: tuple[str, ...] = (
     "snapshot_monthly",
@@ -174,6 +175,7 @@ class ReadinessConfig:
     unit_name: str = ""  # D18, local-only
     operator_label: str = ""  # D05, not a placeholder
     report_handling_notice: str = ""  # P10, local-only
+    stock_expiry_warning_days: int = 90  # P11
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "ppe_hierarchy", _freeze_hierarchy(self.ppe_hierarchy))
@@ -200,6 +202,7 @@ class ReadinessConfig:
         unit_name: str | None = None,
         operator_label: str | None = None,
         report_handling_notice: str | None = None,
+        stock_expiry_warning_days: int | None = None,
     ) -> Self:
         """A copy with the given fields replaced; ``None`` keeps the current value.
 
@@ -227,6 +230,9 @@ class ReadinessConfig:
             unit_name=_pick(unit_name, self.unit_name),
             operator_label=_pick(operator_label, self.operator_label),
             report_handling_notice=_pick(report_handling_notice, self.report_handling_notice),
+            stock_expiry_warning_days=_pick(
+                stock_expiry_warning_days, self.stock_expiry_warning_days
+            ),
         )
 
 
@@ -365,6 +371,9 @@ PLACEHOLDERS: tuple[Placeholder, ...] = (
     Placeholder("A10", _GENERIC, (), "Q3"),
     Placeholder("A11", _GENERIC, ("small_count_threshold",), "Q10"),
     Placeholder("D18", _LOCAL, ("institution_name", "unit_name"), "Q17"),
+    Placeholder("P11", _GENERIC, ("stock_expiry_warning_days",), "Q28"),
+    # The minimum stock per item type lives in stock_item_type (T11.3), so no config field.
+    Placeholder("P12", _LOCAL, (), "Q26"),
 )
 
 
@@ -572,6 +581,9 @@ def from_settings(values: Mapping[str, object]) -> ReadinessConfig:
         operator_label=_read_str(values, "operator_label", d.operator_label, code="INVALID_TEXT"),
         report_handling_notice=_read_str(
             values, "report_handling_notice", d.report_handling_notice, code="INVALID_TEXT"
+        ),
+        stock_expiry_warning_days=_read_int(
+            values, "stock_expiry_warning_days", d.stock_expiry_warning_days
         ),
     )
     validate(config)

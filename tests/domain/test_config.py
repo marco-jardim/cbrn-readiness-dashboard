@@ -50,6 +50,7 @@ EXPECTED_DEFAULTS: dict[str, object] = {
     "unit_name": "",
     "operator_label": "",
     "report_handling_notice": "",
+    "stock_expiry_warning_days": 90,
 }
 
 L = PlaceholderKind.LOCAL_ONLY
@@ -77,6 +78,8 @@ EXPECTED_REGISTRY: list[tuple[str, PlaceholderKind, tuple[str, ...], str | None,
     ("A10", G, (), "Q3", True),
     ("A11", G, ("small_count_threshold",), "Q10", True),
     ("D18", L, ("institution_name", "unit_name"), "Q17", True),
+    ("P11", G, ("stock_expiry_warning_days",), "Q28", True),
+    ("P12", L, (), "Q26", True),
 ]
 
 
@@ -152,10 +155,34 @@ def test_local_only_values_have_no_code_default_and_are_marked() -> None:
     assert local_only_fields() == frozenset(
         {"institution_name", "unit_name", "report_handling_notice"}
     )
-    for placeholder_id in ("P03", "P10", "D18"):
+    for placeholder_id in ("P03", "P10", "D18", "P12"):
         assert placeholder(placeholder_id).kind is PlaceholderKind.LOCAL_ONLY
         assert placeholder(placeholder_id).placeholder is True
     assert placeholder("P03").fields == ()  # the targets live in their own table
+
+
+def test_p12_minimum_stock_is_flagged_local_only_with_no_code_default_and_no_field() -> None:
+    item = placeholder("P12")
+    assert item.kind is PlaceholderKind.LOCAL_ONLY
+    assert item.placeholder is True
+    assert item.question == "Q26"
+    assert item.fields == ()  # the minimum lives in stock_item_type, not in the configuration
+    assert "P12" in flagged_placeholder_ids()
+    names = {spec.name for spec in dataclasses.fields(ReadinessConfig)}
+    assert not {name for name in names if "minimum" in name}
+
+
+def test_p11_stock_expiry_window_is_a_generic_default_of_90_days() -> None:
+    assert ReadinessConfig().stock_expiry_warning_days == 90
+    item = placeholder("P11")
+    assert item.kind is PlaceholderKind.GENERIC_DEFAULT
+    assert item.fields == ("stock_expiry_warning_days",)
+    assert item.question == "Q28"
+    assert item.placeholder is True
+    found = placeholder_for_field("stock_expiry_warning_days")
+    assert found is not None
+    assert found.id == "P11"
+    assert "stock_expiry_warning_days" not in local_only_fields()
 
 
 def test_operator_label_is_not_a_placeholder() -> None:
@@ -175,7 +202,7 @@ def test_flagged_placeholder_ids_in_registry_order() -> None:
     assert flagged_placeholder_ids() == tuple(row[0] for row in EXPECTED_REGISTRY if row[4])
     assert flagged_placeholder_ids() == (
         "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10",
-        "A02", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "D18",
+        "A02", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "D18", "P11", "P12",
     )  # fmt: skip
     assert isinstance(flagged_placeholder_ids(), tuple)
 
@@ -239,6 +266,13 @@ def test_registry_check_detects_broken_invariants(monkeypatch: pytest.MonkeyPatc
         ({"cert_warning_days": -1}, "NEGATIVE_DAYS", "cert_warning_days"),
         ({"maintenance_warning_days": -5}, "NEGATIVE_DAYS", "maintenance_warning_days"),
         ({"backup_reminder_days": -1}, "NEGATIVE_DAYS", "backup_reminder_days"),
+        ({"stock_expiry_warning_days": -1}, "NEGATIVE_DAYS", "stock_expiry_warning_days"),
+        ({"stock_expiry_warning_days": 3651}, "VALUE_TOO_LARGE", "stock_expiry_warning_days"),
+        ({"stock_expiry_warning_days": 10**9}, "VALUE_TOO_LARGE", "stock_expiry_warning_days"),
+        ({"stock_expiry_warning_days": "90"}, "INVALID_TYPE", "stock_expiry_warning_days"),
+        ({"stock_expiry_warning_days": 1.5}, "INVALID_TYPE", "stock_expiry_warning_days"),
+        ({"stock_expiry_warning_days": None}, "INVALID_TYPE", "stock_expiry_warning_days"),
+        ({"stock_expiry_warning_days": True}, "INVALID_TYPE", "stock_expiry_warning_days"),
         ({"cert_warning_days": 1.5}, "INVALID_TYPE", "cert_warning_days"),
         ({"cert_warning_days": "90"}, "INVALID_TYPE", "cert_warning_days"),
         ({"maintenance_warning_days": None}, "INVALID_TYPE", "maintenance_warning_days"),
@@ -304,6 +338,7 @@ def test_boundary_values_are_accepted() -> None:
             cert_warning_days=0,
             maintenance_warning_days=0,
             backup_reminder_days=0,
+            stock_expiry_warning_days=0,
             min_passphrase_length=12,
             daily_backups_kept=2,
             small_count_threshold=1,
@@ -331,6 +366,7 @@ def test_maximum_values_are_accepted() -> None:
             cert_warning_days=3650,
             maintenance_warning_days=3650,
             backup_reminder_days=3650,
+            stock_expiry_warning_days=3650,
             min_passphrase_length=128,
             daily_backups_kept=365,
             small_count_threshold=1000,
@@ -367,6 +403,7 @@ NON_DEFAULT = ReadinessConfig(
     unit_name="Test unit",
     operator_label="DEMO-OPERATOR",
     report_handling_notice="Demo notice",
+    stock_expiry_warning_days=45,
 )
 
 
@@ -374,6 +411,7 @@ def test_to_settings_has_one_prefixed_key_per_field() -> None:
     values = to_settings(ReadinessConfig())
     assert set(values) == {"config." + name for name in EXPECTED_DEFAULTS}
     assert values["config.cert_warning_days"] == 90
+    assert values["config.stock_expiry_warning_days"] == 90
     assert values["config.ppe_validity_months"] == {"A": None, "B": None, "C": None}
     assert values["config.ppe_hierarchy"] == {}
 
@@ -396,6 +434,19 @@ def test_round_trip_of_the_default_configuration() -> None:
     assert from_settings(to_settings(ReadinessConfig())) == ReadinessConfig()
 
 
+def test_stock_expiry_window_round_trips_and_defaults_when_missing() -> None:
+    changed = ReadinessConfig().with_changes(stock_expiry_warning_days=45)
+    assert changed.stock_expiry_warning_days == 45
+    assert changed.cert_warning_days == 90  # the other day fields are untouched
+    values = to_settings(changed)
+    assert values["config.stock_expiry_warning_days"] == 45
+    assert from_settings(values).stock_expiry_warning_days == 45
+    assert from_settings(json.loads(json.dumps(values))) == changed
+    assert from_settings({}).stock_expiry_warning_days == 90  # an older database has no key
+    zero = ReadinessConfig().with_changes(stock_expiry_warning_days=0)
+    assert zero.stock_expiry_warning_days == 0  # zero is a value, not "keep"
+
+
 def test_missing_keys_take_the_defaults_and_unknown_keys_are_ignored() -> None:
     config = from_settings(
         {
@@ -416,6 +467,12 @@ def test_missing_keys_take_the_defaults_and_unknown_keys_are_ignored() -> None:
         ("config.cert_warning_days", 1.5, "INVALID_TYPE"),
         ("config.maintenance_warning_days", "30", "INVALID_TYPE"),
         ("config.backup_reminder_days", 2.0, "INVALID_TYPE"),
+        ("config.stock_expiry_warning_days", "90", "INVALID_TYPE"),
+        ("config.stock_expiry_warning_days", 90.0, "INVALID_TYPE"),
+        ("config.stock_expiry_warning_days", True, "INVALID_TYPE"),
+        ("config.stock_expiry_warning_days", None, "INVALID_TYPE"),
+        ("config.stock_expiry_warning_days", -1, "NEGATIVE_DAYS"),
+        ("config.stock_expiry_warning_days", 3651, "VALUE_TOO_LARGE"),
         ("config.cert_warning_days", -1, "NEGATIVE_DAYS"),
         ("config.cert_warning_days", 10**9, "VALUE_TOO_LARGE"),
         ("config.daily_backups_kept", 10**9, "VALUE_TOO_LARGE"),

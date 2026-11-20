@@ -216,7 +216,7 @@ Every placeholder is declared in `domain/config.py` with a `placeholder` flag. T
 
 Settings shows a "placeholder — to be confirmed" badge until the operator confirms or changes the value; this per-database "confirmed" state only hides the badge on that installation and never changes the flag in code. Release notes and the changelog list the code-level flags.
 
-A-items without a setting (A01, A03, A12, A13, A14) are assumptions, not placeholders. They carry no flag and appear in the changelog only as open questions.
+A-items without a setting (A01, A03, A12, A13, A14, A15, A16) are assumptions, not placeholders. They carry no flag and appear in the changelog only as open questions.
 
 | ID | Assumption or placeholder | Default in v1 | Configurable in | Q |
 |---|---|---|---|---|
@@ -234,6 +234,8 @@ A-items without a setting (A01, A03, A12, A13, A14) are assumptions, not placeho
 | A12 | One operator, or several people taking turns on one machine; nobody edits at the same time. Taking turns works only with one shared Windows account, or with `--data-dir` pointing to a local folder restricted to the committee; with separate Windows accounts each person gets a separate database | — | — | Q12 |
 | A13 | The exercise register holds CBRAMED and EXBRAMED editions (L78), plus an "other" kind | — | — | Q7 |
 | A14 | A person or an asset has one active or in-service interval; someone who returns, or equipment that comes back, is entered as a new record | — | — | Q4, Q5 |
+| A15 | Stock quantities are whole units of issue per item type; there is no unit column and no fractional quantity (O01, D33) | — | — | Q26 |
+| A16 | Each of the 17 built-in stock item types has a fixed category (antidote, decontaminant, detector, PPE or other); the category of a type cannot change once it has lots (D36) | — | — | Q25 |
 | P01 | Warning window before a PPE qualification expires | 90 days | Settings | Q2 |
 | P02 | Warning window before maintenance is due | 30 days | Settings | Q6 |
 | P03 | Indicator targets (warning and critical values) | none, so the status shows "no target" | Settings → Targets | Q1 |
@@ -244,6 +246,8 @@ A-items without a setting (A01, A03, A12, A13, A14) are assumptions, not placeho
 | P08 | Pro-rating of the `BUD_EXEC_RATE` target over the fiscal year (the target is multiplied by the elapsed fraction of the year, linear) | linear, on | Settings → Budget | Q8 |
 | P09 | Reminder banner when the last encrypted backup is older than this many days | 30 days | Settings → Backup | Q11 |
 | P10 | Handling notice printed on the internal report (local-only value: no code default, flag never cleared in code) | empty | Settings → Reports | Q10 |
+| P11 | Warning window before a stock lot expires (D34): a lot is "expiring" when its expiry date is on or before the as-of date plus this many days | 90 days | Settings → Alerts | Q28 |
+| P12 | Minimum stock per item type (D35; local-only value: no code default, no config field, flag never cleared in code; stored in `stock_item_type`) | empty (no minimum) | Settings → Infrastructure | Q26 |
 
 ---
 
