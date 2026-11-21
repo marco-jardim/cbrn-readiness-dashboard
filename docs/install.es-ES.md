@@ -10,15 +10,17 @@ reales: vea [data-protection.md](data-protection.md) (en inglés).
 
 ## 1. Estado de esta guía
 
-La versión del árbol de código es `1.1.0`; está en preparación y no se ha publicado (sin etiqueta).
-La última versión **publicada** es la 1.0.2: se publicó en GitHub el 2026-11-14, con la etiqueta
-`v1.0.2`: [página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2).
-La versión anterior a esa, la 1.0.1, se publicó el 2026-11-13
+La versión del árbol de código es `1.1.0`, que también es la última versión **publicada**: se
+publicó en GitHub el 2026-11-21, con la etiqueta
+`v1.1.0`: [página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.1.0).
+La versión anterior a esa, la 1.0.2, se publicó el 2026-11-14
+([página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2)),
+y la 1.0.1 el 2026-11-13
 ([página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1)).
 El flujo de publicación (`.github/workflows/release.yml`) solo se ejecuta cuando se envía una
 etiqueta `vX.Y.Z`, construye el paquete y crea una versión en *borrador* que una persona publica
 (la 1.0.0 se construyó igual, pero su borrador nunca se publicó y fue retirado). El propietario
-publicó la 1.0.2 antes de la prueba manual en un perfil limpio de Windows
+publicó la 1.1.0 antes de la prueba manual en un perfil limpio de Windows
 ([smoke-test.pt-BR.md](smoke-test.pt-BR.md) y
 [manual-test-script.pt-BR.md](manual-test-script.pt-BR.md), en portugués), que **sigue
 pendiente**; su resultado se registrará en el registro de cambios. En los archivos descargados,
@@ -302,7 +304,7 @@ dónde guardar el archivo y escriba la contraseña dos veces. Para restaurar, el
 Restaurar...**, elija el archivo `.cbrnbak`, confirme que se sustituirán todos los datos actuales
 y escriba la contraseña. Restaurar no está disponible en el modo de solo lectura; la copia de
 seguridad sí. **Archivo > Abrir carpeta de datos** muestra la carpeta de datos local. La
-versión 1.0.2 contiene estas entradas (sección 1); una persona todavía no las ha probado en un
+versión 1.1.0 contiene estas entradas (sección 1); una persona todavía no las ha probado en un
 perfil limpio.
 
 ## 12. Actualizaciones
@@ -331,7 +333,7 @@ Las copias cifradas guardadas en otros medios no se ven afectadas en ninguno de 
 
 ## 14. Límites conocidos
 
-- La versión 1.0.2 está publicada, pero su prueba manual en un perfil limpio sigue pendiente
+- La versión 1.1.0 está publicada, pero su prueba manual en un perfil limpio sigue pendiente
   (sección 1). El ejecutable no está firmado.
 - El instalador lo construye y lo prueba en modo silencioso solo el flujo de publicación; no está
   firmado (sección 4.3), y una persona todavía no lo ha ejecutado en un perfil limpio.

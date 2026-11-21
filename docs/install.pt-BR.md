@@ -10,14 +10,16 @@ veja [data-protection.md](data-protection.md) (em inglês).
 
 ## 1. Situação deste guia
 
-A versão na árvore de código é `1.1.0`; ela está em preparação e não foi publicada (sem tag). A
-última versão **publicada** é a 1.0.2: foi publicada no GitHub em 2026-11-14, com a tag
-`v1.0.2`: [página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2).
-A versão anterior a ela, a 1.0.1, foi publicada em 2026-11-13
+A versão na árvore de código é `1.1.0`, que também é a última versão **publicada**: foi publicada
+no GitHub em 2026-11-21, com a tag
+`v1.1.0`: [página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.1.0).
+A versão anterior a ela, a 1.0.2, foi publicada em 2026-11-14
+([página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2)),
+e a 1.0.1 em 2026-11-13
 ([página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1)).
 O fluxo de publicação (`.github/workflows/release.yml`) só roda quando uma tag `vX.Y.Z` é enviada,
 monta o pacote e cria uma versão em *rascunho* que uma pessoa publica (a 1.0.0 foi montada do mesmo
-modo, mas o rascunho dela nunca foi publicado e foi retirado). O proprietário publicou a 1.0.2
+modo, mas o rascunho dela nunca foi publicado e foi retirado). O proprietário publicou a 1.1.0
 antes do teste manual em um perfil limpo do Windows
 ([smoke-test.pt-BR.md](smoke-test.pt-BR.md) e
 [manual-test-script.pt-BR.md](manual-test-script.pt-BR.md)), que **continua pendente**; o resultado
@@ -292,7 +294,7 @@ Para fazer um, escolha **Arquivo > Fazer backup...** na janela principal, escolh
 arquivo e digite a senha duas vezes. Para restaurar, escolha **Arquivo > Restaurar...**, escolha o
 arquivo `.cbrnbak`, confirme que todos os dados atuais serão substituídos e digite a senha.
 Restaurar não fica disponível no modo somente leitura; Fazer backup fica. **Arquivo > Abrir pasta
-de dados** mostra a pasta de dados local. A versão 1.0.2 contém esses itens (seção 1); uma pessoa
+de dados** mostra a pasta de dados local. A versão 1.1.0 contém esses itens (seção 1); uma pessoa
 ainda não os experimentou em um perfil limpo.
 
 ## 12. Atualizações
@@ -320,7 +322,7 @@ em outras mídias não são tocadas por nenhuma das duas formas.
 
 ## 14. Limites conhecidos
 
-- A versão 1.0.2 está publicada, mas o teste manual dela em um perfil limpo continua pendente
+- A versão 1.1.0 está publicada, mas o teste manual dela em um perfil limpo continua pendente
   (seção 1). O executável não é assinado.
 - O instalador é montado e testado em modo silencioso apenas pelo fluxo de publicação; ele não é
   assinado (seção 4.3), e uma pessoa ainda não o executou em um perfil limpo.

@@ -7,8 +7,8 @@ teste deve confirmar ou desmentir.
 
 **Versão preliminar - indicadores não validados institucionalmente.**
 
-A versão 1.1.0 está em preparação no repositório (sem tag, não publicada); a última versão publicada
-é a 1.0.2. Se você testar a 1.0.2, a janela "Sobre" e o relatório mostram 1.0.2 no lugar de 1.1.0.
+A versão 1.1.0 foi publicada em 21/11/2026, antes da execução deste roteiro. Se você testar uma
+versão anterior, a janela "Sobre" e o relatório mostram o número dela no lugar de 1.1.0.
 
 Este roteiro é para o comitê de defesa QBRN do hospital. Ele percorre, com os **dados de
 demonstração**, cada página do programa, os alertas, a troca de idioma, o backup em mídia removível e
@@ -478,8 +478,8 @@ em uma pasta descartável:
 
 Preencha a folha abaixo após a execução. A folha em si não deve conter dados reais nem frases
 secretas, e é guardada **fora** do repositório. O **resultado** é registrado em
-[CHANGELOG.md](../CHANGELOG.md), na entrada da versão testada (a 1.1.0 está em preparação; a
-última publicada é a 1.0.2): o status deste teste manual para o
+[CHANGELOG.md](../CHANGELOG.md), na entrada da versão atual em preparação (as entradas já
+publicadas não são alteradas): o status deste teste manual para o
 lançamento (data, versão testada, resultado e decisão de publicar o rascunho), sem o conteúdo das
 respostas às perguntas em aberto. Depois do registro, a linha "Status da execução" no início deste
 documento passa de "NÃO EXECUTADO" para "EXECUTADO em AAAA-MM-DD, resultado: ...".

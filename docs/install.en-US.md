@@ -10,15 +10,16 @@ zip's first-run notes (`README-first-run.*.txt`) is shorter and says the same.
 
 ## 1. Status of this guide
 
-The version in the source tree is `1.1.0`; it is in preparation and not published (no tag). The
-latest **published** release is 1.0.2: it was published on GitHub on 2026-11-14, as the tag
-`v1.0.2`:
-[release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2).
-The release before it, 1.0.1, was published on 2026-11-13
+The version in the source tree is `1.1.0`, which is also the latest **published** release: it was
+published on GitHub on 2026-11-21, as the tag `v1.1.0`:
+[release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.1.0).
+The release before it, 1.0.2, was published on 2026-11-14
+([release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2)),
+and 1.0.1 on 2026-11-13
 ([release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.1)).
 The release workflow (`.github/workflows/release.yml`) runs only when a tag `vX.Y.Z` is pushed,
 builds the bundle, and creates a *draft* release that a person publishes (version 1.0.0 was built
-the same way, but its draft was never published and was withdrawn). The owner published 1.0.2
+the same way, but its draft was never published and was withdrawn). The owner published 1.1.0
 before the manual test on a clean Windows profile
 ([smoke-test.pt-BR.md](smoke-test.pt-BR.md) and
 [manual-test-script.pt-BR.md](manual-test-script.pt-BR.md), in Portuguese), which is **still
@@ -284,7 +285,7 @@ To make one, choose **File > Back up...** in the main window, choose where to sa
 type the passphrase twice. To restore one, choose **File > Restore...**, choose the `.cbrnbak`
 file, confirm that all current data will be replaced and type the passphrase. Restore is not
 available in read-only mode; Back up is. **File > Open data folder** shows the local data folder.
-Release 1.0.2 contains these entries (section 1); a person has not yet tried them on a clean
+Release 1.1.0 contains these entries (section 1); a person has not yet tried them on a clean
 profile.
 
 ## 12. Upgrades
@@ -312,7 +313,7 @@ media are not touched by either.
 
 ## 14. Known limits
 
-- Release 1.0.2 is published, but its manual test on a clean profile is still pending (section 1).
+- Release 1.1.0 is published, but its manual test on a clean profile is still pending (section 1).
   The executable is unsigned.
 - The installer is built and smoke-tested by the release workflow only; it is unsigned (section
   4.3), and a person has not yet run it on a clean profile.

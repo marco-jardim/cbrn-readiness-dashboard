@@ -7,12 +7,11 @@ código e a documentação, e é isso que o teste deve confirmar ou desmentir.
 
 **Versão preliminar - indicadores não validados institucionalmente.**
 
-A versão 1.1.0 está em preparação no repositório: não foi marcada com tag nem publicada. A última
-versão publicada é a 1.0.2, em 14/11/2026, por decisão do responsável, antes da execução deste
-roteiro. O fluxo de publicação (`.github/workflows/release.yml`) cria um *rascunho* de lançamento;
-para a 1.1.0, **uma pessoa executa este roteiro sobre o rascunho, antes de publicá-lo**. Para a
-1.0.2, execute-o sobre os arquivos da página pública da versão, trocando 1.1.0 por 1.0.2 nos nomes
-de arquivo abaixo. Se algum passo falhar, avise o responsável pelo projeto.
+A versão 1.1.0 foi publicada em 21/11/2026, por decisão do responsável, antes da execução deste
+roteiro. Execute-o sobre os arquivos da página pública da versão. O fluxo de publicação
+(`.github/workflows/release.yml`) cria um *rascunho* de lançamento; nas próximas versões, **uma
+pessoa executa este roteiro sobre o rascunho, antes de publicá-lo**. Se algum passo falhar, avise o
+responsável pelo projeto.
 
 Os nomes de menus, botões e mensagens abaixo são os do português do programa, que ainda é um
 rascunho de tradução (marcado `unfinished`): a redação na tela pode diferir levemente. Em caso de
