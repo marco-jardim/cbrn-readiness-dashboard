@@ -17,7 +17,17 @@ when the page filter names something that is not an item type.
 from collections.abc import Callable
 
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtWidgets import QCheckBox, QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCheckBox,
+    QDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QTableView,
+    QVBoxLayout,
+    QWidget,
+)
 
 from cbrn_dashboard.domain.stock import LotRow, LotStatus, StockCategory, TypeSummary
 from cbrn_dashboard.services.errors import ServiceError
@@ -50,6 +60,29 @@ def _open(dialog: QDialog) -> None:
     """Show ``dialog`` without blocking; it deletes itself when closed."""
     dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
     dialog.open()
+
+
+SUMMARY_MIN_ROWS = 5
+"""How many rows the summary table keeps visible, whatever the window height."""
+
+
+def _fit_columns(view: QTableView) -> None:
+    """Size every column to its contents but the last, which stretches; wide tables scroll."""
+    header = view.horizontalHeader()
+    last = header.count() - 1
+    for section in range(last):
+        header.setSectionResizeMode(section, QHeaderView.ResizeMode.ResizeToContents)
+    if last >= 0:
+        header.setSectionResizeMode(last, QHeaderView.ResizeMode.Stretch)
+    view.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+
+
+def _keep_rows_visible(view: QTableView, rows: int) -> None:
+    """Give ``view`` a minimum height that shows ``rows`` rows under the header."""
+    height = view.verticalHeader().defaultSectionSize() * rows
+    height += view.horizontalHeader().sizeHint().height()
+    height += view.horizontalScrollBar().sizeHint().height() + 2 * view.frameWidth()
+    view.setMinimumHeight(height)
 
 
 def _shows_in_summary(summary: TypeSummary) -> bool:
@@ -95,6 +128,10 @@ class StockPanel(QWidget):
         self.movements_view.setObjectName("stock_movements_view")
         self.movements_caption.setBuddy(self.movements_view)
 
+        for table in (self.summary_view, self.lots_view, self.movements_view):
+            _fit_columns(table)
+        _keep_rows_visible(self.summary_view, SUMMARY_MIN_ROWS)
+
         def action(text_fn: Callable[[], str], slot: Callable[[], None]) -> EditAction:
             return make_edit_action(context, self, text_fn, slot)
 
@@ -130,7 +167,7 @@ class StockPanel(QWidget):
         options.addStretch(1)
         layout = QVBoxLayout(self)
         layout.addWidget(self.summary_caption)
-        layout.addWidget(self.summary_view, 1)
+        layout.addWidget(self.summary_view, 2)
         layout.addLayout(options)
         layout.addWidget(self.empty_label)
         layout.addWidget(self.lots_view, 3)

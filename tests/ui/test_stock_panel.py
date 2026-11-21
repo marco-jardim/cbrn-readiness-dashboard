@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QDate
-from PySide6.QtWidgets import QDialog, QWidget
+from PySide6.QtWidgets import QDialog, QHeaderView, QWidget
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard.domain.stock import (
@@ -446,6 +446,36 @@ def test_a_panel_limited_to_categories_shows_only_those_lots(
     panel = _panel(app_context, qtbot, ANTIDOTE_PAGE_CATEGORIES)
     assert _lot_codes(panel) == ["L1"]
     assert {row.summary.type_code for row in panel.summary_model.rows()} == {"ANTIDOTE_CHEMICAL"}
+
+
+# --------------------------------------------------------------------------- sizing
+
+
+def test_columns_fit_their_contents_and_the_summary_shows_several_rows(
+    app_context: AppContext, qtbot: QtBot
+) -> None:
+    _add_lot(app_context, code="ANTIDOTE_CHEMICAL", lot_code="L1")
+    _add_lot(app_context, code="GLOVE", lot_code="G1", expires=None)
+    panel = _panel(app_context, qtbot)
+    for view in (panel.summary_view, panel.lots_view, panel.movements_view):
+        header = view.horizontalHeader()
+        last = header.count() - 1
+        for section in range(last):
+            assert header.sectionResizeMode(section) is QHeaderView.ResizeMode.ResizeToContents
+        assert header.sectionResizeMode(last) is QHeaderView.ResizeMode.Stretch
+
+    tables = ((panel.summary_view, panel.summary_model), (panel.lots_view, panel.lots_model))
+    for view, model in tables:
+        view.horizontalHeader().resizeSections()
+        names = [_cell(model, row, "type") for row in range(model.rowCount())]
+        assert names
+        needed = max(view.fontMetrics().horizontalAdvance(name) for name in names)
+        column = [item.key for item in model.COLUMNS].index("type")
+        assert view.columnWidth(column) >= needed
+
+    summary = panel.summary_view
+    four_rows = summary.verticalHeader().defaultSectionSize() * 4
+    assert summary.minimumHeight() >= four_rows + summary.horizontalHeader().sizeHint().height()
 
 
 # --------------------------------------------------------------------------- language, read-only
