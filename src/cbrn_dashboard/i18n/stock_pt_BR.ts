@@ -412,10 +412,6 @@
         <translation type="unfinished">Uma configuração salva não pode ser lida.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation type="unfinished">Este valor provisório não é conhecido.</translation>
-    </message>
-    <message>
         <source>The setting is not valid.</source>
         <translation type="unfinished">A configuração não é válida.</translation>
     </message>
@@ -559,20 +555,8 @@
         <translation type="unfinished">Excluir tipo de item</translation>
     </message>
     <message>
-        <source>Confirm</source>
-        <translation type="unfinished">Confirmar</translation>
-    </message>
-    <message>
         <source>Stock item types</source>
         <translation type="unfinished">Tipos de item de estoque</translation>
-    </message>
-    <message>
-        <source>The minimum stock of the item types is a placeholder until you confirm it or set a minimum.</source>
-        <translation type="unfinished">O estoque mínimo dos tipos de item é um valor provisório até você confirmá-lo ou definir um mínimo.</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Valor provisório - a confirmar</translation>
     </message>
     <message>
         <source>Delete item type %1?</source>

@@ -117,7 +117,7 @@ def test_settings_stock_types_and_the_p11_field_are_disabled(
     qtbot.addWidget(alerts)
 
     registered = app_context.edit_targets()
-    assert len(types._actions) == 6
+    assert len(types._actions) == 5
     for action in types._actions:
         assert action in registered
         assert not action.isEnabled()

@@ -412,10 +412,6 @@
         <translation>A stored setting cannot be read.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation>This placeholder is not known.</translation>
-    </message>
-    <message>
         <source>The setting is not valid.</source>
         <translation>The setting is not valid.</translation>
     </message>
@@ -559,20 +555,8 @@
         <translation>Delete item type</translation>
     </message>
     <message>
-        <source>Confirm</source>
-        <translation>Confirm</translation>
-    </message>
-    <message>
         <source>Stock item types</source>
         <translation>Stock item types</translation>
-    </message>
-    <message>
-        <source>The minimum stock of the item types is a placeholder until you confirm it or set a minimum.</source>
-        <translation>The minimum stock of the item types is a placeholder until you confirm it or set a minimum.</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation>Placeholder - to be confirmed</translation>
     </message>
     <message>
         <source>Delete item type %1?</source>

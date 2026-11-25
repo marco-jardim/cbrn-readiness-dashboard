@@ -223,21 +223,21 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
         "Stock", "The price has more decimal places than the currency allows."
     ),
     TOO_LARGE: lambda: QCoreApplication.translate("Stock", "The price is too large."),
-    # configuration service (reading the default currency, confirming the P12 placeholder)
+    # configuration service (reading the default currency)
     CORRUPT_SETTING: lambda: QCoreApplication.translate(
         "Stock", "A stored setting cannot be read."
-    ),
-    UNKNOWN_PLACEHOLDER: lambda: QCoreApplication.translate(
-        "Stock", "This placeholder is not known."
     ),
 }
 
 for _config_code in CONFIG_ERROR_CODES:
-    # Any other configuration code (a later one included) still gets a translated message.
-    _ERROR_LABELS.setdefault(
-        _config_code,
-        lambda: QCoreApplication.translate("Stock", "The setting is not valid."),
-    )
+    # Any other configuration code (a later one included) still gets a translated message. The
+    # stock UI no longer confirms placeholders, so UNKNOWN_PLACEHOLDER (still listed by the service
+    # until its placeholder machinery is removed, PLAN.md T12.12) cannot reach it.
+    if _config_code != UNKNOWN_PLACEHOLDER:
+        _ERROR_LABELS.setdefault(
+            _config_code,
+            lambda: QCoreApplication.translate("Stock", "The setting is not valid."),
+        )
 
 # Every error code the stock UI can present (for the completeness test).
 ALL_ERROR_CODES: tuple[str, ...] = tuple(_ERROR_LABELS)

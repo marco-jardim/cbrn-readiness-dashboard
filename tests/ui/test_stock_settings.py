@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Settings -> Infrastructure -> stock item types and the minimum stock P12 (PLAN.md T11.13).
+"""Settings -> Infrastructure -> stock item types and their minimum stock (PLAN.md T11.13, T12.8).
 
 User-defined types can be added, renamed, deactivated and deleted (only without lots); a built-in
-type allows only its minimum and its active flag. The badge of P12 shows until it is confirmed or
-a minimum is set; a minimum that changes confirms P12 in the same transaction; read-only mode
-disables every edit; the pseudo-locale walk passes. All values are fictitious.
+type allows only its minimum and its active flag. The minimum is local only and shown without a
+placeholder badge, Confirm button or note; read-only mode disables every edit; the pseudo-locale
+walk passes. All values are fictitious.
 """
 
 from collections.abc import Callable
@@ -13,12 +13,11 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QDialog, QWidget
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QAbstractButton, QDialog, QLabel, QWidget
 from pytestqt.qtbot import QtBot
 
-from cbrn_dashboard.domain.config import ConfigError
 from cbrn_dashboard.domain.stock import StockCategory
-from cbrn_dashboard.services.config import ConfigService
 from cbrn_dashboard.services.stock import (
     DUPLICATE_CODE,
     InitialReceipt,
@@ -27,13 +26,11 @@ from cbrn_dashboard.services.stock import (
     StockTypeInput,
     StockTypeView,
 )
-from cbrn_dashboard.storage import settings_repo
 from cbrn_dashboard.ui.shell import registry
 from cbrn_dashboard.ui.shell.context import AppContext, Services
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from cbrn_dashboard.ui.stock.labels import BUILT_IN_TYPE_CODES, error_label
 from cbrn_dashboard.ui.stock.settings import (
-    PLACEHOLDER_MINIMUM,
     StockTypeSettingsDialog,
     StockTypesSection,
     create_settings_section,
@@ -66,12 +63,6 @@ def pseudo_context(
 
 def _service(context: AppContext) -> StockService:
     service = context.services.stock
-    assert service is not None
-    return service
-
-
-def _config(context: AppContext) -> ConfigService:
-    service = context.services.config
     assert service is not None
     return service
 
@@ -142,27 +133,17 @@ def _fill_new(dialog: StockTypeSettingsDialog, code: str, minimum: int | None) -
         dialog.minimum_spin.setValue(minimum)
 
 
-def _badge_shown(section: StockTypesSection) -> bool:
-    return not section.badge_label.isHidden() and not section.confirm_button.isHidden()
-
-
 # --------------------------------------------------------------------------- the list
 
 
-def test_the_section_lists_every_type_with_the_badge_of_p12(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
+def test_the_section_lists_every_type(app_context: AppContext, qtbot: QtBot) -> None:
     section = _section(app_context, qtbot)
 
     assert section.model.rowCount() == len(BUILT_IN_TYPE_CODES) == 17
     assert {row.code for row in section.model.rows()} == set(BUILT_IN_TYPE_CODES)
     assert _cell(section, "GLOVE", "minimum") == QCoreApplication.translate("Stock", "Not set")
     assert _cell(section, "GLOVE", "origin") == QCoreApplication.translate("Stock", "Built-in")
-    assert _badge_shown(section)
-    assert section.badge_label.text() == "Placeholder - to be confirmed"
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is True
     assert section.add_action.isEnabled()
-    assert section.confirm_action.isEnabled()
     for action in (
         section.edit_action,
         section.deactivate_action,
@@ -170,19 +151,30 @@ def test_the_section_lists_every_type_with_the_badge_of_p12(
         section.delete_action,
     ):
         assert not action.isEnabled()
-
-
-def test_the_confirm_button_confirms_p12_without_changing_a_minimum(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
-    section = _section(app_context, qtbot)
-
-    section.confirm_action.trigger()
-
-    assert not _badge_shown(section)
-    assert not section.confirm_action.isEnabled()
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is False
     assert all(row.minimum_quantity is None for row in section.model.rows())
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_section_shows_no_placeholder_badge_confirm_button_or_note(
+    app_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    app_context.translator_manager.set_language(lang)
+    section = _section(app_context, qtbot)
+    _select(section, "GLOVE")
+
+    names = [child.objectName() for child in section.findChildren(QWidget)]
+    assert not [name for name in names if name.endswith(("_badge", "_confirm"))]
+    assert not [name for name in names if "badge" in name or "note" in name]
+    assert not hasattr(section, "badge_label")
+    assert not hasattr(section, "confirm_button")
+    assert not hasattr(section, "confirm_action")
+    texts = [label.text() for label in section.findChildren(QLabel)]
+    texts += [button.text() for button in section.findChildren(QAbstractButton)]
+    texts += [action.text() for action in section.findChildren(QAction)]
+    for text in texts:
+        assert "Placeholder" not in text
+        assert "provis" not in text.lower()
+        assert text not in {"Confirm", "Confirmar"}
 
 
 def test_the_section_is_registered_in_the_infrastructure_group() -> None:
@@ -196,7 +188,7 @@ def test_the_section_is_registered_in_the_infrastructure_group() -> None:
 # --------------------------------------------------------------------------- user-defined types
 
 
-def test_a_user_type_is_added_with_a_minimum_and_p12_is_confirmed(
+def test_a_user_type_is_added_with_a_minimum(
     app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
 ) -> None:
     section = _section(app_context, qtbot)
@@ -216,14 +208,10 @@ def test_a_user_type_is_added_with_a_minimum_and_p12_is_confirmed(
     selected = section.selected_type()
     assert selected is not None
     assert selected.id == dialog.saved_type_id == view.id
-    assert not _badge_shown(section)
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is False
     assert _warnings(fake_prompts) == []
 
 
-def test_a_user_type_without_a_minimum_keeps_the_badge(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
+def test_a_user_type_is_added_without_a_minimum(app_context: AppContext, qtbot: QtBot) -> None:
     section = _section(app_context, qtbot)
     section.add_action.trigger()
     dialog = _open_dialog(section)
@@ -232,11 +220,10 @@ def test_a_user_type_without_a_minimum_keeps_the_badge(
     dialog.accept()
 
     assert _minimum(app_context, "DEMO-X") is None
-    assert _badge_shown(section)
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is True
+    assert _cell(section, "DEMO-X", "minimum") == QCoreApplication.translate("Stock", "Not set")
 
 
-def test_a_refused_new_type_writes_nothing_and_keeps_the_badge(
+def test_a_refused_new_type_writes_nothing(
     app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
 ) -> None:
     section = _section(app_context, qtbot)
@@ -250,44 +237,29 @@ def test_a_refused_new_type_writes_nothing_and_keeps_the_badge(
     assert _warnings(fake_prompts) == [error_label(DUPLICATE_CODE)]
     assert _minimum(app_context, "GLOVE") is None
     assert section.model.rowCount() == 17
-    assert _badge_shown(section)
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is True
+    assert _service(app_context).get_type_by_code("DEMO-X") is None
+    assert dialog.saved_type_id is None
 
 
-def test_a_failing_confirmation_creates_no_type_and_a_retry_creates_it_once(
-    app_context: AppContext,
-    fake_prompts: FakePrompts,
-    qtbot: QtBot,
-    monkeypatch: pytest.MonkeyPatch,
+def test_a_refused_save_can_be_retried_and_creates_the_type_once(
+    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
 ) -> None:
     section = _section(app_context, qtbot)
     section.add_action.trigger()
     dialog = _open_dialog(section)
-    _fill_new(dialog, "DEMO-X", 25)
-
-    def failing(*_args: object) -> None:
-        raise ConfigError("UNKNOWN_PLACEHOLDER", "placeholder_id")
-
-    with monkeypatch.context() as patch:
-        patch.setattr(settings_repo, "confirm_placeholder", failing)
-        dialog.accept()
-
+    _fill_new(dialog, "GLOVE", 25)  # refused: the code of a built-in type
+    dialog.accept()
     assert dialog.isVisible()
-    assert _warnings(fake_prompts) == [error_label("UNKNOWN_PLACEHOLDER")]
-    assert _service(app_context).get_type_by_code("DEMO-X") is None  # one transaction: no half
-    assert dialog.saved_type_id is None
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is True
+    assert _warnings(fake_prompts) == [error_label(DUPLICATE_CODE)]
 
-    dialog.accept()  # the same dialog, now without the failure: creates the type once
+    dialog.code_edit.setText("DEMO-X")
+    dialog.accept()
 
     assert _minimum(app_context, "DEMO-X") == 25
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is False
     assert [row.code for row in section.model.rows()].count("DEMO-X") == 1
 
 
-def test_a_user_type_is_renamed_without_confirming_p12(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
+def test_a_user_type_is_renamed(app_context: AppContext, qtbot: QtBot) -> None:
     _create(app_context, minimum=None)
     section = _section(app_context, qtbot)
     _select(section, "DEMO-X")
@@ -303,8 +275,6 @@ def test_a_user_type_is_renamed_without_confirming_p12(
     assert (view.label_pt_br, view.label_en_us) == ("Novo nome", "New name")
     assert _cell(section, "DEMO-X", "name") == "New name"
     assert view.minimum_quantity is None
-    assert _badge_shown(section)  # the minimum did not change: nothing is confirmed
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is True
 
 
 def test_a_user_type_is_deactivated_and_activated(app_context: AppContext, qtbot: QtBot) -> None:
@@ -320,7 +290,6 @@ def test_a_user_type_is_deactivated_and_activated(app_context: AppContext, qtbot
     assert _cell(section, "DEMO-X", "status") == QCoreApplication.translate("Stock", "Inactive")
     assert not section.deactivate_action.isEnabled()
     assert section.activate_action.isEnabled()
-    assert _badge_shown(section)  # (de)activating a type is not setting a minimum
 
     section.activate_action.trigger()
 
@@ -390,11 +359,8 @@ def test_a_built_in_type_allows_only_the_minimum_and_the_active_flag(
     assert dialog.active_check.isEnabled()
 
 
-def test_a_minimum_is_set_changed_and_cleared_and_p12_is_confirmed_by_the_first(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
+def test_a_minimum_is_set_changed_and_cleared(app_context: AppContext, qtbot: QtBot) -> None:
     section = _section(app_context, qtbot)
-    assert _badge_shown(section)
 
     _select(section, "GLOVE")
     section.edit_action.trigger()
@@ -404,8 +370,6 @@ def test_a_minimum_is_set_changed_and_cleared_and_p12_is_confirmed_by_the_first(
 
     assert _minimum(app_context, "GLOVE") == 40
     assert _cell(section, "GLOVE", "minimum") == "40"
-    assert not _badge_shown(section)  # the change confirmed P12 in the same call
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is False
 
     section.edit_action.trigger()
     dialog = _open_dialog(section)
@@ -423,10 +387,9 @@ def test_a_minimum_is_set_changed_and_cleared_and_p12_is_confirmed_by_the_first(
 
     assert _minimum(app_context, "GLOVE") is None
     assert _cell(section, "GLOVE", "minimum") == QCoreApplication.translate("Stock", "Not set")
-    assert not _badge_shown(section)  # a confirmed placeholder does not come back
 
 
-def test_clearing_a_minimum_that_was_never_set_confirms_nothing(
+def test_saving_a_built_in_type_as_loaded_changes_nothing(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
     section = _section(app_context, qtbot)
@@ -437,8 +400,6 @@ def test_clearing_a_minimum_that_was_never_set_confirms_nothing(
     dialog.accept()  # the form as loaded: nothing changed
 
     assert _minimum(app_context, "GLOVE") is None
-    assert _badge_shown(section)
-    assert _config(app_context).needs_badge(PLACEHOLDER_MINIMUM) is True
 
 
 def test_a_built_in_type_is_deactivated_and_activated(
@@ -465,8 +426,7 @@ def test_read_only_mode_disables_every_edit(app_context: AppContext, qtbot: QtBo
     _select(section, "DEMO-X")
     registered = app_context.edit_targets()
 
-    assert len(section._actions) == 6
-    assert _badge_shown(section)
+    assert len(section._actions) == 5
     for action in section._actions:
         assert action in registered
         assert not action.isEnabled()
@@ -477,7 +437,6 @@ def test_the_section_builds_without_services(app_context: AppContext, qtbot: QtB
     section = _section(app_context, qtbot)
 
     assert section.model.rowCount() == 0
-    assert not _badge_shown(section)
     for action in section._actions:
         assert not action.isEnabled()
     section.add_type()  # nothing to write to: the dialog opens and a save does nothing
@@ -487,7 +446,7 @@ def test_the_section_builds_without_services(app_context: AppContext, qtbot: QtB
     assert dialog.isVisible()
 
 
-def test_without_a_stock_service_the_confirm_button_still_follows_the_configuration(
+def test_without_a_stock_service_every_action_is_disabled(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
     app_context.services.stock = None
@@ -495,8 +454,8 @@ def test_without_a_stock_service_the_confirm_button_still_follows_the_configurat
 
     assert section.model.rowCount() == 0
     assert not section.add_action.isEnabled()
-    assert _badge_shown(section)
-    assert section.confirm_action.isEnabled()
+    for action in section._actions:
+        assert not action.isEnabled()
 
 
 # --------------------------------------------------------------------------- pseudo-locale walk
@@ -520,14 +479,12 @@ def test_the_walk_carries_the_marker_of_each_language(
     assert_fully_translated(section, lang)
 
 
-def test_the_walk_with_a_selection_a_confirmed_badge_and_the_dialogs(
+def test_the_walk_with_a_selection_and_the_dialogs(
     pseudo_context: AppContext, qtbot: QtBot
 ) -> None:
     _create(pseudo_context, minimum=3)
-    _config(pseudo_context).confirm(PLACEHOLDER_MINIMUM)
     section = _section(pseudo_context, qtbot)
     _select(section, "DEMO-X")
-    assert not _badge_shown(section)
     assert_fully_translated(section)
     selected = section.selected_type()
     assert selected is not None

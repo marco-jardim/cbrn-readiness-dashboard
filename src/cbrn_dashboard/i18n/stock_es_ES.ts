@@ -412,10 +412,6 @@
         <translation type="unfinished">No se puede leer una configuración guardada.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation type="unfinished">Este valor provisional no se conoce.</translation>
-    </message>
-    <message>
         <source>The setting is not valid.</source>
         <translation type="unfinished">La configuración no es válida.</translation>
     </message>
@@ -559,20 +555,8 @@
         <translation type="unfinished">Eliminar tipo de artículo</translation>
     </message>
     <message>
-        <source>Confirm</source>
-        <translation type="unfinished">Confirmar</translation>
-    </message>
-    <message>
         <source>Stock item types</source>
         <translation type="unfinished">Tipos de artículo de existencias</translation>
-    </message>
-    <message>
-        <source>The minimum stock of the item types is a placeholder until you confirm it or set a minimum.</source>
-        <translation type="unfinished">Las existencias mínimas de los tipos de artículo son un valor provisional hasta que las confirme o defina un mínimo.</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Valor provisional - por confirmar</translation>
     </message>
     <message>
         <source>Delete item type %1?</source>

@@ -3,20 +3,18 @@
 
 The section lists every item type (inactive and built-in ones too) and offers Add, Edit, Deactivate
 or Activate, and Delete for a user-defined type that has no lots. A built-in type keeps its code,
-category and name: only its minimum and its active flag change. The minimum stock of a type is the
-placeholder P12 (local only, no configuration field): its "to be confirmed" badge and Confirm
-button show until the operator confirms it or sets a minimum, as the infrastructure section does
-for A06. A type and its minimum are written through ``StockService.save_type_with_minimum`` with
-the confirmation of P12, so the type, the minimum and the confirmation share one transaction.
+category and name: only its minimum and its active flag change. The minimum stock of a type is
+local only (no configuration field) and has an empty code default; it is not a placeholder. A type
+and its minimum are written through ``StockService.save_type_with_minimum``, so both share one
+transaction.
 
-The section reads and writes ONLY through ``context.services.stock`` and
-``context.services.config`` (either may be ``None``: the actions are then disabled and the badge
-hidden). The dialog is opened without blocking and deletes itself when closed; nothing here uses a
-message box.
+The section reads and writes ONLY through ``context.services.stock`` (it may be ``None``: the
+actions are then disabled). The dialog is opened without blocking and deletes itself when closed;
+nothing here uses a message box.
 """
 
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout, QWidget
 
 from cbrn_dashboard.services.errors import ServiceError
 from cbrn_dashboard.services.stock import StockTypeInput, StockTypeView
@@ -36,15 +34,11 @@ from cbrn_dashboard.ui.stock.labels import error_label, fill_placeholders
 from cbrn_dashboard.ui.stock.models import StockTypesModel
 
 __all__ = [
-    "PLACEHOLDER_MINIMUM",
     "StockTypeSettingsDialog",
     "StockTypesSection",
     "create_settings_section",
     "settings_section_title",
 ]
-
-# The placeholder of the minimum stock per item type (local only, no configuration field).
-PLACEHOLDER_MINIMUM = "P12"
 
 
 def _open(dialog: QDialog) -> None:
@@ -57,11 +51,10 @@ def _open(dialog: QDialog) -> None:
 
 
 class StockTypeSettingsDialog(StockTypeDialog):
-    """The item-type dialog of the settings: a changed minimum confirms P12 (same transaction).
+    """The item-type dialog of the settings: the type and its minimum are saved together.
 
-    ``StockService.save_type_with_minimum`` writes the fields, the minimum and the confirmation of
-    P12 in ONE transaction: a refusal leaves everything as it was and creates no type. A minimum
-    that does not change confirms nothing.
+    ``StockService.save_type_with_minimum`` writes the fields and the minimum in ONE transaction:
+    a refusal leaves everything as it was and creates no type.
     """
 
     def submit(self) -> bool:
@@ -83,7 +76,7 @@ class StockTypeSettingsDialog(StockTypeDialog):
         def save() -> None:
             # One transaction: a refusal leaves the type as it was (or not created at all).
             self.saved_type_id = service.save_type_with_minimum(
-                None if current is None else current.id, data, minimum, PLACEHOLDER_MINIMUM
+                None if current is None else current.id, data, minimum
             )
 
         return apply_change(self.context, self, error_label, save)
@@ -93,7 +86,7 @@ class StockTypeSettingsDialog(StockTypeDialog):
 
 
 class StockTypesSection(QWidget):
-    """Settings -> Infrastructure: the stock item types, their minimum stock and the P12 badge."""
+    """Settings -> Infrastructure: the stock item types, their minimum stock."""
 
     def __init__(self, context: AppContext, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -134,41 +127,18 @@ class StockTypesSection(QWidget):
             lambda: QCoreApplication.translate("Stock", "Delete item type"),
             self.delete_type,
         )
-        self.confirm_action = make_edit_action(
-            context,
-            self,
-            lambda: QCoreApplication.translate("Stock", "Confirm"),
-            self.confirm_placeholder,
-        )
         self._actions: tuple[EditAction, ...] = (
             self.add_action,
             self.edit_action,
             self.deactivate_action,
             self.activate_action,
             self.delete_action,
-            self.confirm_action,
         )
-        # Whether the badge of P12 is due (hidden without a readable configuration).
-        self._badge_due = False
-        self.minimum_note = QLabel(self)
-        self.minimum_note.setObjectName("stock_minimum_note")
-        self.minimum_note.setWordWrap(True)
-        self.badge_label = QLabel(self)
-        self.badge_label.setObjectName("stock_minimum_badge")
-        self.confirm_button = QToolButton(self)
-        self.confirm_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self.confirm_button.setDefaultAction(self.confirm_action)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.types_caption)
         layout.addWidget(self.view, 1)
-        layout.addLayout(action_row(self._actions[:5], self))
-        layout.addWidget(self.minimum_note)
-        badge_row = QHBoxLayout()
-        badge_row.addWidget(self.badge_label)
-        badge_row.addWidget(self.confirm_button)
-        badge_row.addStretch(1)
-        layout.addLayout(badge_row)
+        layout.addLayout(action_row(self._actions, self))
         apply_tab_order(self)
 
         selection = self.view.selectionModel()
@@ -183,16 +153,6 @@ class StockTypesSection(QWidget):
 
     def retranslate(self) -> None:
         self.types_caption.setText(QCoreApplication.translate("Stock", "Stock item types"))
-        self.minimum_note.setText(
-            QCoreApplication.translate(
-                "Stock",
-                "The minimum stock of the item types is a placeholder until you confirm it "
-                "or set a minimum.",
-            )
-        )
-        self.badge_label.setText(
-            QCoreApplication.translate("Stock", "Placeholder - to be confirmed")
-        )
         for action in self._actions:
             action.retranslate()
         self.model.set_language(current_language(self.context))
@@ -208,16 +168,6 @@ class StockTypesSection(QWidget):
         row = self.model.selected_row(self.view)
         return row if isinstance(row, StockTypeView) else None
 
-    def _compute_badge(self) -> bool:
-        """Whether the badge of P12 is due (never without a configuration service)."""
-        config = self.context.services.config
-        if config is None:
-            return False
-        try:
-            return bool(config.needs_badge(PLACEHOLDER_MINIMUM))
-        except ServiceError:
-            return False
-
     def refresh(self) -> None:
         service = self.context.services.stock
         previous = self.selected_type()
@@ -225,9 +175,6 @@ class StockTypesSection(QWidget):
         self.model.set_rows(types)
         if previous is not None:
             self._select_type(previous.id)
-        self._badge_due = self._compute_badge()
-        self.badge_label.setVisible(self._badge_due)
-        self.confirm_button.setVisible(self._badge_due)
         self._update_actions()
 
     def _select_type(self, type_id: int | None) -> None:
@@ -262,7 +209,6 @@ class StockTypesSection(QWidget):
             and not self._has_lots(selected.id)
         )
         enable(self.delete_action, deletable)
-        enable(self.confirm_action, self._badge_due)
 
     # ----- the types
 
@@ -312,13 +258,6 @@ class StockTypesSection(QWidget):
         )
         if self.context.prompts.confirm(self, title, question):
             apply_change(self.context, self, error_label, lambda: service.delete_type(type_id))
-
-    def confirm_placeholder(self) -> None:
-        config = self.context.services.config
-        if config is not None and self._badge_due:
-            apply_change(
-                self.context, self, error_label, lambda: config.confirm(PLACEHOLDER_MINIMUM)
-            )
 
 
 # --------------------------------------------------------------------------- registry factories
