@@ -117,7 +117,6 @@ EXPECTED_ENGLISH: dict[str, str] = {
     "VALUE_TOO_LARGE": "The value is too large.",
     "INVALID_TYPE": "The value has the wrong type.",
     "CORRUPT_SETTING": "A stored setting cannot be read.",
-    "UNKNOWN_PLACEHOLDER": "This placeholder is not known.",
 }
 
 
@@ -753,7 +752,6 @@ def test_the_section_follows_read_only_mode(read_only_context: AppContext, qtbot
     qtbot.addWidget(section)
     for row in (section.passphrase_row, section.daily_row, section.reminder_row):
         assert not row.spin.isEnabled()
-        assert not row.confirm.isEnabled()
     assert not section.save_action.isEnabled()
     assert not section.backup_actions.restore_action.isEnabled()
     assert section.backup_actions.backup_action.isEnabled()
@@ -932,28 +930,25 @@ def test_unsaved_typing_survives_a_data_change_and_a_save_reloads(
     assert section.daily_row.spin.value() == 4
 
 
-def test_the_placeholder_badges_and_confirm_buttons_follow_the_configuration(
-    app_context: AppContext, qtbot: QtBot
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_section_has_no_placeholder_badge_or_confirm_button(
+    app_context: AppContext, qtbot: QtBot, lang: str
 ) -> None:
+    app_context.translator_manager.set_language(lang)
     section = BackupSettingsSection(app_context)
     qtbot.addWidget(section)
-    config = _config(app_context)
-    expected = (
-        ("P05", section.passphrase_row),
-        ("P06", section.daily_row),
-        ("P09", section.reminder_row),
-    )
-    for placeholder, row in expected:
-        assert row.placeholder == placeholder
-        assert config.badge_for_field(row.field) == placeholder
-        assert not row.badge.isHidden()
-        assert row.badge.text() == "Placeholder - to be confirmed"
-        assert row.confirm.text() == "Confirm"
-    section.passphrase_row.confirm.click()
-    assert config.badge_for_field("min_passphrase_length") is None
-    assert section.passphrase_row.badge.isHidden()
-    assert section.passphrase_row.confirm.isHidden()
-    assert not section.daily_row.badge.isHidden()
+    for child in section.findChildren(QWidget):
+        name = child.objectName()
+        assert not name.endswith(("_badge", "_confirm")), name
+        text = getattr(child, "text", None)
+        if callable(text):
+            shown = str(text())
+            assert "Placeholder" not in shown, name
+            assert "Valor provis" not in shown, name
+            assert shown != "Confirm", name
+    for row in (section.passphrase_row, section.daily_row, section.reminder_row):
+        assert not hasattr(row, "badge")
+        assert not hasattr(row, "confirm")
 
 
 def _corrupt_setting(context: AppContext) -> None:
@@ -984,9 +979,6 @@ def test_an_unreadable_setting_is_explained_and_the_inputs_wait_for_the_repair(
     assert section.config_error_label.text() == "A stored setting cannot be read."
     assert not any(spin.isEnabled() for spin in inputs)
     assert not section.save_action.isEnabled()
-    for row in (section.passphrase_row, section.daily_row, section.reminder_row):
-        assert row.badge.isHidden()
-        assert row.confirm.isHidden()
     assert fake_prompts.calls == []
 
     _repair_setting(app_context)
@@ -995,7 +987,6 @@ def test_an_unreadable_setting_is_explained_and_the_inputs_wait_for_the_repair(
     assert section.config_error_label.isHidden()
     assert all(spin.isEnabled() for spin in inputs)
     assert section.save_action.isEnabled()
-    assert not section.passphrase_row.badge.isHidden()
 
 
 def test_the_unreadable_setting_message_follows_a_language_switch(

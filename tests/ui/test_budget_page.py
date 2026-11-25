@@ -100,12 +100,10 @@ def _with_config(context: AppContext) -> ConfigService:
 
 
 class _FakeConfig:
-    """The configuration service API over memory, with scripted placeholder badges."""
+    """The configuration service API over memory (load and save only)."""
 
-    def __init__(self, badges: dict[str, str]) -> None:
+    def __init__(self) -> None:
         self.config = ReadinessConfig()
-        self.badges = dict(badges)
-        self.confirmed: list[str] = []
         self.fail_with: str | None = None
 
     def load(self) -> ReadinessConfig:
@@ -116,13 +114,6 @@ class _FakeConfig:
             raise ServiceError(self.fail_with)
         self.config = config
         return ()
-
-    def badge_for_field(self, field: str) -> str | None:
-        return self.badges.get(field)
-
-    def confirm(self, placeholder_id: str) -> None:
-        self.confirmed.append(placeholder_id)
-        self.badges = {k: v for k, v in self.badges.items() if v != placeholder_id}
 
 
 def _cells(model: QAbstractItemModel, row: int, columns: int) -> list[object]:
@@ -638,27 +629,39 @@ def test_the_settings_section_changes_the_currency_and_the_pro_rating_switch(
     assert section.currency_combo.currentData() == "USD"
 
 
-def test_the_placeholder_badges_and_confirm_buttons_follow_the_configuration(
+def _assert_no_placeholder_widgets(widget: QWidget) -> None:
+    """No ``*_badge`` / ``*_confirm`` child and no placeholder text anywhere under ``widget``."""
+    for child in widget.findChildren(QWidget):
+        name = child.objectName()
+        assert not name.endswith(("_badge", "_confirm")), name
+        text = getattr(child, "text", None)
+        if callable(text):
+            shown = str(text())
+            assert "Placeholder" not in shown, name
+            assert "Valor provis" not in shown, name
+            assert shown != "Confirm", name
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_settings_section_has_no_placeholder_badge_or_confirm_button(
+    app_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    app_context.translator_manager.set_language(lang)
+    vars(app_context.services)["config"] = _FakeConfig()
+    section = BudgetSettingsSection(app_context)
+    qtbot.addWidget(section)
+    _assert_no_placeholder_widgets(section)
+    for name in ("currency_badge", "currency_confirm", "prorate_badge", "prorate_confirm"):
+        assert not hasattr(section, name)
+
+
+def test_the_currency_and_pro_rating_save_without_any_confirmation(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
-    fake = _FakeConfig({"default_currency": "A08", "budget_prorate_target": "P08"})
+    fake = _FakeConfig()
     vars(app_context.services)["config"] = fake
     section = BudgetSettingsSection(app_context)
     qtbot.addWidget(section)
-    assert not section.currency_badge.isHidden()
-    assert not section.prorate_badge.isHidden()
-    assert section.currency_badge.text() == "Placeholder - to be confirmed"
-    assert section.currency_confirm.text() == "Confirm"
-
-    section.currency_confirm.click()
-    assert fake.confirmed == ["A08"]
-    assert section.currency_badge.isHidden()
-    assert section.currency_confirm.isHidden()
-    assert not section.prorate_badge.isHidden()
-    section.prorate_confirm.click()
-    assert fake.confirmed == ["A08", "P08"]
-    assert section.prorate_badge.isHidden()
-
     section.prorate_check.setChecked(False)
     assert fake.config.budget_prorate_target is False
     section.currency_combo.setCurrentIndex(section.currency_combo.findData("USD"))
@@ -668,7 +671,7 @@ def test_the_placeholder_badges_and_confirm_buttons_follow_the_configuration(
 def test_a_refused_configuration_change_shows_the_message_and_restores_the_control(
     app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
 ) -> None:
-    fake = _FakeConfig({})
+    fake = _FakeConfig()
     fake.fail_with = "READ_ONLY"
     vars(app_context.services)["config"] = fake
     section = BudgetSettingsSection(app_context)
@@ -826,12 +829,7 @@ def test_read_only_mode_disables_every_edit(app_context: AppContext, qtbot: QtBo
     for action in actions:
         assert action in targets
         assert not action.isEnabled()
-    for widget in (
-        section.currency_combo,
-        section.prorate_check,
-        section.currency_confirm,
-        section.prorate_confirm,
-    ):
+    for widget in (section.currency_combo, section.prorate_check):
         assert widget in targets
         assert not widget.isEnabled()
 
@@ -1146,15 +1144,13 @@ def test_the_pseudo_locale_walk_with_data(
     assert_fully_translated(widget)
 
 
-def test_the_pseudo_locale_walk_with_visible_badges(
+def test_the_pseudo_locale_walk_with_a_configuration_service(
     pseudo_context: AppContext, qtbot: QtBot
 ) -> None:
-    vars(pseudo_context.services)["config"] = _FakeConfig(
-        {"default_currency": "A08", "budget_prorate_target": "P08"}
-    )
+    vars(pseudo_context.services)["config"] = _FakeConfig()
     section = BudgetSettingsSection(pseudo_context)
     qtbot.addWidget(section)
-    assert not section.currency_badge.isHidden()
+    assert section.currency_combo.isEnabled()
     assert_fully_translated(section)
 
 
@@ -1249,5 +1245,7 @@ def test_all_error_codes_lists_the_format_and_configuration_codes() -> None:
     format_codes = _constants(formatting_module) - _constants(decimal)
     assert {"EMPTY", "AMBIGUOUS_NUMBER", "TOO_MANY_DECIMALS", "TOO_LARGE"} <= format_codes
     assert format_codes <= set(ALL_ERROR_CODES), sorted(format_codes - set(ALL_ERROR_CODES))
-    assert set(CONFIG_ERROR_CODES) <= set(ALL_ERROR_CODES)
-    assert {"CORRUPT_SETTING", "UNKNOWN_PLACEHOLDER"} <= set(ALL_ERROR_CODES)
+    # The budget UI no longer confirms placeholders: UNKNOWN_PLACEHOLDER is not presented.
+    assert set(CONFIG_ERROR_CODES) - {"UNKNOWN_PLACEHOLDER"} <= set(ALL_ERROR_CODES)
+    assert "CORRUPT_SETTING" in ALL_ERROR_CODES
+    assert "UNKNOWN_PLACEHOLDER" not in ALL_ERROR_CODES

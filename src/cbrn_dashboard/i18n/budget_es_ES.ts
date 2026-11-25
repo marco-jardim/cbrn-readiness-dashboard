@@ -149,10 +149,6 @@
         <translation type="unfinished">No se puede leer una configuración almacenada.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation type="unfinished">Este valor provisional no se conoce.</translation>
-    </message>
-    <message>
         <source>Source</source>
         <extracomment>A missing value in a cell (data, not a translatable text).</extracomment>
         <translation type="unfinished">Fuente</translation>
@@ -328,14 +324,6 @@
     <message>
         <source>Pro-rate the execution target over the fiscal year</source>
         <translation type="unfinished">Prorratear el objetivo de ejecución a lo largo del ejercicio fiscal</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Valor provisional - por confirmar</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation type="unfinished">Confirmar</translation>
     </message>
     <message>
         <source>Budget</source>

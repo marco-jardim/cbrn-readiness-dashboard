@@ -54,14 +54,6 @@
         <translation type="unfinished">Lembrar quando o último backup criptografado tiver mais de (dias)</translation>
     </message>
     <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Valor provisório - a confirmar</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation type="unfinished">Confirmar</translation>
-    </message>
-    <message>
         <source>Minimums that cannot be lowered: %1 passphrase characters, %2 daily backups.</source>
         <translation type="unfinished">Mínimos que não podem ser reduzidos: %1 caracteres na frase secreta, %2 backups diários.</translation>
     </message>
@@ -196,10 +188,6 @@
     <message>
         <source>A stored setting cannot be read.</source>
         <translation type="unfinished">Uma configuração salva não pode ser lida.</translation>
-    </message>
-    <message>
-        <source>This placeholder is not known.</source>
-        <translation type="unfinished">Este marcador provisório não é conhecido.</translation>
     </message>
     <message>
         <source>Back up...</source>

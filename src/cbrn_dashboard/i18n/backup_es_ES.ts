@@ -54,14 +54,6 @@
         <translation type="unfinished">Recordarme cuando la última copia cifrada tenga más de (días)</translation>
     </message>
     <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Valor provisional - por confirmar</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation type="unfinished">Confirmar</translation>
-    </message>
-    <message>
         <source>Minimums that cannot be lowered: %1 passphrase characters, %2 daily backups.</source>
         <translation type="unfinished">Mínimos que no se pueden reducir: %1 caracteres en la frase de contraseña, %2 copias diarias.</translation>
     </message>
@@ -196,10 +188,6 @@
     <message>
         <source>A stored setting cannot be read.</source>
         <translation type="unfinished">No se puede leer un ajuste guardado.</translation>
-    </message>
-    <message>
-        <source>This placeholder is not known.</source>
-        <translation type="unfinished">Este valor provisional no se conoce.</translation>
     </message>
     <message>
         <source>Back up...</source>

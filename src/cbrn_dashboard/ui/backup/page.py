@@ -3,10 +3,10 @@
 
 The section (Settings -> Backup) holds the three backup settings with their hard floors (T1.5): the
 minimum passphrase length P05 (never below 12), the number of daily local backups kept P06 (never
-below 2) and the age in days after which the reminder appears P09. Each carries the "to be
-confirmed" badge of its placeholder. It also shows the time of the last encrypted backup and offers
-"Back up..." and "Restore..." (the same :class:`~cbrn_dashboard.ui.backup.actions.BackupActions`
-the File menu uses). Settings are read and written ONLY through ``context.services.config``.
+below 2) and the age in days after which the reminder appears P09. It also shows the time of the
+last encrypted backup and offers "Back up..." and "Restore..." (the same
+:class:`~cbrn_dashboard.ui.backup.actions.BackupActions` the File menu uses). Settings are read and
+written ONLY through ``context.services.config``.
 
 There is no navigation page. The module-level factories are what the registries of the shell call;
 they build without services and never prompt, open a dialog or touch the database.
@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -60,14 +59,11 @@ __all__ = [
 
 @dataclass
 class _Row:
-    """One setting: its caption, spin box, placeholder badge and confirm button."""
+    """One setting: its stored field, caption and spin box."""
 
     field: str
     caption: QLabel
     spin: QSpinBox
-    badge: QLabel
-    confirm: QPushButton
-    placeholder: str | None = None
 
 
 class BackupSettingsSection(QWidget):
@@ -117,8 +113,6 @@ class BackupSettingsSection(QWidget):
             line = QHBoxLayout()
             line.addWidget(row.caption)
             line.addWidget(row.spin)
-            line.addWidget(row.badge)
-            line.addWidget(row.confirm)
             line.addStretch(1)
             layout.addLayout(line)
         layout.addWidget(self.floors_label)
@@ -140,17 +134,9 @@ class BackupSettingsSection(QWidget):
         spin = QSpinBox(self)
         spin.setObjectName(name)
         spin.setRange(minimum, maximum)
-        badge = QLabel(self)
-        badge.setObjectName(f"{name}_badge")
-        confirm = QPushButton(self)
-        confirm.setObjectName(f"{name}_confirm")
-        badge.setVisible(False)
-        confirm.setVisible(False)
-        row = _Row(field, QLabel(self), spin, badge, confirm)
+        row = _Row(field, QLabel(self), spin)
         row.caption.setBuddy(spin)
-        for target in (spin, confirm):
-            self.context.register_edit_action(target)
-        confirm.clicked.connect(lambda: self._confirm(row))
+        self.context.register_edit_action(spin)
         return row
 
     # ----- texts
@@ -167,11 +153,6 @@ class BackupSettingsSection(QWidget):
                 "Backup", "Remind me when the last encrypted backup is older than (days)"
             )
         )
-        badge = QCoreApplication.translate("Backup", "Placeholder - to be confirmed")
-        confirm = QCoreApplication.translate("Backup", "Confirm")
-        for row in self._rows:
-            row.badge.setText(badge)
-            row.confirm.setText(confirm)
         floors = QCoreApplication.translate(
             "Backup", "Minimums that cannot be lowered: %1 passphrase characters, %2 daily backups."
         )
@@ -226,7 +207,7 @@ class BackupSettingsSection(QWidget):
         return self._loaded is not None and self._typed() != self._loaded
 
     def refresh(self) -> None:
-        """Show the stored settings with their badges, and the time of the last backup.
+        """Show the stored settings and the time of the last backup.
 
         The values are loaded into the spin boxes the first time and when they hold no unsaved
         edit: a ``data_changed`` of another page must not discard what was typed.
@@ -248,18 +229,9 @@ class BackupSettingsSection(QWidget):
         }
         load_values = not self.is_dirty()
         for row in self._rows:
-            row.placeholder = None
-            if config is not None:
-                try:
-                    row.placeholder = config.badge_for_field(row.field)
-                except ServiceError:
-                    row.placeholder = None
             if load_values:
                 row.spin.setValue(values[row.field])
-            row.badge.setVisible(row.placeholder is not None)
-            row.confirm.setVisible(row.placeholder is not None)
             self.context.set_edit_enabled(row.spin, config is not None)
-            self.context.set_edit_enabled(row.confirm, config is not None)
         self.context.set_edit_enabled(self.save_action, config is not None)
         if load_values:
             self._loaded = self._typed()
@@ -289,13 +261,6 @@ class BackupSettingsSection(QWidget):
         if apply_change(self.context, self, error_label, save):
             self._loaded = None  # what is typed is now what is stored
             self.refresh()
-
-    def _confirm(self, row: _Row) -> None:
-        config = self._config()
-        placeholder = row.placeholder
-        if config is None or placeholder is None:
-            return
-        apply_change(self.context, self, error_label, lambda: config.confirm(placeholder))
 
 
 # --------------------------------------------------------------------------- registry factories

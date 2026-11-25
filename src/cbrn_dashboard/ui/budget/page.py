@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -390,8 +389,6 @@ class BudgetSettingsSection(QWidget):
         self.setObjectName("budget_section")
         self.context = context
         self._syncing = False
-        self._currency_placeholder: str | None = None
-        self._prorate_placeholder: str | None = None
         self._config_error: str | None = None
         self.model = SourcesModel(self)
         self.view = make_table_view(self.model, self)
@@ -440,42 +437,18 @@ class BudgetSettingsSection(QWidget):
         self.currency_caption.setBuddy(self.currency_combo)
         for code in CURRENCY_DECIMALS:
             self.currency_combo.addItem(code, code)
-        self.currency_badge = QLabel(self)
-        self.currency_badge.setObjectName("currency_badge")
-        self.currency_confirm = QPushButton(self)
-        self.currency_confirm.setObjectName("currency_confirm")
         self.prorate_check = QCheckBox(self)
         self.prorate_check.setObjectName("prorate_check")
-        self.prorate_badge = QLabel(self)
-        self.prorate_badge.setObjectName("prorate_badge")
-        self.prorate_confirm = QPushButton(self)
-        self.prorate_confirm.setObjectName("prorate_confirm")
-        for widget in (
-            self.currency_badge,
-            self.currency_confirm,
-            self.prorate_badge,
-            self.prorate_confirm,
-        ):
-            widget.setVisible(False)
         # Read-only mode disables every control that changes data.
-        for target in (
-            self.currency_combo,
-            self.currency_confirm,
-            self.prorate_check,
-            self.prorate_confirm,
-        ):
+        for target in (self.currency_combo, self.prorate_check):
             context.register_edit_action(target)
 
         currency_row = QHBoxLayout()
         currency_row.addWidget(self.currency_caption)
         currency_row.addWidget(self.currency_combo)
-        currency_row.addWidget(self.currency_badge)
-        currency_row.addWidget(self.currency_confirm)
         currency_row.addStretch(1)
         prorate_row = QHBoxLayout()
         prorate_row.addWidget(self.prorate_check)
-        prorate_row.addWidget(self.prorate_badge)
-        prorate_row.addWidget(self.prorate_confirm)
         prorate_row.addStretch(1)
         layout = QVBoxLayout(self)
         layout.addWidget(self.sources_caption)
@@ -490,8 +463,6 @@ class BudgetSettingsSection(QWidget):
             selection.selectionChanged.connect(self._update_actions)
         self.currency_combo.currentIndexChanged.connect(self._currency_picked)
         self.prorate_check.toggled.connect(self._prorate_toggled)
-        self.currency_confirm.clicked.connect(self._confirm_currency)
-        self.prorate_confirm.clicked.connect(self._confirm_prorate)
         context.data_changed.connect(self.refresh)
         follow_language(context, self.retranslate)
         self.retranslate()
@@ -507,12 +478,6 @@ class BudgetSettingsSection(QWidget):
                 "Budget", "Pro-rate the execution target over the fiscal year"
             )
         )
-        badge = QCoreApplication.translate("Budget", "Placeholder - to be confirmed")
-        confirm = QCoreApplication.translate("Budget", "Confirm")
-        self.currency_badge.setText(badge)
-        self.prorate_badge.setText(badge)
-        self.currency_confirm.setText(confirm)
-        self.prorate_confirm.setText(confirm)
         for action in self._actions:
             action.retranslate()
         self._show_config_error()
@@ -548,18 +513,14 @@ class BudgetSettingsSection(QWidget):
         self._update_actions()
 
     def _refresh_settings(self) -> None:
-        """Show the stored default currency and pro-rating switch with their badges."""
+        """Show the stored default currency and pro-rating switch."""
         config = _config(self.context)
         currency = configured_currency(self.context)
         prorate = True
-        self._currency_placeholder = None
-        self._prorate_placeholder = None
         self._config_error = None
         if config is not None:
             try:
                 prorate = bool(config.load().budget_prorate_target)
-                self._currency_placeholder = config.badge_for_field("default_currency")
-                self._prorate_placeholder = config.badge_for_field("budget_prorate_target")
             except ServiceError as error:
                 self._config_error = error.code
                 config = None
@@ -570,15 +531,9 @@ class BudgetSettingsSection(QWidget):
             self.prorate_check.setChecked(prorate)
         finally:
             self._syncing = False
-        self.currency_badge.setVisible(self._currency_placeholder is not None)
-        self.currency_confirm.setVisible(self._currency_placeholder is not None)
-        self.prorate_badge.setVisible(self._prorate_placeholder is not None)
-        self.prorate_confirm.setVisible(self._prorate_placeholder is not None)
         enable = self.context.set_edit_enabled
         enable(self.currency_combo, config is not None)
         enable(self.prorate_check, config is not None)
-        enable(self.currency_confirm, config is not None)
-        enable(self.prorate_confirm, config is not None)
 
     def _update_actions(self, *_args: object) -> None:
         has_service = self.context.services.budget is not None
@@ -613,18 +568,6 @@ class BudgetSettingsSection(QWidget):
 
         if not apply_change(self.context, self, error_label, save):
             self.refresh()
-
-    def _confirm_currency(self) -> None:
-        self._confirm(self._currency_placeholder)
-
-    def _confirm_prorate(self) -> None:
-        self._confirm(self._prorate_placeholder)
-
-    def _confirm(self, placeholder: str | None) -> None:
-        config = _config(self.context)
-        if config is None or placeholder is None:
-            return
-        apply_change(self.context, self, error_label, lambda: config.confirm(placeholder))
 
     # ----- funding sources
 

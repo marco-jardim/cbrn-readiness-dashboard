@@ -155,9 +155,6 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     "CORRUPT_SETTING": lambda: QCoreApplication.translate(
         "Backup", "A stored setting cannot be read."
     ),
-    "UNKNOWN_PLACEHOLDER": lambda: QCoreApplication.translate(
-        "Backup", "This placeholder is not known."
-    ),
 }
 
 #: Every error code the backup UI can present (for the completeness test).

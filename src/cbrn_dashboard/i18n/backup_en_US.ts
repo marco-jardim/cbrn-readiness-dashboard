@@ -54,14 +54,6 @@
         <translation>Remind me when the last encrypted backup is older than (days)</translation>
     </message>
     <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation>Placeholder - to be confirmed</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation>Confirm</translation>
-    </message>
-    <message>
         <source>Minimums that cannot be lowered: %1 passphrase characters, %2 daily backups.</source>
         <translation>Minimums that cannot be lowered: %1 passphrase characters, %2 daily backups.</translation>
     </message>
@@ -196,10 +188,6 @@
     <message>
         <source>A stored setting cannot be read.</source>
         <translation>A stored setting cannot be read.</translation>
-    </message>
-    <message>
-        <source>This placeholder is not known.</source>
-        <translation>This placeholder is not known.</translation>
     </message>
     <message>
         <source>Back up...</source>

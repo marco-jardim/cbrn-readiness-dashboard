@@ -149,10 +149,6 @@
         <translation>A stored setting cannot be read.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation>This placeholder is not known.</translation>
-    </message>
-    <message>
         <source>Source</source>
         <extracomment>A missing value in a cell (data, not a translatable text).</extracomment>
         <translation>Source</translation>
@@ -328,14 +324,6 @@
     <message>
         <source>Pro-rate the execution target over the fiscal year</source>
         <translation>Pro-rate the execution target over the fiscal year</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation>Placeholder - to be confirmed</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation>Confirm</translation>
     </message>
     <message>
         <source>Budget</source>
