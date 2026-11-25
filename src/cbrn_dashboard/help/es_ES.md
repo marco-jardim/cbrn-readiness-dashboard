@@ -203,4 +203,4 @@ Algunos valores son provisionales y el comité todavía debe confirmarlos. Lleva
 - El registro de eventos (log) contiene solo códigos de eventos, nunca el contenido de los registros.
 - El programa no puede comprobar si el disco de este equipo está cifrado. La documentación exige el cifrado completo del disco, por ejemplo con BitLocker. Los archivos que usted exporta o copia a un soporte extraíble no están protegidos por el programa.
 - Un aviso advierte cuando la carpeta de datos está en un recurso compartido de red o dentro de una carpeta sincronizada con OneDrive.
-- "Sensible" es solo una etiqueta de trabajo para los datos que permanecen en este equipo; no es una clasificación formal. No introduzca datos reales hasta que se respondan las cuestiones abiertas Q19, Q4, Q11 y Q13. Hasta entonces use solo datos de demostración, que llevan un aviso DEMO permanente.
+- "Sensible" es solo una etiqueta de trabajo para los datos que permanecen en este equipo; no es una clasificación formal. Los datos de demostración llevan un aviso DEMO permanente.

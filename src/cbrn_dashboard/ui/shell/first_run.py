@@ -46,9 +46,8 @@ def first_run_notice_text(data_folder: Path) -> str:
 
     It says where the data lives; that full-disk encryption is required by the documentation
     (D03), cannot be checked by the application and does not protect exported files on removable
-    media; how backups work; that "sensitive" is not a formal classification and that real data
-    must not be entered before Q19, Q4, Q11 and Q13 are answered; and how several people can share
-    one machine (A12).
+    media; how backups work; that "sensitive" is only a working label and not a formal
+    classification; and how several people can share one machine (A12).
     """
     location = QCoreApplication.translate(
         "Shell", "Your data is stored only on this computer, in this folder: %1"
@@ -68,9 +67,7 @@ def first_run_notice_text(data_folder: Path) -> str:
     classification = QCoreApplication.translate(
         "Shell",
         'Classification: "sensitive" is only a working label for data that stays on this '
-        "computer; it is not a formal classification. Do not enter real data until the "
-        "classification question (Q19) and the questions Q4, Q11 and Q13 have been answered. "
-        "Until then use only demo data.",
+        "computer; it is not a formal classification.",
     )
     shared = QCoreApplication.translate(
         "Shell",

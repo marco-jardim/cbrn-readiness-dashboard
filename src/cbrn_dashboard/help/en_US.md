@@ -203,4 +203,4 @@ Some values are placeholders that the committee still has to confirm. They carry
 - The log holds event codes only, never the contents of records.
 - The program cannot check whether the disk of this computer is encrypted. The documentation requires full-disk encryption, for example BitLocker. Files that you export or copy to removable media are not protected by the program.
 - A banner warns when the data folder is on a network share or inside a folder synchronised by OneDrive.
-- "Sensitive" is only a working label for data that stays on this computer; it is not a formal classification. Do not enter real data until the open questions Q19, Q4, Q11 and Q13 have been answered. Until then use only demo data, which carries a permanent DEMO banner.
+- "Sensitive" is only a working label for data that stays on this computer; it is not a formal classification. Demo data carries a permanent DEMO banner.

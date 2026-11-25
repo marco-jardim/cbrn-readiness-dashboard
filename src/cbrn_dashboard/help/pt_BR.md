@@ -203,4 +203,4 @@ Alguns valores são provisórios e ainda precisam ser confirmados pelo comitê. 
 - O registro de eventos (log) contém apenas códigos de eventos, nunca o conteúdo dos registros.
 - O programa não consegue verificar se o disco deste computador está criptografado. A documentação exige criptografia de disco completo, por exemplo o BitLocker. Arquivos que você exporta ou copia para mídia removível não são protegidos pelo programa.
 - Um aviso alerta quando a pasta de dados está em um compartilhamento de rede ou dentro de uma pasta sincronizada pelo OneDrive.
-- "Sensível" é apenas um rótulo de trabalho para dados que ficam neste computador; não é uma classificação formal. Não digite dados reais até que as questões em aberto Q19, Q4, Q11 e Q13 sejam respondidas. Até lá, use apenas dados de demonstração, que trazem um aviso DEMO permanente.
+- "Sensível" é apenas um rótulo de trabalho para dados que ficam neste computador; não é uma classificação formal. Os dados de demonstração trazem um aviso DEMO permanente.

@@ -296,8 +296,8 @@
         <translation type="unfinished">Backups: uma cópia simples do banco de dados é feita automaticamente uma vez por dia na pasta backups da pasta de dados. Os backups criptografados são feitos manualmente em um local de sua escolha; guarde-os em mídia separada. Uma senha perdida não pode ser recuperada.</translation>
     </message>
     <message>
-        <source>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification. Do not enter real data until the classification question (Q19) and the questions Q4, Q11 and Q13 have been answered. Until then use only demo data.</source>
-        <translation type="unfinished">Classificação: &quot;sensível&quot; é apenas um rótulo de trabalho para dados que ficam neste computador; não é uma classificação formal. Não insira dados reais até que a questão da classificação (Q19) e as questões Q4, Q11 e Q13 tenham sido respondidas. Até lá, use apenas dados de demonstração.</translation>
+        <source>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification.</source>
+        <translation type="unfinished">Classificação: "sensível" é apenas um rótulo de trabalho para dados que ficam neste computador; não é uma classificação formal.</translation>
     </message>
     <message>
         <source>Shared computer: several people can take turns on one computer only with one shared Windows account, or with --data-dir pointing to a local folder restricted to the committee. With separate Windows accounts each person gets a separate database.</source>

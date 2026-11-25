@@ -296,8 +296,8 @@
         <translation>Backups: a plain copy of the database is made automatically once a day in the backups folder of the data folder. Encrypted backups are made by hand to a place that you choose; keep them on separate media. A lost passphrase cannot be recovered.</translation>
     </message>
     <message>
-        <source>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification. Do not enter real data until the classification question (Q19) and the questions Q4, Q11 and Q13 have been answered. Until then use only demo data.</source>
-        <translation>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification. Do not enter real data until the classification question (Q19) and the questions Q4, Q11 and Q13 have been answered. Until then use only demo data.</translation>
+        <source>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification.</source>
+        <translation>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification.</translation>
     </message>
     <message>
         <source>Shared computer: several people can take turns on one computer only with one shared Windows account, or with --data-dir pointing to a local folder restricted to the committee. With separate Windows accounts each person gets a separate database.</source>

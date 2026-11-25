@@ -544,13 +544,14 @@ def test_the_first_run_notice_appears_exactly_once_with_its_content(
         "folder of the data folder. Encrypted backups are made by hand to a place that you "
         "choose; keep them on separate media. A lost passphrase cannot be recovered.",
         'Classification: "sensitive" is only a working label for data that stays on this '
-        "computer; it is not a formal classification. Do not enter real data until the "
-        "classification question (Q19) and the questions Q4, Q11 and Q13 have been answered. "
-        "Until then use only demo data.",
+        "computer; it is not a formal classification.",
         "Shared computer: several people can take turns on one computer only with one shared "
         "Windows account, or with --data-dir pointing to a local folder restricted to the "
         "committee. With separate Windows accounts each person gets a separate database.",
     ]
+    # T12.5 (D39): the real-data gate is gone from the notice.
+    assert "Q19" not in call.text
+    assert "real data" not in call.text
     saved = json.loads((tmp_path / PREFS_FILE_NAME).read_text(encoding="utf-8"))
     assert saved["first_run_notice_shown"] is True
     first.close()
