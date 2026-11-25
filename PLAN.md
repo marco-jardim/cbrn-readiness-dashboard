@@ -160,7 +160,7 @@ These requests come from the project owner, not from the appendix, so they carry
 | I03 | Every indicator can be evaluated for any as-of date, past or present, from the dated records as known today and with the current configuration. Snapshots are the only record of what was known and configured at the time | R04, R29, R31 |
 | I04 | Rules, warning windows and targets are configurable | R28 (requirements have not been gathered yet) |
 | I05 | Input validation and data-quality warnings | R06 |
-| I06 | A visible "preliminary, not validated" notice in the UI and in reports | R30 |
+| I06 | A visible "preliminary, not validated" notice in the UI and in reports — withdrawn by D39 (T12.4, T12.13) | R30 |
 | I07 | Demo data kept strictly separate from real data | F05 |
 
 ### 3.4 Design decisions register
@@ -193,7 +193,7 @@ These requests come from the project owner, not from the appendix, so they carry
 | D25 | Demo data lives in a separate database file with its own backups, every identifier starts with `DEMO`, and a permanent banner is shown. The banner, a PDF watermark and the `DEMO-` prefix on CSV file names are driven by `app_meta.is_demo`, not by the command-line flag | §7 |
 | D26 | An asset with no status event on or before the as-of date has the status "unknown": not available, and flagged as a data-quality issue | T3.2 |
 | D27 | Negative budget amounts are rejected; corrections are made by editing the entry, and every edit is recorded in `change_log` | T5.3 |
-| D28 | `staff_member.category` is treated as personal free text while Q4 (whether to record a category, and from which coded list) is open: like `identifier` and `label`, its value never reaches `change_log` (only the fact that it changed), "pseudonymise person" clears it, and its input shows the free-text hint (QA finding P2-01) | §5.1, T2.3, T2.4, Q4 |
+| D28 | `staff_member.category` is treated as personal free text while Q4 (whether to record a category, and from which coded list) is open: like `identifier` and `label`, its value never reaches `change_log` (only the fact that it changed), "pseudonymise person" clears it, and its input shows the free-text hint (QA finding P2-01). Stays in force after Q4 was answered (D39); any change that follows from the answer needs its own task | §5.1, T2.3, T2.4, Q4 |
 | D29 | `EX_LAST_COUNTRIES`, empty country set: an edition saved with no countries is read as "countries not entered", not as zero countries, so the indicator is No data (D14) for that kind, as it is for participants not recorded. An edition that really had no foreign participation cannot be told apart from one whose countries were not filled in; an operator who wants to show a real zero (no foreign participation) should record the host country. The number of countries in the editions table still shows 0 for such an edition (QA finding P4-04) | §5.4, T4.3, T4.5 |
 | D30 | A chart value that is not recorded (`None`) is not drawn as a value: its bar has no height, the legend entry of its series names the categories that are not recorded ("… (not recorded: …)"), the legend is shown whenever a value is missing, and reading the chart back gives `None` for those categories. Inside Qt the bar still holds 0, so the legend note is what tells a missing value from a recorded 0. Chart axis numbers follow the locale of the language in use (QA finding P6-05) | D08, T6.4, T6.5, T8.6 |
 | D31 | When the data folder named by `--data-dir` or by `CBRN_DASHBOARD_DATA_DIR` is unusable (not writable and holding no database), the offer to choose another folder says the choice is for this session only, and the chosen folder is used for this session only: no `location.json` pointer is written. These two sources rank above the pointer (D02), so a pointer written then would be ignored by the next start with the same option and followed only by a later plain start, which would move the data silently. Other sources keep the T7.5 behaviour (QA finding P7-05) | D02, T7.5 |
@@ -204,6 +204,7 @@ These requests come from the project owner, not from the appendix, so they carry
 | D36 | Stock is its own indicator module, `Module.STOCK`. Its dimension keys are `category` and `item`. The category of a type cannot change once a lot uses it. A value is produced only for a type that is in use on the date or has a minimum | O03, O04, T11.7 |
 | D37 | The anonymised report omits per-type stock quantities, values and prices, and the stock chart; it keeps counts (lots expired, lots expiring, types below minimum, stock alerts). Those cells are marked `internal_only` in the report model. The internal report lists the expired and expiring lots with stock | T11.15, Q27, A11 |
 | D38 | One stock panel is shared by the "Estoque (lotes)" tab and by the antidotes page. Stock is management data only: types, lots, quantities, expiry dates, prices and movements; there are no dose, indication or protocol fields, and lot codes and notes carry a hint that no clinical information belongs there (D19) | O01, O03, T11.9, T11.10, T11.11 |
+| D39 | Owner, 2026-11-24 ("o app está concluído e aprovado, remova os avisos"). From 1.2.0 there is no preliminary-version notice (UI banner, PDF, About, first-run notes, release body, help), no warning against entering real data until Q19, Q4, Q11 and Q13 are answered, and no placeholder badge or Confirm action. Generic defaults become confirmed code defaults (placeholder flags cleared). The local-only values P03, P10, D18 and P12 keep empty code defaults, are set per installation in Settings, and are not shown as placeholders. P07 is withdrawn. Q15, Q19, Q4, Q11 and Q13 are answered; only their status is recorded, never the answer content. Kept: D25 (DEMO banner), the data-protection notice without the gate sentence, F05 and K04 (no real data in the repository). Supersedes I06 and the notice and badge requirements of T1.5, T1.9, T6.1, T7.5, T8.6, T9.3, T9.4, T10.2, T10.5 and T11.13; done tasks are not rewritten. It is not a claim of institutional homologation (R30). Answering Q11 and Q13 does not trigger X1, X5, X6 or X13 | I06, P07, K24, K25, T12.3–T12.14 |
 
 New A, P and D identifiers are assigned at merge time (next free number). Design decisions go to this register and assumptions or placeholders to §3.5 (§10.1).
 
@@ -242,7 +243,7 @@ A-items without a setting (A01, A03, A12, A13, A14, A15, A16) are assumptions, n
 | P04 | Automatic snapshots (D21) | monthly (first start in a month) and on every report | Settings | Q9 |
 | P05 | Minimum backup passphrase length. Settings cannot go below the hard floor of 12 characters | 12 characters | Settings | Q11 |
 | P06 | Number of automatic daily local backups kept. Settings cannot go below the hard floor of 2 copies | 7 | Settings | — (technical) |
-| P07 | Disclaimer wording (I06) | "Preliminary version — indicators not institutionally validated." | translations | Q15 |
+| P07 | Disclaimer wording (I06) — withdrawn by D39 (T12.4, T12.13) | "Preliminary version — indicators not institutionally validated." | translations | Q15 |
 | P08 | Pro-rating of the `BUD_EXEC_RATE` target over the fiscal year (the target is multiplied by the elapsed fraction of the year, linear) | linear, on | Settings → Budget | Q8 |
 | P09 | Reminder banner when the last encrypted backup is older than this many days | 30 days | Settings → Backup | Q11 |
 | P10 | Handling notice printed on the internal report (local-only value: no code default, flag never cleared in code) | empty | Settings → Reports | Q10 |
@@ -2474,6 +2475,106 @@ Rules that hold for every task of the phase:
 - Accept: the readiness tests pass (the entry lists the placeholders found in code, the question statuses of Q1–Q29 and the count of unfinished messages found); the default suite and the packaging suite pass; the frozen self-test passes with the stock tables present.
 - Check: `uv run pytest tests/meta/test_release_readiness.py`, then `uv run pytest` and `uv run pytest -m packaging`
 
+#### Phase 12 — Notice removal (1.2.0)
+This phase implements D39 (owner decision of 2026-11-24). It removes the preliminary-version notices, the warning against entering real data, the placeholder badges and the Confirm actions, and clears the placeholder flags. It is a separate release, 1.2.0, that follows 1.1.0. It is not a claim of institutional homologation (R30, K25) and it records only the status of each answered question, never the content of an answer.
+
+Rules that hold for every task of the phase:
+- Kept: the DEMO banner and the `DEMO` identifiers (D25), the data-protection notice without the gate sentence, the "sensitive is a working label, not a formal classification" sentence (§7.1), and the rule that no real data enters the repository (F05, K04).
+- The local-only values P03, P10, D18 and P12 keep empty code defaults and are set per installation in Settings; they are not shown as placeholders.
+- Done tasks of earlier phases are not rewritten; this phase supersedes their notice and badge requirements (D39).
+- No wording anywhere states that the tool is validated, approved or homologated.
+- The snapshot configuration hash does not change: no hashed field is added, removed or given a new default (K24; see T12.12 and T12.13).
+
+**T12.1 — Open the 1.2.0 cycle** (S) · Depends on: T11.19 · **Status: done**
+- Files: `src/cbrn_dashboard/__init__.py`, `README.md`, `CHANGELOG.md`, `docs/`, `tests/meta/test_release_readiness.py`.
+- Work: set the version to 1.2.0; name 1.1.0 as the last published version where the documents and the readiness tests do so; add an unreleased `1.2.0` changelog entry that says what has not happened (no tag, no workflow run, no manual test).
+- Accept: the readiness tests pass for 1.2.0 and the changelog entry states that it is not published.
+- Check: `uv run pytest tests/meta/test_release_readiness.py`
+
+**T12.2 — Plan amendments D39 and Phase 12** (S) · Depends on: T12.1 · **Status: done**
+- Files: `PLAN.md`.
+- Work: add D39 (§3.4), the notes on I06, P07 and D28, K24 and K25 (§11), §13.2, this phase and its sizing row (§10.4). §3.5, §7.1, §12, K12 and K19 are not touched here; T12.13 and T12.14 do that.
+- Accept: `PLAN.md` has D39, K24, K25, §13.2 and T12.1–T12.15, and the question statuses are unchanged.
+- Check: `uv run pytest tests/meta`
+
+**T12.3 — No preliminary notice in reports** (S) · Depends on: T12.2 · **Status: pending**
+- Files: `reports/model.py`, `reports/message_keys.py`, `reports/labels.py`, `reports/pdf.py`, `reports/anonymise.py`, `tests/reports/`.
+- Work: remove `ReportDocument.preliminary_notice_code`, `PRELIMINARY_NOTICE_CODE`, `ReportTexts.preliminary_notice`, `PRELIMINARY_KEY`, the PDF notice box and the footer notice; keep the footer rule and "Page %1 of %2".
+- Accept: neither report model nor PDF text carries a preliminary notice; every page still has the footer rule and the page counter.
+- Check: `uv run pytest tests/reports`
+
+**T12.4 — Shell without the preliminary banner** (S) · Depends on: T12.2 · **Status: pending**
+- Files: `ui/shell/`, `ui/help/` (or the equivalent module), `help/{pt_BR,en_US,es_ES}.md`, `i18n/` catalogues of the `shell` area, `tests/ui/test_shell.py`, `tests/ui/test_help_and_about.py`.
+- Work: remove the PRELIMINARY banner, the About line and the help topic "preliminary" in the three languages; the DEMO banner stays permanent in demo mode (D25). Q15 is answered and implemented here.
+- Accept: no banner, About line or help topic mentions a preliminary version; the DEMO banner is still shown in demo mode; the help has the same headings in the three languages.
+- Check: `uv run pytest tests/ui/test_shell.py tests/ui/test_help_and_about.py`
+
+**T12.5 — Lift the real-data gate in the app** (S) · Depends on: T12.2 · **Status: pending**
+- Files: `ui/shell/` (first-run notice), `help/{pt_BR,en_US,es_ES}.md` (privacy topic), `i18n/` catalogues, `tests/ui/test_first_run_and_location.py`, `tests/ui/test_help_and_about.py`.
+- Work: the first-run classification paragraph keeps only the sentence that "sensitive" is a working label, not a formal classification; the help privacy topic loses the warning against real data. Q19, Q4, Q11 and Q13 are answered and implemented here.
+- Accept: no text in the app tells the operator to wait for an answer before entering real data; the working-label sentence is still shown.
+- Check: `uv run pytest tests/ui/test_first_run_and_location.py tests/ui/test_help_and_about.py`
+
+**T12.6 — Shipped notes without notices** (S) · Depends on: T12.2 · **Status: pending**
+- Files: `packaging/README-first-run.*.txt`, `packaging/installer/cbrn-dashboard.iss`, `.github/release-body.template.md`, `tests/packaging/`.
+- Work: remove the preliminary notice and the gate sentence from the first-run notes, the installer before-install notices and the release body template; the template keeps the unsigned-executable statement, the checksum and attestation text, the source links and the written offer (D10, §8).
+- Accept: no shipped note mentions a preliminary version or the gate; the checksum and licence statements are unchanged.
+- Check: `uv run pytest tests/packaging tests/meta/test_release_readiness.py`
+
+**T12.7 — Settings General, Alerts and Targets without badges** (M) · Depends on: T12.2 · **Status: pending**
+- Files: `ui/settings/sections.py`, `ui/settings/page.py`, `i18n/` catalogues of the `settings` area, `tests/ui/test_settings_page.py`, `tests/ui/test_placeholder_confirmation.py` (deleted).
+- Work: remove the badges and Confirm actions of the General, Alerts and Targets sections; delete `PlaceholderBadge` and `tests/ui/test_placeholder_confirmation.py`. Saving, validation and the local-only fields behave as before.
+- Accept: the three sections show no badge or Confirm action; every field still saves and reloads; `PlaceholderBadge` no longer exists.
+- Check: `uv run pytest tests/ui/test_settings_page.py`
+
+**T12.8 — Stock item types without the P12 badge** (S) · Depends on: T12.7 · **Status: pending**
+- Files: `ui/settings/` (stock types section), `tests/ui/test_stock_settings.py`.
+- Work: remove the P12 badge from the stock item types section; the minimum stays an empty-by-default, per-installation value (D35).
+- Accept: the section shows no badge; a minimum still saves and clears.
+- Check: `uv run pytest tests/ui/test_stock_settings.py`
+
+**T12.9 — Personnel and Infrastructure sections without badges** (S) · Depends on: T12.7 · **Status: pending**
+- Files: `ui/settings/` (personnel and infrastructure sections), `tests/ui/test_settings_page.py`.
+- Work: remove the badges and Confirm actions of the two sections.
+- Accept: neither section shows a badge or Confirm action; their fields behave as before.
+- Check: `uv run pytest tests/ui/test_settings_page.py`
+
+**T12.10 — Budget and Backup sections without badges** (S) · Depends on: T12.7 · **Status: pending**
+- Files: `ui/settings/` (budget and backup sections), `tests/ui/test_settings_page.py`.
+- Work: remove the badges and Confirm actions of the two sections.
+- Accept: neither section shows a badge or Confirm action; their fields behave as before.
+- Check: `uv run pytest tests/ui/test_settings_page.py`
+
+**T12.11 — Reports and Snapshots sections and help texts without badges** (S) · Depends on: T12.7 · **Status: pending**
+- Files: `ui/settings/` (reports and snapshots sections), `help/{pt_BR,en_US,es_ES}.md`, `i18n/` catalogues, `tests/ui/test_settings_page.py`, `tests/ui/test_help_and_about.py`.
+- Work: remove the badges and Confirm actions of the two sections; remove the sentences about badges and confirmation from the help texts in the three languages.
+- Accept: no section and no help text mentions a badge, a placeholder flag or a confirmation.
+- Check: `uv run pytest tests/ui/test_settings_page.py tests/ui/test_help_and_about.py`
+
+**T12.12 — Services and storage: delete the confirmation machinery** (M) · Depends on: T12.7, T12.8, T12.9, T12.10, T12.11 · **Status: pending**
+- Files: `storage/settings_repo.py`, `services/settings_service.py`, `tests/storage/test_settings_repo.py`, `tests/services/`.
+- Work: delete the `confirmed.<ID>` keys handling, the confirmation functions and their call sites. Existing `confirmed.<ID>` rows in `app_settings` stay unused: no migration, no deletion. The snapshot configuration hash does not change (no hashed field is touched; K24).
+- Accept: no code reads or writes `confirmed.<ID>`; a database with such rows opens and works; a snapshot taken before and after the change has the same configuration hash.
+- Check: `uv run pytest tests/storage/test_settings_repo.py tests/services`
+
+**T12.13 — Clear every placeholder flag and withdraw P07** (M) · Depends on: T12.12 · **Status: pending**
+- Files: `domain/config.py`, `PLAN.md` (§3.5), `docs/indicators.md`, readiness rules in `tests/meta/`, `tests/domain/`.
+- Work: clear the placeholder flag of every generic default (they become confirmed code defaults) and of the local-only values P03, P10, D18 and P12, which keep empty code defaults; withdraw P07 and remove it from the registry; update §3.5, `docs/indicators.md` and the readiness rules that list flagged placeholders. The `ReadinessConfig()` defaults test and the snapshot configuration hash do not change (K24).
+- Accept: no placeholder flag is set; `flagged_placeholder_ids()` is empty; the plan and the code agree on §3.5; the defaults test and the hash test pass unchanged.
+- Check: `uv run pytest tests/domain tests/meta/test_placeholders_documented.py tests/meta/test_docs.py`
+
+**T12.14 — Documentation, question statuses and the no-notice guard** (M) · Depends on: T12.3, T12.4, T12.5, T12.6, T12.13 · **Status: pending**
+- Files: `PLAN.md` (§3.5, §7.1, §12, K12, K19), `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `docs/`, `tests/meta/`.
+- Work: set the status of Q15 to "answered and implemented in task T12.4" and of Q19, Q4, Q11 and Q13 to "answered and implemented in task T12.5", never the content of an answer; update §7.1, K12 and K19 and the documents that name the notice or the gate; add a no-notice guard test in `tests/meta` that scans the sources, catalogues, help, shipped notes and templates for the removed notices and for validation claims, and allows the DEMO banner and the working-label sentence.
+- Accept: the guard test and the readiness tests pass; the documents state no gate and no preliminary notice; no answer content is recorded.
+- Check: `uv run pytest tests/meta`
+
+**T12.15 — Release 1.2.0** (S) · Depends on: every task of Phase 12 · **Status: pending**
+- Files: `CHANGELOG.md`, `README.md`, `docs/manual-test-script.pt-BR.md`, `docs/smoke-test.pt-BR.md`, `tests/meta/test_release_readiness.py`, `PLAN.md` (status of Phase 12).
+- Work: the 1.2.0 changelog entry says what ships, lists the local-only values with empty code defaults (P03, P10, D18, P12), the assumptions without a setting, the status of Q1–Q29 and the number of unfinished translation messages. Run the full default and packaging suites; a person tags `v1.2.0`, runs the manual test on a clean Windows profile and publishes the draft release. The entry gets its date only then.
+- Accept: the readiness tests pass; the default suite and the packaging suite pass; the frozen self-test passes.
+- Check: `uv run pytest tests/meta/test_release_readiness.py`, then `uv run pytest` and `uv run pytest -m packaging`
+
 ### 10.4 MVP cut, deferred work and sizing
 
 **MVP v0.1** consists of Phases 0–7 (T0.1–T7.5) plus T8.1 (readiness snapshots), T9.2 (licence bundle), T9.3 (release pipeline), T9.4 (first-run notes and the portable example) and T9.6 (the v0.1.0 release). It contains:
@@ -2533,10 +2634,11 @@ That is enough for the committee to review the indicators and placeholders with 
 | 9 Packaging and release | 6 | 3 | 3 | T9.2, T9.3, T9.4, T9.6 MVP; T9.1, T9.5 v1.0 |
 | 10 Documentation and v1.0 | 5 | 2 | 3 | v1.0 |
 | 11 Stock by lot, antidotes and decontaminants | 19 | 5 | 14 | 1.1.0 |
-| **Total** | **88** | **37** | **51** | MVP 56 tasks (27 S, 29 M); v1.0 adds 13 (5 S, 8 M); 1.1.0 adds 19 (5 S, 14 M) |
+| 12 Notice removal | 15 | 11 | 4 | 1.2.0 |
+| **Total** | **103** | **48** | **55** | MVP 56 tasks (27 S, 29 M); v1.0 adds 13 (5 S, 8 M); 1.1.0 adds 19 (5 S, 14 M); 1.2.0 adds 15 (11 S, 4 M) |
 
 Honest remarks on size:
-- The MVP is about four fifths of the task count of v1.0 (56 of 69). Phase 11 adds 19 tasks for 1.1.0, so the plan has 88 tasks in all.
+- The MVP is about four fifths of the task count of v1.0 (56 of 69). Phase 11 adds 19 tasks for 1.1.0 and Phase 12 adds 15 for 1.2.0, so the plan has 103 tasks in all.
 - The longest chain of tasks that must run one after another is 16 tasks (§10.2): T0.1 → T0.5 or T0.6 → T0.7 → T1.3 → T1.4 → T1.8 → T1.9 → a module UI task (T2.4, T3.4, T4.5 or T5.4) → T6.1 → T6.2 → T6.5 → T8.5 → T8.6 → T8.7 → T10.2 or T10.4 → T10.5. The branch T6.5 → T8.1 → T8.2 → T8.7 is equally long. The documentation branch T9.3 → T9.4 → T10.3 → T10.5 is shorter. Running modules and Phase 7 in parallel shortens the elapsed time, but not this chain.
 - The UI tasks carry most of the effort and most of the translation work. Each UI task also adds translations in three languages, which the committee still has to review (Q14).
 - Answers to §12 may add work. Most answers are applied in Settings without code: P01–P06, P08, P09, targets, A02, A04, A05, A06 intervals, A07 metrics, A09 courses and the A11 threshold. P07 (the disclaimer wording) lives in the translations and needs a commit. A01, A03, A12, A13 and A14 have no setting: they are assumptions, and an answer that contradicts them, like one that contradicts A08 or A10 or requests X1–X6, needs new tasks. Clearing a placeholder flag in `domain/config.py` is always a commit (§3.5).
@@ -2583,6 +2685,8 @@ Likelihood and impact are rated H (high), M (medium) or L (low).
 | K21 | Snapshots taken before 1.1.0 are not comparable with later ones: the configuration hash changes once on upgrade, because the hashed fields grow by `stock_expiry_warning_days` and `stock_item_type_minimum_quantity`, and the `STOCK_*` indicators are missing from older snapshots. | H / L | The change is documented in the changelog entry for 1.1.0 and in T8.1. T11.7 checks that an indicator missing from an older snapshot is read as "no data", never as zero. Old snapshots are not rewritten (they cannot be changed, K13). | K13, T8.1, T11.7 |
 | K22 | Tile inflation: stock adds many tiles to the dashboard (one per item type, plus lot and minimum counts), and the committee stops reading it. | M / M | A `STOCK_VALID_QTY` value exists only for a type that is in use on the date or has a minimum (D36). Stock tiles form their own "Estoque" group. A fresh real database shows no stock tiles. The antidotes page and the dashboard shortcut carry the detail instead of the overview. | D36, T11.7, T11.12 |
 | K23 | Stock data (quantities, expiry dates, prices, the lots that are short or expired) reaches third parties through reports, exports or backups, which would disclose readiness gaps. | M / H | Stock carries the "sensitive" working label (§7.1). The anonymised report omits per-type quantities, values and prices and the stock chart, and keeps only counts (D37, T11.15); a test checks that no total in it contains an internal-only cell. The internal report lists expired and expiring lots and is for internal use only. CSV export and backups follow the existing controls (§7.3). Whether the counts themselves are safe is Q27. | K03, D37, Q27 |
+| K24 | Default drift: with the confirmations gone (D39), nothing pins a generic default on an existing database, so a later change of a code default silently changes the value on every installation that never saved that field. | M / M | Any change of a generic default needs a step that writes the old value to the existing databases, plus the existing `ReadinessConfig()` defaults test. T12.12 and T12.13 note that the configuration hash does not change. | D39, T12.12, T12.13 |
+| K25 | Removing the notices is read as institutional homologation, or lifting the gate publicly reveals something about the answers to Q19, Q4, Q11 and Q13. | M / H | A no-notice guard test (T12.14). No wording that claims validation anywhere; R30 stays outside the software. Only the status of each question is recorded, never the content of an answer. | D39, R30, T12.14 |
 
 Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for IT teams", taken straight from the per-file manifest, is superseded. `SHA256-FILES.txt` is for verifying each extracted file; IT teams then make their allow-listing rules from the verified folder with their organisation's own policy tooling (T9.3). The same reading applies to D10, §8, T9.4 and T10.3.
 
@@ -2758,8 +2862,8 @@ Version 1.0 is done when every item below can be verified.
    - pt-BR, en-US and es-ES are complete according to the automated tests;
    - the terminology review (Q14) is recorded in `CHANGELOG.md`: either no unfinished message remains in the catalogues, or the changelog states the count still pending review (T10.5 test);
    - the in-app help exists in all three languages with the same structure.
-7. **Placeholders:** every placeholder of §3.5 is either a generic default whose flag was cleared in `domain/config.py` because the project owner judged the value not sensitive, or still flagged in `domain/config.py` and listed in the changelog entry for 1.0.0 (T10.5 test). The local-only values (targets, institution and unit names, the report handling notice) stay flagged, have no code default and are confirmed per installation in Settings only. The A-items without a setting (A01, A03, A12, A13, A14) are listed only as open questions. The changelog and PLAN.md record only the status of each question, never the content of an answer.
-8. **Preliminary notice:** it is present in the UI banner, on every PDF page, in the About dialog, in the first-run notes and in the release body (tests in T1.9, T8.6, T10.2, T9.4 and T9.3).
+7. **Placeholders** (1.0.x and 1.1.0; from 1.2.0 see §13.2)**:** every placeholder of §3.5 is either a generic default whose flag was cleared in `domain/config.py` because the project owner judged the value not sensitive, or still flagged in `domain/config.py` and listed in the changelog entry for 1.0.0 (T10.5 test). The local-only values (targets, institution and unit names, the report handling notice) stay flagged, have no code default and are confirmed per installation in Settings only. The A-items without a setting (A01, A03, A12, A13, A14) are listed only as open questions. The changelog and PLAN.md record only the status of each question, never the content of an answer.
+8. **Preliminary notice** (1.0.x and 1.1.0; from 1.2.0 see §13.2)**:** it is present in the UI banner, on every PDF page, in the About dialog, in the first-run notes and in the release body (tests in T1.9, T8.6, T10.2, T9.4 and T9.3).
 9. **Documentation:** all of these exist and pass their tests where tests apply:
    - `README.md`; `PLAN.md` (updated §3.5 and §12, with the status of each question and never the content of an answer); `CONTRIBUTING.md`; `CHANGELOG.md`;
    - `docs/install.{pt-BR,en-US,es-ES}.md`, `docs/indicators.md`, `docs/architecture.md`, `docs/data-protection.md`, `docs/import-templates.md`, `docs/manual-test-script.pt-BR.md`, `docs/smoke-test.pt-BR.md`;
@@ -2769,7 +2873,7 @@ Version 1.0 is done when every item below can be verified.
 11. **Offline:** source contains no network-capable modules (T0.4), and the bundle contains no Qt network or web libraries (T9.1). No telemetry, no update check.
 12. **Licences:** the allow-list test passes, and the `licenses\` folder and the About dialog list every bundled component (T9.2, T10.2). The release body links the matching source tag and the Qt and PySide6 source release, and carries the written offer (T9.3).
 13. **Repository content:** the hygiene test passes, and a person has reviewed the tagged tree. It contains no real data, no database or backup files, no text from the WHO guide or from internal hospital documents, no clinical content, and no committee answers (only the status of each question). All demo data is fictitious and uses `DEMO` identifiers.
-14. **Out of scope:** institutional homologation (R30) and the result of the predictive-validity comparison (R31) are not part of this definition. v1.0 is handed over for institutional evaluation as a preliminary tool. The entry of real data is gated by the answers to Q19 (formal classification), Q4, Q11 and Q13 (§12); until then only demo data is used.
+14. **Out of scope** (1.0.x and 1.1.0; from 1.2.0 see §13.2)**:** institutional homologation (R30) and the result of the predictive-validity comparison (R31) are not part of this definition. v1.0 is handed over for institutional evaluation as a preliminary tool. The entry of real data is gated by the answers to Q19 (formal classification), Q4, Q11 and Q13 (§12); until then only demo data is used.
 
 ### 13.1 Definition of done for 1.1.0
 Version 1.1.0 (stock by lot, antidotes and decontaminants; Phase 11) is done when items 2, 3 and 6 to 13 of the list above apply to it, with these changes, and every task from T11.1 to T11.19 is merged:
@@ -2779,3 +2883,11 @@ Version 1.1.0 (stock by lot, antidotes and decontaminants; Phase 11) is done whe
 - the anonymised report contains no per-type stock quantity, value or price (D37), and the documentation says so (items 9 and 13);
 - the one-time change of the snapshot configuration hash is documented in the changelog (K21);
 - the deferred items X1–X13 stay excluded, and the entry of real data stays gated as in item 14.
+
+### 13.2 Definition of done for 1.2.0
+Version 1.2.0 (notice removal; Phase 12; D39) is done when items 2, 3, 5, 6 and 9 to 13 of the list in §13 apply to it, with these changes, and every task from T12.1 to T12.15 is merged:
+- the version, the release artefacts (item 5), the checked commit (item 4) and the manual test (item 10) are those of 1.2.0;
+- item 7 becomes: no placeholder flag is set; the local-only values (P03, P10, D18, P12) have empty code defaults and are listed in the changelog; no badge or Confirm action exists;
+- item 8 becomes: the no-notice scan in `tests/meta` passes; the DEMO banner is still shown in demo mode (D25);
+- item 14 becomes: the real-data gate is lifted (D39); institutional homologation (R30) and the result of the predictive-validity comparison (R31) stay outside the software;
+- the changelog and `PLAN.md` record only the status of Q15, Q19, Q4, Q11 and Q13, never the content of an answer.
