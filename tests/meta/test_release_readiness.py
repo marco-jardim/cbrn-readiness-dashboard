@@ -586,3 +586,23 @@ def test_no_release_document_claims_a_publication_or_a_signature() -> None:
         text = _one_line(_read(path))
         found = [claim for claim in FORBIDDEN_CLAIMS if claim in text]
         assert not found, f"{path.name} claims too much: {found}"
+
+
+# --- the placeholder confirmation is gone (PLAN.md D39, T12.12) ------------------------------
+
+_REMOVED_CONFIRMATION_IDENTIFIERS = re.compile(
+    r"\b(?:needs_badge|badge_for_field|confirm_placeholder|unconfirm|unconfirm_placeholder"
+    r"|confirmed_placeholders|CONFIRMED_PREFIX|PlaceholderBadge|UNKNOWN_PLACEHOLDER)\b"
+)
+
+
+def test_no_placeholder_confirmation_remains_in_the_source() -> None:
+    sources = sorted((ROOT / "src").rglob("*.py"))
+    assert sources, "the source tree was not found"
+    found = [
+        f"{path.relative_to(ROOT).as_posix()}:{number}: {match.group(0)}"
+        for path in sources
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+        for match in _REMOVED_CONFIRMATION_IDENTIFIERS.finditer(line)
+    ]
+    assert not found, f"placeholder confirmation code is back: {found}"

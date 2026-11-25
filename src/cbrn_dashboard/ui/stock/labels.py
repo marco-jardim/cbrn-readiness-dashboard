@@ -17,11 +17,7 @@ from collections.abc import Callable, Mapping
 from PySide6.QtCore import QCoreApplication
 
 from cbrn_dashboard.domain.stock import LotStatus, MovementKind, StockCategory
-from cbrn_dashboard.services.config import (
-    CONFIG_ERROR_CODES,
-    CORRUPT_SETTING,
-    UNKNOWN_PLACEHOLDER,
-)
+from cbrn_dashboard.services.config import CONFIG_ERROR_CODES, CORRUPT_SETTING
 from cbrn_dashboard.services.errors import (
     CODE_IMMUTABLE,
     INVALID_CODE,
@@ -230,14 +226,11 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
 }
 
 for _config_code in CONFIG_ERROR_CODES:
-    # Any other configuration code (a later one included) still gets a translated message. The
-    # stock UI no longer confirms placeholders, so UNKNOWN_PLACEHOLDER (still listed by the service
-    # until its placeholder machinery is removed, PLAN.md T12.12) cannot reach it.
-    if _config_code != UNKNOWN_PLACEHOLDER:
-        _ERROR_LABELS.setdefault(
-            _config_code,
-            lambda: QCoreApplication.translate("Stock", "The setting is not valid."),
-        )
+    # Any other configuration code (a later one included) still gets a translated message.
+    _ERROR_LABELS.setdefault(
+        _config_code,
+        lambda: QCoreApplication.translate("Stock", "The setting is not valid."),
+    )
 
 # Every error code the stock UI can present (for the completeness test).
 ALL_ERROR_CODES: tuple[str, ...] = tuple(_ERROR_LABELS)

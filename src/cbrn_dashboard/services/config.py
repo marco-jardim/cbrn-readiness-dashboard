@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Config service: the readiness configuration and the placeholder state (PLAN.md 3.5, 4.1, T6.1).
+"""Config service: the readiness configuration (PLAN.md 3.5, 4.1, T6.1).
 
 Qt-free. ``ui/`` reaches the configuration only through this service (D11); the service wraps
 ``storage/settings_repo.py`` and keeps the conventions of the other module services:
@@ -21,14 +21,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 from cbrn_dashboard.clock import Clock
-from cbrn_dashboard.domain.config import (
-    PLACEHOLDERS,
-    SETTING_PREFIX,
-    ConfigError,
-    Placeholder,
-    ReadinessConfig,
-    placeholder_for_field,
-)
+from cbrn_dashboard.domain.config import ConfigError, ReadinessConfig
 from cbrn_dashboard.services.errors import READ_ONLY, ServiceError, require
 from cbrn_dashboard.storage import settings_repo
 from cbrn_dashboard.storage.db import DatabaseConnection, ReadOnlyDatabaseError, transaction
@@ -37,14 +30,11 @@ from cbrn_dashboard.storage.repository import WriteContext
 __all__ = [
     "CONFIG_ERROR_CODES",
     "CORRUPT_SETTING",
-    "UNKNOWN_PLACEHOLDER",
     "ConfigService",
 ]
 
 #: A stored setting cannot be read (unreadable JSON or a value that no longer validates).
 CORRUPT_SETTING = "CORRUPT_SETTING"
-#: The placeholder id is not in the registry.
-UNKNOWN_PLACEHOLDER = "UNKNOWN_PLACEHOLDER"
 
 #: Every code ``domain.config.validate`` can raise (field-level rejections of a configuration).
 CONFIG_ERROR_CODES: tuple[str, ...] = (
@@ -78,7 +68,7 @@ def _translated(*, loading: bool = False) -> Iterator[None]:
 
 
 class ConfigService:
-    """Read and change the readiness configuration and the confirmed state of the placeholders."""
+    """Read and change the readiness configuration."""
 
     def __init__(
         self,
@@ -109,53 +99,9 @@ class ConfigService:
         """Validate and store ``config``; the ``config.<field>`` keys that changed.
 
         An invalid configuration raises ``ServiceError(code, field)`` with the domain code and
-        nothing is written. Saving what is already stored writes and logs nothing.
-
-        A placeholder whose config field changed is confirmed in the SAME transaction (PLAN.md
-        3.5: the badge stays "until the operator confirms or changes the value"): if the
-        confirmation fails the whole save is rolled back. A save that changes nothing confirms
-        nothing.
+        nothing is written. Saving what is already stored writes and logs nothing. All writes
+        share one transaction.
         """
         self._require_writable()
         with _translated(), transaction(self._conn):
-            ctx = self._ctx()
-            changed = settings_repo.save_config(ctx, config)
-            due: list[str] = []
-            for key in changed:
-                item = placeholder_for_field(key.removeprefix(SETTING_PREFIX))
-                if item is not None and item.id not in due:
-                    due.append(item.id)
-            for placeholder_id in due:
-                if settings_repo.needs_badge(self._conn, placeholder_id):
-                    settings_repo.confirm_placeholder(ctx, placeholder_id)
-            return changed
-
-    # ----- placeholders
-
-    def placeholders(self) -> tuple[Placeholder, ...]:
-        """The placeholder registry in registry order."""
-        return PLACEHOLDERS
-
-    def needs_badge(self, placeholder_id: str) -> bool:
-        """Whether the "to be confirmed" badge is due: flagged in code, not confirmed here."""
-        with _translated():
-            return settings_repo.needs_badge(self._conn, placeholder_id)
-
-    def badge_for_field(self, field: str) -> str | None:
-        """The id of the placeholder whose badge is due for config ``field``, else ``None``."""
-        item = placeholder_for_field(field)
-        if item is None:
-            return None
-        return item.id if self.needs_badge(item.id) else None
-
-    def confirm(self, placeholder_id: str) -> None:
-        """Confirm ``placeholder_id`` on this installation and pin its current config values."""
-        self._require_writable()
-        with _translated(), transaction(self._conn):
-            settings_repo.confirm_placeholder(self._ctx(), placeholder_id)
-
-    def unconfirm(self, placeholder_id: str) -> None:
-        """Forget the confirmation of ``placeholder_id`` (idempotent)."""
-        self._require_writable()
-        with _translated(), transaction(self._conn):
-            settings_repo.unconfirm_placeholder(self._ctx(), placeholder_id)
+            return settings_repo.save_config(self._ctx(), config)

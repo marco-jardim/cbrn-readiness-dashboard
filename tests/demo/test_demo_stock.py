@@ -26,7 +26,7 @@ from cbrn_dashboard.domain.alerts import AlertKind, stock_alerts
 from cbrn_dashboard.domain.stock import LotRow, LotStatus, MovementKind, StockCategory
 from cbrn_dashboard.paths import DATABASE_FILE_NAME
 from cbrn_dashboard.services.stock import StockService
-from cbrn_dashboard.storage import app_meta, settings_repo
+from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.storage.migrate import DatabaseIdentity, open_and_migrate
 
@@ -312,7 +312,7 @@ def test_no_movement_is_dated_after_today_on_any_day(opener: Opener) -> None:
 # --------------------------------------------------------------------------- minimums and P12
 
 
-def test_only_the_demo_minimums_are_set_and_p12_stays_flagged(opener: Opener) -> None:
+def test_only_the_demo_minimums_are_set_and_nothing_is_confirmed(opener: Opener) -> None:
     conn = opener()
     minimums = {
         str(code): minimum
@@ -323,7 +323,8 @@ def test_only_the_demo_minimums_are_set_and_p12_stays_flagged(opener: Opener) ->
     }
     assert minimums == {"ANTIDOTE_RAD_NUCLEAR": 20, "ANTIDOTE_BIOLOGICAL": 5}
     assert minimums == demo_stock.MINIMUMS
-    assert settings_repo.needs_badge(conn, "P12") is True  # writing demo minimums never confirms it
+    # the placeholder confirmation no longer exists: the demo database has no ``confirmed.`` key
+    assert _rows(conn, "SELECT key FROM setting WHERE key LIKE 'confirmed.%'") == []
 
 
 def test_a_real_database_has_no_minimums_and_no_stock(tmp_path: Path) -> None:
@@ -337,7 +338,7 @@ def test_a_real_database_has_no_minimums_and_no_stock(tmp_path: Path) -> None:
         assert _rows(conn, "SELECT count(*) FROM stock_lot") == [(0,)]
         assert _rows(conn, "SELECT count(*) FROM stock_movement") == [(0,)]
         assert _rows(conn, "SELECT count(*) FROM stock_item_type WHERE built_in = 0") == [(0,)]
-        assert settings_repo.needs_badge(conn, "P12") is True
+        assert _rows(conn, "SELECT key FROM setting WHERE key LIKE 'confirmed.%'") == []
     finally:
         conn.close()
 

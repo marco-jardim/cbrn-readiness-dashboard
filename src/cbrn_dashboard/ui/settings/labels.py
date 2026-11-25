@@ -12,7 +12,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QCoreApplication
 
-from cbrn_dashboard.services.config import CONFIG_ERROR_CODES, CORRUPT_SETTING, UNKNOWN_PLACEHOLDER
+from cbrn_dashboard.services.config import CONFIG_ERROR_CODES, CORRUPT_SETTING
 from cbrn_dashboard.services.errors import NOT_FOUND, READ_ONLY, REQUIRED
 from cbrn_dashboard.services.indicators import (
     INVALID_DIMENSION,
@@ -102,14 +102,8 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     TOO_LARGE: lambda: QCoreApplication.translate("Settings", "The number is too large."),
 }
 
-# Every error code the Settings UI can present (for the completeness test). The Settings UI no
-# longer confirms placeholders, so it cannot receive UNKNOWN_PLACEHOLDER (the service still lists it
-# until its placeholder machinery is removed, PLAN.md T12.12).
-ALL_ERROR_CODES: tuple[str, ...] = tuple(
-    dict.fromkeys(
-        (*_ERROR_LABELS, *(code for code in CONFIG_ERROR_CODES if code != UNKNOWN_PLACEHOLDER))
-    )
-)
+# Every error code the Settings UI can present (for the completeness test).
+ALL_ERROR_CODES: tuple[str, ...] = tuple(dict.fromkeys((*_ERROR_LABELS, *CONFIG_ERROR_CODES)))
 
 _INDICATOR_LABELS: dict[str, Callable[[], str]] = {
     # The same wording as the dashboard (ui/dashboard/labels.py), which follows PLAN.md 5.4.

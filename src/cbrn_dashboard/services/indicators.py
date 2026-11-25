@@ -49,7 +49,6 @@ from datetime import date
 
 from cbrn_dashboard.clock import Clock
 from cbrn_dashboard.domain import indicators as rules
-from cbrn_dashboard.domain.config import ConfigError
 from cbrn_dashboard.domain.indicators import (
     IndicatorDefinition,
     IndicatorReading,
@@ -76,7 +75,6 @@ from cbrn_dashboard.services.exercises import ExercisesService
 from cbrn_dashboard.services.infrastructure import InfrastructureService
 from cbrn_dashboard.services.personnel import PersonnelService
 from cbrn_dashboard.services.stock import StockService
-from cbrn_dashboard.storage import settings_repo
 from cbrn_dashboard.storage import targets_repo as repo
 from cbrn_dashboard.storage.db import DatabaseConnection, ReadOnlyDatabaseError, transaction
 from cbrn_dashboard.storage.repository import RowNotFoundError, WriteContext
@@ -318,16 +316,6 @@ class IndicatorService:
         require(canonical == dimension, INVALID_DIMENSION, "dimension")
         return dimension
 
-    def _confirm_if_changed(self, changed: bool, placeholder_id: str | None) -> None:
-        """Confirm ``placeholder_id`` (its badge is due) in the caller's transaction."""
-        if not changed or placeholder_id is None:
-            return
-        try:
-            if settings_repo.needs_badge(self._conn, placeholder_id):
-                settings_repo.confirm_placeholder(self._ctx(), placeholder_id)
-        except ConfigError as exc:
-            raise ServiceError(exc.code, exc.field or None) from exc
-
     def set_target(
         self,
         code: str,
@@ -336,17 +324,12 @@ class IndicatorService:
         warning_value: float | None,
         critical_value: float | None,
         enabled: bool = True,
-        confirm_placeholder: str | None = None,
     ) -> bool:
         """Create or change the target of ``(code, dimension)``; return whether anything changed.
 
         For ``BUD_EXEC_RATE`` the values are YEAR-END targets (a ratio, for example 0.9 = 90 %):
         they are stored as entered and pro-rated only when evaluated (P08). A ratio target must be
         between 0 and :data:`MAX_RATIO_TARGET`.
-
-        With ``confirm_placeholder`` (for example ``"P03"``), a call that changed something also
-        confirms that placeholder, in the SAME transaction (PLAN.md 3.5): a failing confirmation
-        rolls the target back.
 
         Refusals (nothing is written): ``UNKNOWN_INDICATOR``, ``INVALID_DIMENSION``,
         ``INVALID_NUMBER``, ``TARGET_NOT_FINITE``, ``TARGET_OUT_OF_RANGE`` (a ratio below 0 or above
@@ -372,31 +355,22 @@ class IndicatorService:
                 validate_target_order(Target(warning, critical, enabled), definition.direction)
             except TargetOrderError as exc:
                 raise ServiceError(exc.code) from None
-            changed = repo.upsert_target(
+            return repo.upsert_target(
                 self._ctx(), definition.code, checked, warning, critical, bool(enabled)
             )
-            self._confirm_if_changed(changed, confirm_placeholder)
-            return changed
 
-    def set_target_enabled(
-        self,
-        code: str,
-        dimension: str,
-        enabled: bool,
-        *,
-        confirm_placeholder: str | None = None,
-    ) -> bool:
+    def set_target_enabled(self, code: str, dimension: str, enabled: bool) -> bool:
         """Switch a stored target on or off; return whether anything changed.
 
         ``NOT_FOUND`` when there is no such target. A disabled target is kept but behaves as if it
-        were absent. ``confirm_placeholder`` works as in :meth:`set_target`.
+        were absent.
         """
         self._require_writable()
         with _translated(), transaction(self._conn):
             current = repo.get_target(self._conn, code, dimension)
             if current is None:
                 raise ServiceError(NOT_FOUND)
-            changed = repo.upsert_target(
+            return repo.upsert_target(
                 self._ctx(),
                 code,
                 dimension,
@@ -404,8 +378,6 @@ class IndicatorService:
                 current.critical_value,
                 bool(enabled),
             )
-            self._confirm_if_changed(changed, confirm_placeholder)
-            return changed
 
     def delete_target(self, code: str, dimension: str) -> None:
         """Delete a stored target; ``NOT_FOUND`` when there is none.

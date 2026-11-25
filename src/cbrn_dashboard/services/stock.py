@@ -86,7 +86,6 @@ from cbrn_dashboard.services.infrastructure import (
     TYPE_IN_USE,
     TYPE_INACTIVE,
 )
-from cbrn_dashboard.storage import settings_repo
 from cbrn_dashboard.storage import stock_repo as repo
 from cbrn_dashboard.storage.db import DatabaseConnection, ReadOnlyDatabaseError, transaction
 from cbrn_dashboard.storage.repository import ForeignKeyError, RowNotFoundError, WriteContext
@@ -689,38 +688,29 @@ class StockService:
         self,
         type_id: int,
         minimum: int | None,
-        *,
-        confirm_placeholder: str | None = None,
     ) -> bool:
         """Set or clear the minimum stock of a type (built-in ones too); True if it changed.
 
-        With ``confirm_placeholder`` (for example ``"P12"``), a call that changed something also
-        confirms that placeholder, in the SAME transaction (PLAN.md 3.5): a failing confirmation
-        rolls the minimum back. ``INVALID_QUANTITY`` when ``minimum`` is not ``None`` or a whole
-        number from 0 to :data:`MAX_MINIMUM`.
+        ``INVALID_QUANTITY`` when ``minimum`` is not ``None`` or a whole number from 0 to
+        :data:`MAX_MINIMUM`.
         """
         self._require_writable()
         with _translated(), transaction(self._conn):
             row = self._type_row(type_id)
             checked = _minimum(minimum)
-            changed = self._write_type(row, minimum_quantity=checked, active=row.active)
-            self._confirm_if_changed(changed, confirm_placeholder)
-            return changed
+            return self._write_type(row, minimum_quantity=checked, active=row.active)
 
     def save_type_with_minimum(
         self,
         type_id: int | None,
         data: StockTypeInput,
         minimum: int | None,
-        confirm_placeholder: str | None = "P12",
     ) -> int:
         """Create (``type_id`` ``None``) or change a type together with its minimum; returns its id.
 
-        One transaction: the type, the minimum (``data.minimum_quantity`` is ignored) and, when the
-        minimum changed (a new type counts as changed when it has one), the confirmation of
-        ``confirm_placeholder`` (P12 by default; ``None`` confirms nothing). Any refusal, a bad
-        minimum or a failing confirmation included, leaves nothing written: no type is created and
-        no field is changed.
+        One transaction: the type and the minimum (``data.minimum_quantity`` is ignored). Any
+        refusal, a bad minimum included, leaves nothing written: no type is created and no field is
+        changed.
         """
         self._require_writable()
         with _translated(), transaction(self._conn):
@@ -739,7 +729,6 @@ class StockService:
                     minimum_quantity=checked,
                     active=fields.active,
                 )
-                changed = checked is not None
             else:
                 saved_id = current.id
                 repo.update_type(
@@ -753,19 +742,7 @@ class StockService:
                     minimum_quantity=checked,
                     active=fields.active,
                 )
-                changed = checked != current.minimum_quantity
-            self._confirm_if_changed(changed, confirm_placeholder)
             return saved_id
-
-    def _confirm_if_changed(self, changed: bool, placeholder_id: str | None) -> None:
-        """Confirm ``placeholder_id`` (its badge is due) in the caller's transaction."""
-        if not changed or placeholder_id is None:
-            return
-        try:
-            if settings_repo.needs_badge(self._conn, placeholder_id):
-                settings_repo.confirm_placeholder(self._ctx(), placeholder_id)
-        except ConfigError as exc:
-            raise ServiceError(exc.code, exc.field or None) from exc
 
     def delete_type(self, type_id: int) -> None:
         """Delete a user-defined type that has no lots (``BUILT_IN_TYPE``, ``TYPE_IN_USE``)."""

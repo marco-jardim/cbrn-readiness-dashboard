@@ -30,7 +30,7 @@ from cbrn_dashboard.services.budget import (
     SourceView,
     source_label,
 )
-from cbrn_dashboard.services.config import CONFIG_ERROR_CODES, UNKNOWN_PLACEHOLDER
+from cbrn_dashboard.services.config import CONFIG_ERROR_CODES
 from cbrn_dashboard.services.errors import (
     CODE_IMMUTABLE,
     INVALID_CODE,
@@ -167,14 +167,8 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     ),
 }
 
-# Every error code the budget UI can present (for the completeness test). The budget UI no longer
-# confirms placeholders, so it cannot receive UNKNOWN_PLACEHOLDER (the service still lists it until
-# its placeholder machinery is removed, PLAN.md T12.12).
-ALL_ERROR_CODES: tuple[str, ...] = tuple(
-    dict.fromkeys(
-        (*_ERROR_LABELS, *(code for code in CONFIG_ERROR_CODES if code != UNKNOWN_PLACEHOLDER))
-    )
-)
+# Every error code the budget UI can present (for the completeness test).
+ALL_ERROR_CODES: tuple[str, ...] = tuple(dict.fromkeys((*_ERROR_LABELS, *CONFIG_ERROR_CODES)))
 
 
 def error_label(code: str) -> str:

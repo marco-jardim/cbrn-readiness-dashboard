@@ -938,11 +938,11 @@ def test_all_error_codes_list_the_codes_of_the_services() -> None:
     assert {"READ_ONLY", "NOT_FOUND", "REQUIRED"} <= shared
     assert {"READ_ONLY", "NOT_FOUND", "REQUIRED"} <= mapped
     stored = _defined_constants(config_module)
-    assert {"CORRUPT_SETTING", "UNKNOWN_PLACEHOLDER"} == stored
-    # The Settings UI no longer confirms placeholders, so it cannot receive UNKNOWN_PLACEHOLDER.
+    assert {"CORRUPT_SETTING"} == stored
+    # The placeholder confirmation is gone (T12.12): the service no longer has that error code.
     assert "UNKNOWN_PLACEHOLDER" not in mapped
-    assert stored - {"UNKNOWN_PLACEHOLDER"} <= mapped
-    assert set(CONFIG_ERROR_CODES) - {"UNKNOWN_PLACEHOLDER"} <= mapped
+    assert stored <= mapped
+    assert set(CONFIG_ERROR_CODES) <= mapped
     typed = _defined_constants(formatting_module)
     assert {"EMPTY", "INVALID_NUMBER", "AMBIGUOUS_NUMBER", "TOO_LARGE"} <= typed
     assert {"EMPTY", "INVALID_NUMBER", "AMBIGUOUS_NUMBER", "TOO_LARGE"} <= mapped

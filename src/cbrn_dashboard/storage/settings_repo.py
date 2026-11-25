@@ -5,16 +5,16 @@ Everything lives in the ``setting`` table (``key`` -> ``value_json``):
 
 * ``config.<field>``: the fields of :class:`~cbrn_dashboard.domain.config.ReadinessConfig`; a value
   equal to the default and not stored yet is not written;
-* ``confirmed.<ID>``: ``true`` when the operator confirmed placeholder ``<ID>`` on this
-  installation. This only hides the badge here; the code-level flag of
-  :data:`~cbrn_dashboard.domain.config.PLACEHOLDERS` is never touched. Confirming also pins the
-  current values of the placeholder's config fields in this database, default or not;
 * any other key through :func:`get_value` / :func:`set_value` (for example the time of the last
   encrypted backup, T7.2).
 
 Every write goes through the repository helpers, so it lands in ``change_log`` with
 ``entity = "setting"`` and ``entity_key = {"key": ...}``. Errors are
 :class:`~cbrn_dashboard.domain.config.ConfigError` with a stable code and never contain values.
+
+``confirmed.<ID>`` rows written before 1.2.0 (the old placeholder confirmation) are kept in the
+table and never read; there is no migration. A future confirmation feature must use a new key
+prefix.
 """
 
 from __future__ import annotations
@@ -24,12 +24,10 @@ import re
 import sqlite3
 
 from cbrn_dashboard.domain.config import (
-    PLACEHOLDERS,
     SETTING_PREFIX,
     ConfigError,
     ReadinessConfig,
     from_settings,
-    placeholder,
     to_settings,
     validate,
 )
@@ -38,19 +36,11 @@ from cbrn_dashboard.storage.db import transaction
 from cbrn_dashboard.storage.repository import WriteContext
 
 __all__ = [
-    "CONFIRMED_PREFIX",
-    "confirm_placeholder",
-    "confirmed_placeholders",
     "get_value",
     "load_config",
-    "needs_badge",
     "save_config",
     "set_value",
-    "unconfirm_placeholder",
 ]
-
-#: Prefix of the keys that record a confirmed placeholder.
-CONFIRMED_PREFIX = "confirmed."
 
 _TABLE = "setting"
 _KEY_PATTERN = re.compile(r"[a-z][A-Za-z0-9_.\-]{0,99}")
@@ -136,61 +126,6 @@ def save_config(ctx: WriteContext, config: ReadinessConfig) -> tuple[str, ...]:
             if _put(ctx, key, value):
                 changed.append(key)
     return tuple(changed)
-
-
-# --------------------------------------------------------------------------- confirmed state
-
-
-def _known_placeholder(placeholder_id: str) -> str:
-    try:
-        return placeholder(placeholder_id).id
-    except KeyError as exc:
-        raise ConfigError("UNKNOWN_PLACEHOLDER", "placeholder_id") from exc
-
-
-def confirm_placeholder(ctx: WriteContext, placeholder_id: str) -> None:
-    """Record that the operator confirmed ``placeholder_id`` on this installation (idempotent).
-
-    In the same transaction the current values of the placeholder's config fields are stored too,
-    even when they equal the default, so a later release that changes a generic default cannot
-    silently change a confirmed value on this database. A placeholder without config fields
-    (``fields == ()``) writes only the ``confirmed.<ID>`` key.
-    """
-    known = _known_placeholder(placeholder_id)
-    fields = placeholder(known).fields
-    with transaction(ctx.conn):
-        if fields:
-            current = to_settings(load_config(ctx.conn))
-            for name in fields:
-                key = SETTING_PREFIX + name
-                _put(ctx, key, current[key])
-        _put(ctx, CONFIRMED_PREFIX + known, True)
-
-
-def unconfirm_placeholder(ctx: WriteContext, placeholder_id: str) -> None:
-    """Forget the confirmation of ``placeholder_id`` (idempotent)."""
-    known = _known_placeholder(placeholder_id)
-    key = CONFIRMED_PREFIX + known
-    with transaction(ctx.conn):
-        if repository.fetch_row(ctx.conn, _TABLE, {"key": key}) is not None:
-            repository.delete(ctx, _TABLE, {"key": key})
-
-
-def confirmed_placeholders(conn: sqlite3.Connection) -> frozenset[str]:
-    """The ids of the placeholders confirmed in this database."""
-    known = {item.id for item in PLACEHOLDERS}
-    confirmed: set[str] = set()
-    for key, text in _rows_with_prefix(conn, CONFIRMED_PREFIX):
-        placeholder_id = key[len(CONFIRMED_PREFIX) :]
-        if placeholder_id in known and _loads(key, text) is True:
-            confirmed.add(placeholder_id)
-    return frozenset(confirmed)
-
-
-def needs_badge(conn: sqlite3.Connection, placeholder_id: str) -> bool:
-    """Whether Settings shows the "to be confirmed" badge: flagged in code, not confirmed here."""
-    item = placeholder(_known_placeholder(placeholder_id))
-    return item.placeholder and item.id not in confirmed_placeholders(conn)
 
 
 # --------------------------------------------------------------------------- generic values

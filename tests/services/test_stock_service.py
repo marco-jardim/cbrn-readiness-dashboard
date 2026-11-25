@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from cbrn_dashboard.clock import FixedClock
-from cbrn_dashboard.domain.config import ConfigError, ReadinessConfig
+from cbrn_dashboard.domain.config import ReadinessConfig
 from cbrn_dashboard.domain.stock import MovementKind, StockCategory
 from cbrn_dashboard.services.budget import MAX_MINOR
 from cbrn_dashboard.services.errors import (
@@ -50,7 +50,7 @@ from cbrn_dashboard.services.stock import (
     StockTypeView,
     stock_type_label,
 )
-from cbrn_dashboard.storage import settings_repo, snapshots_repo, stock_repo, targets_repo
+from cbrn_dashboard.storage import snapshots_repo, stock_repo, targets_repo
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.storage.repository import REDACTED_COLUMNS, WriteContext
 from cbrn_dashboard.storage.settings_repo import save_config
@@ -465,77 +465,25 @@ def test_set_minimum_refuses_a_value_that_is_not_a_whole_quantity(
     _refused(db, lambda: service.set_minimum(glove, bad), INVALID_QUANTITY, "minimum_quantity")
 
 
-def test_set_minimum_confirms_p12_in_the_same_transaction(
+def test_set_minimum_writes_only_the_type(
     service: StockService, db: DatabaseConnection, change_log_rows: ChangeLogRows
 ) -> None:
     glove = _type_id(service, "GLOVE")
-    assert settings_repo.needs_badge(db, "P12") is True
     before = len(change_log_rows(db))
 
-    changed = service.set_minimum(glove, 15, confirm_placeholder="P12")
+    assert service.set_minimum(glove, 15) is True
 
-    assert changed is True
-    assert settings_repo.needs_badge(db, "P12") is False
     rows = change_log_rows(db)[before:]
-    assert sorted(str(row["entity"]) for row in rows) == ["setting", "stock_item_type"]
+    assert [str(row["entity"]) for row in rows] == ["stock_item_type"]
+    assert _count(db, "setting") == 0
 
 
-def test_a_minimum_that_changes_nothing_confirms_nothing(
-    service: StockService, db: DatabaseConnection
-) -> None:
-    glove = _type_id(service, "GLOVE")
-    service.set_minimum(glove, 15)
-
-    again = service.set_minimum(glove, 15, confirm_placeholder="P12")
-
-    assert again is False
-    assert settings_repo.needs_badge(db, "P12") is True
-
-
-def test_a_failing_confirmation_rolls_the_minimum_back(
-    service: StockService, db: DatabaseConnection, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_refused_minimum_changes_nothing(service: StockService, db: DatabaseConnection) -> None:
     glove = _type_id(service, "GLOVE")
 
-    def failing(*_args: object) -> None:
-        raise ConfigError("UNKNOWN_PLACEHOLDER", "placeholder_id")
-
-    monkeypatch.setattr(settings_repo, "confirm_placeholder", failing)
-
-    _refused(
-        db,
-        lambda: service.set_minimum(glove, 15, confirm_placeholder="P12"),
-        "UNKNOWN_PLACEHOLDER",
-        "placeholder_id",
-    )
+    _refused(db, lambda: service.set_minimum(glove, -1), INVALID_QUANTITY)
 
     assert service.get_type(glove).minimum_quantity is None
-
-
-def test_an_unknown_placeholder_rolls_the_minimum_back(
-    service: StockService, db: DatabaseConnection
-) -> None:
-    glove = _type_id(service, "GLOVE")
-
-    _refused(
-        db, lambda: service.set_minimum(glove, 15, confirm_placeholder="P99"), "UNKNOWN_PLACEHOLDER"
-    )
-
-    assert service.get_type(glove).minimum_quantity is None
-
-
-def test_a_refused_minimum_does_not_confirm_p12(
-    service: StockService, db: DatabaseConnection
-) -> None:
-    glove = _type_id(service, "GLOVE")
-
-    _refused(
-        db,
-        lambda: service.set_minimum(glove, -1, confirm_placeholder="P12"),
-        INVALID_QUANTITY,
-    )
-
-    assert settings_repo.needs_badge(db, "P12") is True
 
 
 # --------------------------------------------------------------------------- lots: create
@@ -968,16 +916,13 @@ def test_the_code_and_the_category_are_frozen_once_an_indicator_target_names_the
 # --------------------------------------------------------------------------- save with minimum
 
 
-def test_save_type_with_minimum_creates_the_type_with_its_minimum_and_confirms_p12(
-    service: StockService, db: DatabaseConnection
+def test_save_type_with_minimum_creates_the_type_with_its_minimum(
+    service: StockService,
 ) -> None:
-    assert settings_repo.needs_badge(db, "P12") is True
-
     type_id = service.save_type_with_minimum(None, _type_input(), 12)
 
     view = service.get_type(type_id)
     assert (view.code, view.minimum_quantity) == ("DEMO-ITEM", 12)
-    assert settings_repo.needs_badge(db, "P12") is False
 
 
 def test_save_type_with_minimum_ignores_the_minimum_of_the_input(
@@ -988,18 +933,18 @@ def test_save_type_with_minimum_ignores_the_minimum_of_the_input(
     assert service.get_type(type_id).minimum_quantity is None
 
 
-def test_save_type_with_minimum_changes_a_type_and_confirms_only_a_changed_minimum(
-    service: StockService, db: DatabaseConnection
+def test_save_type_with_minimum_changes_a_type_and_its_minimum(
+    service: StockService,
 ) -> None:
     type_id = _user_type(service)
 
     service.save_type_with_minimum(type_id, _type_input(label_pt_br="Novo"), None)
-    assert settings_repo.needs_badge(db, "P12") is True  # the minimum did not change
+    view = service.get_type(type_id)
+    assert (view.label_pt_br, view.minimum_quantity) == ("Novo", None)
 
     service.save_type_with_minimum(type_id, _type_input(label_pt_br="Novo"), 4)
     view = service.get_type(type_id)
     assert (view.label_pt_br, view.minimum_quantity) == ("Novo", 4)
-    assert settings_repo.needs_badge(db, "P12") is False
 
 
 @pytest.mark.parametrize("bad", [-1, True, 2.5, 1_000_000_001])
@@ -1014,25 +959,20 @@ def test_a_failing_minimum_leaves_no_type_created(
     )
 
     assert service.get_type_by_code("DEMO-ITEM") is None
-    assert settings_repo.needs_badge(db, "P12") is True
 
 
-def test_a_failing_confirmation_leaves_no_type_created_and_a_type_unchanged(
+def test_a_failing_minimum_leaves_a_type_unchanged(
     service: StockService, db: DatabaseConnection
 ) -> None:
-    _refused(
-        db,
-        lambda: service.save_type_with_minimum(None, _type_input(), 3, "P99"),
-        "UNKNOWN_PLACEHOLDER",
-    )
-    assert service.get_type_by_code("DEMO-ITEM") is None
-
     type_id = _user_type(service)
+
     _refused(
         db,
-        lambda: service.save_type_with_minimum(type_id, _type_input(label_pt_br="Novo"), 3, "P99"),
-        "UNKNOWN_PLACEHOLDER",
+        lambda: service.save_type_with_minimum(type_id, _type_input(label_pt_br="Novo"), -1),
+        INVALID_QUANTITY,
+        "minimum_quantity",
     )
+
     view = service.get_type(type_id)
     assert (view.label_pt_br, view.minimum_quantity) == ("Item demo", None)
 
@@ -1048,7 +988,6 @@ def test_a_refusal_of_the_type_fields_leaves_everything_as_it_was(
         DUPLICATE_CODE,
         "code",
     )
-    assert settings_repo.needs_badge(db, "P12") is True
 
 
 def test_save_type_with_minimum_refuses_a_read_only_connection(
@@ -1112,7 +1051,6 @@ def test_read_only_mode_refuses_every_write(
         lambda: reader.deactivate_type(1),
         lambda: reader.activate_type(1),
         lambda: reader.set_minimum(1, 5),
-        lambda: reader.set_minimum(1, 5, confirm_placeholder="P12"),
         lambda: reader.delete_type(1),
         lambda: reader.create_lot(_lot_input(1), _receipt()),
         lambda: reader.update_lot(1, _lot_input(1)),

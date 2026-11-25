@@ -18,7 +18,6 @@ import pytest
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain import indicators as rules
 from cbrn_dashboard.domain import personnel as personnel_rules
-from cbrn_dashboard.domain.config import ConfigError
 from cbrn_dashboard.domain.indicators import (
     IndicatorReading,
     IndicatorStatus,
@@ -53,7 +52,7 @@ from cbrn_dashboard.services.personnel import (
     StaffInput,
     TrainingInput,
 )
-from cbrn_dashboard.storage import settings_repo, targets_repo
+from cbrn_dashboard.storage import targets_repo
 from cbrn_dashboard.storage.db import DatabaseConnection
 from cbrn_dashboard.storage.repository import WriteContext
 from cbrn_dashboard.storage.settings_repo import load_config, save_config
@@ -436,67 +435,27 @@ def test_the_bound_is_for_ratio_indicators_only(stack: Stack) -> None:
     assert (view.warning_value, view.critical_value) == (90.0, 60.0)
 
 
-# --------------------------------------------------------------------------- confirming P03
+# --------------------------------------------------------------------------- change flags
 
 
-def test_a_changing_target_confirms_its_placeholder_in_the_same_transaction(
+def test_set_target_reports_whether_it_changed_and_writes_only_the_target(
     stack: Stack, db: DatabaseConnection, change_log_rows: ChangeLogRows
 ) -> None:
-    """P6-03/P6-04: one call, one transaction; the badge is gone when the target is stored."""
-    assert settings_repo.needs_badge(db, "P03") is True
     before = len(change_log_rows(db))
 
-    changed = stack.indicators.set_target(
-        CERT_A, LEVEL_A, warning_value=2, critical_value=1, confirm_placeholder="P03"
-    )
+    changed = stack.indicators.set_target(CERT_A, LEVEL_A, warning_value=2, critical_value=1)
+    again = stack.indicators.set_target(CERT_A, LEVEL_A, warning_value=2, critical_value=1)
 
-    assert changed is True
-    assert settings_repo.needs_badge(db, "P03") is False
+    assert (changed, again) == (True, False)
     entities = [row["entity"] for row in change_log_rows(db)[before:]]
-    assert sorted(entities) == ["indicator_target", "setting"]
+    assert entities == ["indicator_target"]
 
 
-def test_a_target_that_changes_nothing_confirms_nothing(
-    stack: Stack, db: DatabaseConnection
-) -> None:
-    stack.indicators.set_target(CERT_A, LEVEL_A, warning_value=2, critical_value=1)
-    assert settings_repo.needs_badge(db, "P03") is True
-
-    again = stack.indicators.set_target(
-        CERT_A, LEVEL_A, warning_value=2, critical_value=1, confirm_placeholder="P03"
-    )
-
-    assert again is False
-    assert settings_repo.needs_badge(db, "P03") is True
-
-
-def test_switching_a_target_confirms_its_placeholder_too(
-    stack: Stack, db: DatabaseConnection
-) -> None:
+def test_switching_a_target_reports_whether_it_changed(stack: Stack) -> None:
     stack.indicators.set_target(CERT_A, LEVEL_A, warning_value=2, critical_value=1)
 
-    stack.indicators.set_target_enabled(CERT_A, LEVEL_A, False, confirm_placeholder="P03")
-
-    assert settings_repo.needs_badge(db, "P03") is False
-
-
-def test_a_failing_confirmation_rolls_the_target_back(
-    stack: Stack, db: DatabaseConnection, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def failing(*_args: object) -> None:
-        raise ConfigError("UNKNOWN_PLACEHOLDER", "placeholder_id")
-
-    monkeypatch.setattr(settings_repo, "confirm_placeholder", failing)
-
-    _refused(
-        db,
-        lambda: stack.indicators.set_target(
-            CERT_A, LEVEL_A, warning_value=2, critical_value=1, confirm_placeholder="P03"
-        ),
-        "UNKNOWN_PLACEHOLDER",
-    )
-
-    assert stack.indicators.list_targets() == []
+    assert stack.indicators.set_target_enabled(CERT_A, LEVEL_A, False) is True
+    assert stack.indicators.set_target_enabled(CERT_A, LEVEL_A, False) is False
 
 
 # --------------------------------------------------------------------------- targets: round trip

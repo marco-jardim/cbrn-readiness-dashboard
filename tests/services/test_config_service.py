@@ -12,16 +12,12 @@ import pytest
 
 from cbrn_dashboard.clock import FixedClock
 from cbrn_dashboard.domain import config as domain_config
-from cbrn_dashboard.domain.config import PLACEHOLDERS, ReadinessConfig
-from cbrn_dashboard.services.config import (
-    CONFIG_ERROR_CODES,
-    CORRUPT_SETTING,
-    UNKNOWN_PLACEHOLDER,
-    ConfigService,
-)
+from cbrn_dashboard.domain.config import ReadinessConfig
+from cbrn_dashboard.services.config import CONFIG_ERROR_CODES, CORRUPT_SETTING, ConfigService
 from cbrn_dashboard.services.errors import READ_ONLY, ServiceError
 from cbrn_dashboard.storage import settings_repo
 from cbrn_dashboard.storage.db import DatabaseConnection
+from cbrn_dashboard.storage.repository import WriteContext
 from tests.services.conftest import ChangeLogRows
 
 NOW_TEXT = "2026-03-05T12:00:00Z"
@@ -84,10 +80,8 @@ def test_save_round_trips_and_logs_only_the_changed_keys(
     assert set(changed) == expected
     assert service.load() == changed_config
     rows = change_log_rows(db)[before:]
-    # the placeholders of the changed fields (P01, A02, A04) are confirmed in the same save
-    confirmed = {"confirmed.P01", "confirmed.A02", "confirmed.A04"}
-    assert _logged_keys(rows) == expected | confirmed
-    assert len(rows) == len(expected) + len(confirmed)
+    assert _logged_keys(rows) == expected
+    assert len(rows) == len(expected)
     assert all(row["entity"] == "setting" and row["action"] == "insert" for row in rows)
     assert all(row["operator"] == OPERATOR and row["at_utc"] == NOW_TEXT for row in rows)
 
@@ -120,33 +114,20 @@ def test_saving_a_later_change_logs_an_update_of_that_key_only(
     assert service.load().small_count_threshold == 9
 
 
-def test_a_changing_save_confirms_the_placeholder_of_the_changed_field_only(
-    service: ConfigService, db: DatabaseConnection
-) -> None:
-    """P6-03/P6-04: "until the operator confirms or changes the value" (PLAN.md 3.5)."""
-    assert service.badge_for_field("cert_warning_days") == "P01"
-
-    service.save(service.load().with_changes(cert_warning_days=120))
-
-    assert service.badge_for_field("cert_warning_days") is None
-    assert _stored(db, "confirmed.P01") is True
-    assert service.needs_badge("P02") is True  # another field: its badge stays
-    assert _stored(db, "confirmed.P02") is None
-
-
-def test_a_save_that_changes_nothing_confirms_nothing(
+def test_a_save_that_changes_nothing_writes_nothing(
     service: ConfigService, db: DatabaseConnection, change_log_rows: ChangeLogRows
 ) -> None:
-    before = len(change_log_rows(db))
+    settings_before = _count(db, "setting")
+    log_before = len(change_log_rows(db))
 
     assert service.save(service.load()) == ()  # the defaults, not stored yet
     assert service.save(service.load().with_changes(cert_warning_days=90)) == ()  # still default
 
-    assert service.needs_badge("P01") is True
-    assert len(change_log_rows(db)) == before
+    assert _count(db, "setting") == settings_before
+    assert len(change_log_rows(db)) == log_before
 
 
-def test_the_confirmation_is_made_in_the_same_transaction_as_the_save(
+def test_a_save_writes_only_the_changed_keys_and_no_confirmation(
     service: ConfigService, db: DatabaseConnection, change_log_rows: ChangeLogRows
 ) -> None:
     before = len(change_log_rows(db))
@@ -154,34 +135,38 @@ def test_the_confirmation_is_made_in_the_same_transaction_as_the_save(
     service.save(service.load().with_changes(unit_name="Demo unit", small_count_threshold=7))
 
     rows = change_log_rows(db)[before:]
-    # D18 pins both of its fields, even the one that was not typed (institution_name)
-    assert _logged_keys(rows) == {
-        "config.unit_name",
-        "config.small_count_threshold",
-        "config.institution_name",
-        "confirmed.D18",
-        "confirmed.A11",
-    }
-    assert service.needs_badge("D18") is False
-    assert service.needs_badge("A11") is False
+    assert _logged_keys(rows) == {"config.unit_name", "config.small_count_threshold"}
+    keys = [str(row[0]) for row in db.execute("SELECT key FROM setting")]
+    assert sorted(keys) == ["config.small_count_threshold", "config.unit_name"]
 
 
-def test_a_failing_confirmation_rolls_the_save_back(
+def test_a_failing_save_is_atomic(
     service: ConfigService,
     db: DatabaseConnection,
     change_log_rows: ChangeLogRows,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def failing(*_args: object) -> None:
-        raise domain_config.ConfigError("UNKNOWN_PLACEHOLDER", "placeholder_id")
+    real_put = settings_repo._put
+    calls: list[str] = []
 
-    monkeypatch.setattr(settings_repo, "confirm_placeholder", failing)
+    def failing_second(ctx: WriteContext, key: str, value: object) -> bool:
+        calls.append(key)
+        if len(calls) == 2:
+            raise domain_config.ConfigError("INVALID_VALUE", "")
+        return real_put(ctx, key, value)
+
+    monkeypatch.setattr(settings_repo, "_put", failing_second)
     settings_before = _count(db, "setting")
     log_before = len(change_log_rows(db))
 
-    error = _error(lambda: service.save(service.load().with_changes(cert_warning_days=120)))
+    error = _error(
+        lambda: service.save(
+            service.load().with_changes(cert_warning_days=120, small_count_threshold=7)
+        )
+    )
 
-    assert error.code == "UNKNOWN_PLACEHOLDER"
+    assert error.code == "INVALID_VALUE"
+    assert len(calls) == 2  # the first key was written, then the second failed
     assert _count(db, "setting") == settings_before
     assert len(change_log_rows(db)) == log_before
     assert service.load().cert_warning_days == 90
@@ -289,104 +274,21 @@ def test_a_stored_value_of_the_wrong_type_makes_load_fail_with_corrupt_setting(
     assert _error(service.load).code == CORRUPT_SETTING
 
 
-# --------------------------------------------------------------------------- placeholders
+# --------------------------------------------------------------------------- old confirmations
 
 
-def test_placeholders_are_the_registry_in_registry_order(service: ConfigService) -> None:
-    items = service.placeholders()
-
-    assert items == PLACEHOLDERS
-    assert [item.id for item in items][:3] == ["P01", "P02", "P03"]
-
-
-def test_needs_badge_confirm_and_unconfirm(
+def test_a_confirmed_row_from_before_1_2_0_is_left_alone(
     service: ConfigService, db: DatabaseConnection, change_log_rows: ChangeLogRows
 ) -> None:
-    assert service.needs_badge("P01") is True
-    before = len(change_log_rows(db))
+    db.execute("INSERT INTO setting (key, value_json) VALUES ('confirmed.P01', 'true')")
+    log_before = len(change_log_rows(db))
 
-    service.confirm("P01")
+    assert service.load() == ReadinessConfig()
+    assert service.save(service.load()) == ()
+    service.save(service.load().with_changes(cert_warning_days=120))
 
-    assert service.needs_badge("P01") is False
-    assert service.needs_badge("P02") is True
-    rows = change_log_rows(db)[before:]
-    assert _logged_keys(rows) == {"config.cert_warning_days", "confirmed.P01"}
-    assert all(row["operator"] == OPERATOR and row["at_utc"] == NOW_TEXT for row in rows)
-
-    service.unconfirm("P01")
-
-    assert service.needs_badge("P01") is True
-    assert _stored(db, "confirmed.P01") is None
-
-
-def test_confirming_pins_the_current_value_even_when_it_is_the_default(
-    service: ConfigService, db: DatabaseConnection
-) -> None:
-    assert _stored(db, "config.cert_warning_days") is None
-
-    service.confirm("P01")
-
-    assert _stored(db, "config.cert_warning_days") == 90
-    assert _stored(db, "confirmed.P01") is True
-
-
-def test_confirming_keeps_a_changed_value(service: ConfigService, db: DatabaseConnection) -> None:
-    service.save(ReadinessConfig().with_changes(cert_warning_days=120))
-
-    service.confirm("P01")
-
-    assert _stored(db, "config.cert_warning_days") == 120
-    assert service.load().cert_warning_days == 120
-
-
-def test_confirm_and_unconfirm_are_idempotent(
-    service: ConfigService, db: DatabaseConnection, change_log_rows: ChangeLogRows
-) -> None:
-    service.confirm("P03")  # a placeholder without config fields
-    before = len(change_log_rows(db))
-
-    service.confirm("P03")
-    service.unconfirm("P09")
-
-    assert len(change_log_rows(db)) == before
-    assert service.needs_badge("P03") is False
-
-
-def test_an_unknown_placeholder_id_is_refused(
-    service: ConfigService, db: DatabaseConnection, change_log_rows: ChangeLogRows
-) -> None:
-    before = len(change_log_rows(db))
-
-    for call in (
-        lambda: service.confirm("P99"),
-        lambda: service.unconfirm("P99"),
-        lambda: service.needs_badge("P99"),
-    ):
-        error = _error(call)
-        assert error.code == UNKNOWN_PLACEHOLDER == "UNKNOWN_PLACEHOLDER"
-    assert len(change_log_rows(db)) == before
-
-
-# --------------------------------------------------------------------------- badge per field
-
-
-def test_badge_for_field_follows_the_confirmation(service: ConfigService) -> None:
-    assert service.badge_for_field("cert_warning_days") == "P01"
-    assert service.badge_for_field("ppe_hierarchy") == "A02"
-
-    service.confirm("P01")
-
-    assert service.badge_for_field("cert_warning_days") is None
-    assert service.badge_for_field("ppe_hierarchy") == "A02"
-
-    service.unconfirm("P01")
-
-    assert service.badge_for_field("cert_warning_days") == "P01"
-
-
-def test_badge_for_field_is_none_for_fields_without_a_placeholder(service: ConfigService) -> None:
-    assert service.badge_for_field("operator_label") is None
-    assert service.badge_for_field("no_such_field") is None
+    assert _stored(db, "confirmed.P01") is True  # kept, never read, never rewritten
+    assert _logged_keys(change_log_rows(db)[log_before:]) == {"config.cert_warning_days"}
 
 
 # --------------------------------------------------------------------------- read-only
@@ -399,13 +301,9 @@ def test_a_read_only_connection_can_load_but_not_write(
     log_before = _count(read_only_db, "change_log")
 
     assert service.load() == ReadinessConfig()
-    assert service.needs_badge("P01") is True
-    assert service.badge_for_field("cert_warning_days") == "P01"
     assert _error(lambda: service.save(ReadinessConfig().with_changes(unit_name="x"))).code == (
         READ_ONLY
     )
-    assert _error(lambda: service.confirm("P01")).code == READ_ONLY
-    assert _error(lambda: service.unconfirm("P01")).code == READ_ONLY
     assert _count(read_only_db, "change_log") == log_before
 
 

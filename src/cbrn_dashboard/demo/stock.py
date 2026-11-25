@@ -24,8 +24,7 @@ The fixed cases (days are relative to the creation day; ``P11`` is the 90-day wa
   quantities.
 * The user-defined antidote type ``DEMO-ANTIDOTE-X`` with lot ``DEMO-L014``.
 
-The minimums (P12) exist ONLY in the demo database; they are written without confirming the
-placeholder, so P12 stays flagged "to be confirmed" and a real database has no minimum (D25, D35).
+The minimums (P12) exist ONLY in the demo database; a real database has no minimum (D25, D35).
 
 Qt-free.
 """
@@ -211,7 +210,6 @@ def generate(ctx: DemoContext) -> None:
                 ),
             )
 
-    # The minimums are demo data only. P12 is NOT confirmed (no ``confirm_placeholder``): it keeps
-    # its "to be confirmed" badge, as in a real database.
+    # The minimums are demo data only; a real database has none.
     for code, minimum in MINIMUMS.items():
         service.set_minimum(type_ids[code], minimum)
