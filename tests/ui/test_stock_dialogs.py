@@ -295,8 +295,8 @@ def test_every_error_code_of_the_stock_service_has_a_label(app_context: AppConte
     } <= service_codes
     shared = {READ_ONLY, NOT_FOUND, REQUIRED, INVALID_DATE, INVALID_CODE, LABEL_PT_BR_REQUIRED}
     # The stock UI no longer confirms placeholders: UNKNOWN_PLACEHOLDER is not presented.
-    config_codes = set(CONFIG_ERROR_CODES) - {"UNKNOWN_PLACEHOLDER"}
-    expected = service_codes | shared | config_codes | {CODE_IMMUTABLE}
+    assert "UNKNOWN_PLACEHOLDER" not in ALL_ERROR_CODES
+    expected = service_codes | shared | set(CONFIG_ERROR_CODES) | {CODE_IMMUTABLE}
     expected |= {"CORRUPT_SETTING"}
     expected |= {"INVALID_NUMBER", "AMBIGUOUS_NUMBER", "NEGATIVE_AMOUNT", "TOO_MANY_DECIMALS"}
     assert expected <= set(ALL_ERROR_CODES)

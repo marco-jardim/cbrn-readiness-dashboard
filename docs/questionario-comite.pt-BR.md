@@ -85,7 +85,7 @@ e provavelmente não cobre dados de gestão de pessoal; e um código interno é 
 que o dado continua sendo pessoal (art. 13, §4º).
 
 **Como o aplicativo funciona hoje.** Só existem o código interno, um rótulo opcional e uma lista de
-categorias livre e vazia. Nenhum dado real é inserido.
+categorias livre e vazia.
 
 **Quem responde.** O comitê.
 
@@ -109,7 +109,7 @@ de um backup criptografado antigo (P09)?
 
 **Como o aplicativo funciona hoje.** Proteção pelo sistema operacional, redução ao mínimo dos dados,
 backups manuais criptografados e frase secreta com no mínimo 12 caracteres (P05); lembrete depois de
-30 dias (P09). Nenhum dado real é inserido.
+30 dias (P09).
 
 **Quem responde.** O comitê.
 
@@ -133,8 +133,7 @@ encerra a sessão. AppLocker, WDAC ou Smart App Control estão em vigor e em qua
 executar programas?
 
 **Como o aplicativo funciona hoje.** Um zip com uma pasta, sem assinatura, com checksums, uma lista de
-verificação arquivo por arquivo e uma atestação de proveniência da compilação. Nenhum dado real é
-inserido.
+verificação arquivo por arquivo e uma atestação de proveniência da compilação.
 
 **Quem responde.** O comitê, com quem administra esses computadores.
 
@@ -380,16 +379,16 @@ _______________________________________________________________________________
 
 Decisão registrada em: ____ / ____ / ________  por: ______________________________
 
-### Q15 - Aviso de versão preliminar
+### Q15 - Aviso de versão (retirado na 1.2.0)
 
 Situação: respondida (D39)
 
 **Pergunta.** O que deve dizer o aviso "versão preliminar, não validada institucionalmente" e onde ele
 deve aparecer na interface e nos relatórios?
 
-**Como o aplicativo funciona hoje.** O texto provisório ("Versão preliminar - indicadores não validados
-institucionalmente.") aparece na faixa da interface, em todas as páginas de PDF, na janela "Sobre", nas
-notas de primeira execução e nas notas da versão (P07).
+**Como o aplicativo funciona hoje.** Desde a versão 1.2.0 (D39) o aplicativo não exibe aviso de versão
+nem de validação: nem na interface, nem nos relatórios em PDF, nem na janela "Sobre", nem nas notas de
+primeira execução, nem nas notas da versão.
 
 **Quem responde.** A pessoa autora da tese, com o comitê.
 
@@ -475,8 +474,8 @@ de armazenamento?
 
 **Como o aplicativo funciona hoje.** As quantidades são números inteiros de unidades de fornecimento
 por tipo de item; não há coluna de unidade nem quantidade fracionada (A15). O estoque mínimo fica
-vazio para todos os tipos: é um valor provisório (P12), digitado só no próprio computador e nunca
-guardado no repositório. Sem mínimo, nenhum tipo gera o alerta de estoque abaixo do mínimo. Não há
+vazio para todos os tipos: é um valor local (P12), definido em cada instalação, digitado só no próprio
+computador e nunca guardado no repositório. Sem mínimo, nenhum tipo gera o alerta de estoque abaixo do mínimo. Não há
 mínimo por local.
 
 **Quem responde.** O comitê.

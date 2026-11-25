@@ -241,20 +241,34 @@ def test_registry_invariants_hold() -> None:
 
 
 def test_registry_check_detects_broken_invariants(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A08 owns default_currency (non-empty default): re-declaring it as local-only, in place, makes
+    # the empty-default rule the first one broken (no duplicate field, no duplicate id).
+    local_only_a08 = tuple(
+        cfg.Placeholder("A08", L, ("default_currency",), "Q8") if item.id == "A08" else item
+        for item in PLACEHOLDERS
+    )
+    assert [item.kind for item in local_only_a08 if item.id == "A08"] == [L]
     broken_sets = [
-        (*PLACEHOLDERS, cfg.Placeholder("X01", G, ("no_such_field",), None)),
-        (*PLACEHOLDERS, cfg.Placeholder("X01", G, ("cert_warning_days",), None)),  # field twice
-        (*PLACEHOLDERS, cfg.Placeholder("P01", G, (), None)),  # id twice
-        (*PLACEHOLDERS, cfg.Placeholder("X01", G, ("operator_label",), None)),
-        # a local-only field with a non-empty default
-        (*PLACEHOLDERS, cfg.Placeholder("X01", L, ("default_currency",), None)),
+        ((*PLACEHOLDERS, cfg.Placeholder("X01", G, ("no_such_field",), None)), "no_such_field"),
+        (
+            (*PLACEHOLDERS, cfg.Placeholder("X01", G, ("cert_warning_days",), None)),
+            "cert_warning_days",  # field twice
+        ),
+        ((*PLACEHOLDERS, cfg.Placeholder("P01", G, (), None)), "P01"),  # id twice
+        (
+            (*PLACEHOLDERS, cfg.Placeholder("X01", G, ("operator_label",), None)),
+            "operator_label",
+        ),
+        # a local-only field with a non-empty default (the empty-default rule)
+        (local_only_a08, "default_currency"),
     ]
-    for broken in broken_sets:
+    for broken, field in broken_sets:
         with monkeypatch.context() as patch:
             patch.setattr(cfg, "PLACEHOLDERS", broken)
             with pytest.raises(ConfigError) as info:
                 check_registry()
             assert info.value.code == "REGISTRY_INVALID"
+            assert info.value.field == field
     check_registry()
 
 

@@ -2,7 +2,7 @@
 """The three settings sections owned by T6.1: general, alerts and indicator targets (PLAN.md 3.5).
 
 * General: the user-interface language, the operator label (D05) and the institution and unit
-  names (D18, a local-only placeholder).
+  names (D18, a local-only value).
 * Alerts: the certificate warning window (P01), the maintenance warning window (P02) and the
   stock lot warning window before expiry (P11).
 * Targets: the stored indicator targets (P03), one row per (indicator, dimension).

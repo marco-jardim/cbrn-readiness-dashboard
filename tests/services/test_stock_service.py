@@ -977,6 +977,54 @@ def test_a_failing_minimum_leaves_a_type_unchanged(
     assert (view.label_pt_br, view.minimum_quantity) == ("Item demo", None)
 
 
+class _WriteFailedError(RuntimeError):
+    """A storage failure injected right AFTER a type write (not a service refusal)."""
+
+
+def _fail_after(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    """Make ``stock_repo.<name>`` do its real write (type row + change_log) and then raise."""
+    real = getattr(stock_repo, name)
+
+    def failing(*args: Any, **kwargs: Any) -> None:
+        real(*args, **kwargs)
+        raise _WriteFailedError(name)
+
+    monkeypatch.setattr(stock_repo, name, failing)
+
+
+def test_a_failure_after_the_type_insert_rolls_back_the_type_and_its_change_log(
+    service: StockService, db: DatabaseConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before = _state(db)
+    _fail_after(monkeypatch, "insert_type")
+
+    with pytest.raises(_WriteFailedError):
+        service.save_type_with_minimum(None, _type_input(), 5)
+
+    assert _state(db) == before  # no type row, no change_log row, no setting
+    assert service.get_type_by_code("DEMO-ITEM") is None
+
+
+def test_a_failure_after_the_type_update_keeps_the_old_values_and_the_change_log(
+    service: StockService,
+    db: DatabaseConnection,
+    change_log_rows: ChangeLogRows,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    type_id = _user_type(service)
+    before = _state(db)
+    log_before = change_log_rows(db)
+    _fail_after(monkeypatch, "update_type")
+
+    with pytest.raises(_WriteFailedError):
+        service.save_type_with_minimum(type_id, _type_input(label_pt_br="Novo"), 7)
+
+    assert _state(db) == before
+    assert change_log_rows(db) == log_before
+    view = service.get_type(type_id)
+    assert (view.label_pt_br, view.minimum_quantity) == ("Item demo", None)
+
+
 def test_a_refusal_of_the_type_fields_leaves_everything_as_it_was(
     service: StockService, db: DatabaseConnection
 ) -> None:

@@ -199,9 +199,6 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
         "Personnel", "The currency is not valid."
     ),
     "INVALID_TEXT": lambda: QCoreApplication.translate("Personnel", "The text is not valid."),
-    "REGISTRY_INVALID": lambda: QCoreApplication.translate(
-        "Personnel", "The list of placeholders is not valid."
-    ),
     "CORRUPT_SETTING": lambda: QCoreApplication.translate(
         "Personnel", "A stored setting cannot be read."
     ),

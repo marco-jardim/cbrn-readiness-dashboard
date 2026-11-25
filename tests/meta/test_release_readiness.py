@@ -575,6 +575,10 @@ def test_the_manual_test_script_links_resolve() -> None:
         assert (DOCS / link.split("#", 1)[0]).resolve().exists(), link
 
 
+def test_the_manual_test_guide_names_the_current_version() -> None:
+    assert __version__ in _read(DOCS / "guia-teste-manual.pt-BR.md")
+
+
 # --- nothing claims an event that did not happen ---------------------------------------------
 
 
@@ -635,21 +639,85 @@ _REMOVED_NOTICE_PATTERNS = tuple(
     )
 )
 
-#: Files that may still quote the removed notices: the history (CHANGELOG, PLAN), the committee
-#: questionnaire (it quotes the original question texts) and this test suite.
-_NOTICE_EXEMPT = frozenset({"docs/questionario-comite.pt-BR.md", "CHANGELOG.md", "PLAN.md"})
+#: A claim that the tool (or its indicators) is validated, approved or homologated (R30, K25): a
+#: subject about the tool, then an affirmative verb, then the claim. Matched on lower-case text
+#: with the whitespace collapsed; negated sentences are dropped by ``_validation_claims``.
+_VALIDATION_CLAIM = re.compile(
+    r"\b(?:tool|app|application|software|dashboard|indicators?|aplicativo|ferramenta|painel"
+    r"|indicadores?|aplicaci[óo]n|herramienta)\b[^.\n]{0,40}"
+    r"\b(?:is|are|has been|have been|was|were|foi|foram|está|estão|é|são"
+    r"|fue|fueron|es|son)\s+(?:institutionally\s+|institucionalmente\s+)?"
+    r"(?:validated|approved|homologated|validad[oa]s?|aprovad[oa]s?|aprobad[oa]s?"
+    r"|homologad[oa]s?)\b",
+    re.IGNORECASE,
+)
+_NEGATION = re.compile(r"\b(?:not|no|never|n[ãa]o|nem|nunca|sin|sem|ni)\b", re.IGNORECASE)
+_SENTENCE_BREAK = (". ", "! ", "? ", ": ", ";")
+
+
+def _validation_claims(text: str) -> list[str]:
+    """The affirmative validation claims of ``text`` (a negation in the sentence cancels one)."""
+    line = _one_line(text)
+    claims: list[str] = []
+    for match in _VALIDATION_CLAIM.finditer(line):
+        start = max(line.rfind(mark, 0, match.start()) for mark in _SENTENCE_BREAK)
+        # From the start of the sentence to the end of the claim: "does not show that ... are
+        # validated" is a disclaimer, not a claim.
+        if not _NEGATION.search(line[start + 1 : match.end()]):
+            claims.append(match.group(0))
+    return claims
+
+
+#: Files that may still quote the removed notices: the history (CHANGELOG, PLAN). The committee
+#: questionnaire is scanned too, except for the original question texts (``_QUESTION_START``).
+#: No script, workflow or installer file needed an exemption (checked against the patterns).
+_NOTICE_EXEMPT = frozenset({"CHANGELOG.md", "PLAN.md"})
+_QUESTIONNAIRE = "docs/questionario-comite.pt-BR.md"
+_QUESTION_START = "**Pergunta.**"
+
+
+def _without_questions(text: str) -> str:
+    """The questionnaire without its original question texts.
+
+    A question starts with ``**Pergunta.**`` and runs to the next blank line (it may wrap).
+    """
+    kept: list[str] = []
+    in_question = False
+    for line in text.splitlines():
+        if line.startswith(_QUESTION_START):
+            in_question = True
+            continue
+        if in_question and line.strip():
+            continue
+        in_question = False
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def _scanned_text(path: Path) -> str:
+    text = path.read_text(encoding="utf-8")
+    if path.relative_to(ROOT).as_posix() == _QUESTIONNAIRE:
+        return _without_questions(text)
+    return text
 
 
 def _files_scanned_for_the_removed_notices() -> list[Path]:
     src = ROOT / "src"
     packaging = ROOT / "packaging"
+    github = ROOT / ".github"
     files = [
         *src.rglob("*.py"),
         *src.rglob("*.md"),
         *src.rglob("*.ts"),
         *packaging.rglob("*.txt"),
+        *(packaging / "installer").glob("*.iss"),
+        *github.rglob("*.md"),
+        *github.rglob("*.yml"),
+        *github.rglob("*.yaml"),
+        *(ROOT / "scripts").rglob("*.py"),
         TEMPLATE,
         ROOT / "README.md",
+        ROOT / "CONTRIBUTING.md",
         *DOCS.glob("*.md"),
     ]
     return sorted(
@@ -664,8 +732,13 @@ def test_no_file_shows_the_preliminary_notice_or_the_real_data_gate() -> None:
     names = {path.relative_to(ROOT).as_posix() for path in files}
     # The scan must really cover the places the notices lived in.
     assert "README.md" in names
+    assert "CONTRIBUTING.md" in names
     assert ".github/release-body.template.md" in names
+    assert ".github/workflows/release.yml" in names
     assert "docs/install.pt-BR.md" in names
+    assert _QUESTIONNAIRE in names
+    assert "packaging/installer/cbrn-dashboard.iss" in names
+    assert "scripts/make_release_zip.py" in names
     assert any(name.endswith(".py") for name in names)
     assert any(name.endswith(".ts") for name in names)
     assert not names & _NOTICE_EXEMPT
@@ -673,12 +746,59 @@ def test_no_file_shows_the_preliminary_notice_or_the_real_data_gate() -> None:
         f"{path.relative_to(ROOT).as_posix()}: {match.group(0)!r}"
         for path in files
         for match in (
-            pattern.search(_one_line(path.read_text(encoding="utf-8")))
-            for pattern in _REMOVED_NOTICE_PATTERNS
+            pattern.search(_one_line(_scanned_text(path))) for pattern in _REMOVED_NOTICE_PATTERNS
         )
         if match
     ]
     assert not found, f"a removed notice or gate is back: {found}"
+
+
+def test_no_file_claims_that_the_tool_is_validated() -> None:
+    found = [
+        f"{path.relative_to(ROOT).as_posix()}: {claim!r}"
+        for path in _files_scanned_for_the_removed_notices()
+        for claim in _validation_claims(_scanned_text(path))
+    ]
+    assert not found, f"a validation claim is back (R30, K25): {found}"
+
+
+def test_the_questionnaire_guard_skips_only_the_question_texts() -> None:
+    text = (
+        "### Q15 - Aviso de versão preliminar\n\n"
+        '**Pergunta.** O que deve dizer o aviso "versão preliminar"\n'
+        "e onde ele deve aparecer?\n\n"
+        "**Como o aplicativo funciona hoje.** Sem aviso.\n"
+    )
+    kept = _without_questions(text)
+    assert "e onde ele deve aparecer" not in kept
+    assert "**Pergunta.**" not in kept
+    assert "Aviso de versão preliminar" in kept  # a heading is not an original question
+    assert "Sem aviso." in kept
+    # The notice wording inside the question alone is skipped; the one in the heading is found.
+    assert any(pattern.search(_one_line(kept)) for pattern in _REMOVED_NOTICE_PATTERNS)
+    clean = _without_questions(text.replace("Aviso de versão preliminar", "Aviso"))
+    assert not any(pattern.search(_one_line(clean)) for pattern in _REMOVED_NOTICE_PATTERNS)
+
+
+def test_the_validation_claim_guard_matches_affirmative_claims_only() -> None:
+    assert _validation_claims("The tool has been validated by the committee.")
+    assert _validation_claims("The indicators are validated.")
+    assert _validation_claims("O aplicativo foi homologado.")
+    assert _validation_claims("O aplicativo foi institucionalmente validado.")
+    assert _validation_claims("La herramienta fue aprobada\npor el comité.")
+    assert not _validation_claims(
+        "the software makes no claim of institutional homologation (an institutional step)."
+    )
+    assert not _validation_claims("The indicators are not validated.")
+    assert not _validation_claims("O aplicativo não foi validado.")
+    assert not _validation_claims("La herramienta no es validada.")
+    assert not _validation_claims(
+        "It does not show that the program is safe or that its indicators are validated."
+    )
+    assert not _validation_claims("O orçamento foi aprovado.")
+    assert not _validation_claims("Every release is approved by hand before it is signed.")
+    # A negation in ANOTHER sentence does not cancel the claim.
+    assert _validation_claims("It is not official. The tool is validated.")
 
 
 def test_the_notice_guard_matches_the_removed_wordings_only() -> None:

@@ -1246,6 +1246,6 @@ def test_all_error_codes_lists_the_format_and_configuration_codes() -> None:
     assert {"EMPTY", "AMBIGUOUS_NUMBER", "TOO_MANY_DECIMALS", "TOO_LARGE"} <= format_codes
     assert format_codes <= set(ALL_ERROR_CODES), sorted(format_codes - set(ALL_ERROR_CODES))
     # The budget UI no longer confirms placeholders: UNKNOWN_PLACEHOLDER is not presented.
-    assert set(CONFIG_ERROR_CODES) - {"UNKNOWN_PLACEHOLDER"} <= set(ALL_ERROR_CODES)
+    assert set(CONFIG_ERROR_CODES) <= set(ALL_ERROR_CODES)
     assert "CORRUPT_SETTING" in ALL_ERROR_CODES
     assert "UNKNOWN_PLACEHOLDER" not in ALL_ERROR_CODES

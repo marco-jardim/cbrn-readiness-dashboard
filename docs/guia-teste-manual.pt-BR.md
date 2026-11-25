@@ -1,6 +1,6 @@
-# Guia prático para executar o teste manual - versão 1.1.0
+# Guia prático para executar o teste manual - versão 1.2.0
 
-Este guia é para a pessoa que vai executar os roteiros de teste da versão 1.1.0 em um **perfil limpo
+Este guia é para a pessoa que vai executar os roteiros de teste da versão 1.2.0 em um **perfil limpo
 do Windows, sem direitos de administrador**. Ele diz como preparar o computador, como obter e conferir
 o instalador e o zip, o que executar e como registrar o resultado. Os testes em si estão nestes dois
 roteiros:
@@ -82,16 +82,16 @@ Não adicione a conta ao grupo "Administradores".
 
 ## 3. Obter o instalador e o zip da versão
 
-A versão 1.1.0 fica na página
-[v1.1.0](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.1.0). Enquanto
+A versão 1.2.0 fica na página
+[v1.2.0](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.2.0). Enquanto
 ela for um *rascunho*, só quem colabora no repositório a vê; depois de publicada, a página não exige
 conta. Há duas formas de obter os arquivos; escolha uma:
 
 - **A. Baixar da página da versão**, em um navegador. Baixe os quatro arquivos da **mesma** página
   de versão:
-  - `cbrn-readiness-dashboard-1.1.0-win-x64-setup.exe` (o instalador, a forma recomendada de
+  - `cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe` (o instalador, a forma recomendada de
     instalar)
-  - `cbrn-readiness-dashboard-1.1.0-win-x64.zip` (o zip, para o modo portátil e para equipes de TI)
+  - `cbrn-readiness-dashboard-1.2.0-win-x64.zip` (o zip, para o modo portátil e para equipes de TI)
   - `SHA256SUMS.txt`
   - `SHA256-FILES.txt`
 - **B. Pedir ao responsável pelo projeto** que copie esses quatro arquivos para um pen drive ou uma
@@ -108,16 +108,16 @@ como os arquivos chegaram (navegador, pen drive ou pasta compartilhada) na folha
 1. Abra o PowerShell na pasta dos arquivos e execute, para o instalador **e** para o zip:
 
    ```powershell
-   Get-FileHash .\cbrn-readiness-dashboard-1.1.0-win-x64-setup.exe -Algorithm SHA256
-   Get-FileHash .\cbrn-readiness-dashboard-1.1.0-win-x64.zip -Algorithm SHA256
+   Get-FileHash .\cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe -Algorithm SHA256
+   Get-FileHash .\cbrn-readiness-dashboard-1.2.0-win-x64.zip -Algorithm SHA256
    ```
 
 2. Compare o valor da coluna `Hash` de cada arquivo com a linha correspondente em
-   `SHA256SUMS.txt`. Os valores devem ser iguais. Para a versão 1.1.0, os valores esperados são:
+   `SHA256SUMS.txt`. Os valores devem ser iguais. Para a versão 1.2.0, os valores esperados são:
 
    ```text
-   6c0e55aa7712e5709345655cf0ed20939d521585b52f99cc22dd0dd4e347ad5d  cbrn-readiness-dashboard-1.1.0-win-x64-setup.exe
-   69acc9be982a00dcca2f81a20bb705bee6ddb447452f8086a23853a3a54b1727  cbrn-readiness-dashboard-1.1.0-win-x64.zip
+   (preenchido na publicação da 1.2.0)  cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe
+   (preenchido na publicação da 1.2.0)  cbrn-readiness-dashboard-1.2.0-win-x64.zip
    ```
 
    O `Get-FileHash` mostra o valor em
@@ -129,8 +129,8 @@ como os arquivos chegaram (navegador, pen drive ou pasta compartilhada) na folha
    compilação de cada arquivo.
 
    ```powershell
-   gh attestation verify .\cbrn-readiness-dashboard-1.1.0-win-x64-setup.exe --repo marco-jardim/cbrn-readiness-dashboard
-   gh attestation verify .\cbrn-readiness-dashboard-1.1.0-win-x64.zip --repo marco-jardim/cbrn-readiness-dashboard
+   gh attestation verify .\cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe --repo marco-jardim/cbrn-readiness-dashboard
+   gh attestation verify .\cbrn-readiness-dashboard-1.2.0-win-x64.zip --repo marco-jardim/cbrn-readiness-dashboard
    ```
 
    Se a atestação não estiver disponível, anote o fato; ele não impede o teste. O checksum prova a
@@ -144,7 +144,7 @@ portátil e das equipes de TI, e vale como segundo teste, se o responsável pedi
 
 ### 5.1 Pelo instalador (caminho recomendado)
 
-1. Execute `cbrn-readiness-dashboard-1.1.0-win-x64-setup.exe` com um duplo clique, **sem** "Executar
+1. Execute `cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe` com um duplo clique, **sem** "Executar
    como administrador". O instalador não deve pedir elevação: ele instala só para o usuário atual,
    em `%LOCALAPPDATA%\Programs`. Se pedir elevação de administrador, anote.
 2. Como o instalador **não é assinado**, o Windows pode mostrar **"O Windows protegeu o
@@ -164,7 +164,7 @@ portátil e das equipes de TI, e vale como segundo teste, se o responsável pedi
    aparecer) e clique em **OK**. Alternativa no PowerShell:
 
    ```powershell
-   Unblock-File .\cbrn-readiness-dashboard-1.1.0-win-x64.zip
+   Unblock-File .\cbrn-readiness-dashboard-1.2.0-win-x64.zip
    ```
 
    Faça isso **antes** de extrair.
@@ -204,7 +204,7 @@ portátil e das equipes de TI, e vale como segundo teste, se o responsável pedi
    sugerida sobre publicar o rascunho (sim ou não). Informe a data da execução, a edição e a versão do
    Windows e os valores do `Get-FileHash` do instalador e do zip que foram testados.
 2. **O responsável pelo projeto** registra o status em [CHANGELOG.md](../CHANGELOG.md), na entrada da
-   versão 1.1.0: data, versão testada, resultado e decisão sobre publicar, **sem** o conteúdo das
+   versão 1.2.0: data, versão testada, resultado e decisão sobre publicar, **sem** o conteúdo das
    respostas ao questionário. Depois troca a linha de status no início dos dois roteiros de "NÃO
    EXECUTADO" para o formato que os testes do repositório aceitam:
 

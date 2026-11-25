@@ -69,8 +69,10 @@ empty and must keep all placeholders.
 - Do not add AI co-author lines or "Generated with ..." lines.
 - A task is done only when its own check and the whole default suite (`uv run pytest`) pass. A
   task that breaks another task's test is not done.
-- A rule the plan does not state is declared in `domain/config.py` with a `placeholder` flag,
-  and the same commit records it in `PLAN.md`.
+- A rule the plan does not state is declared in the `PLACEHOLDERS` registry of `domain/config.py`
+  with its kind and question, and the same commit records it in `PLAN.md`. Since D39 (1.2.0) no
+  entry sets the `placeholder` flag; values that identify an institution or set a readiness
+  target are `local_only` and get no code default (see `docs/architecture.md`, section 12).
 
 ## Dependency updates
 

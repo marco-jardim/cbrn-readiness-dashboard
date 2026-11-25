@@ -204,10 +204,6 @@
         <translation>The text is not valid.</translation>
     </message>
     <message>
-        <source>The list of placeholders is not valid.</source>
-        <translation>The list of placeholders is not valid.</translation>
-    </message>
-    <message>
         <source>A stored setting cannot be read.</source>
         <translation>A stored setting cannot be read.</translation>
     </message>

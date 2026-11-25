@@ -15,8 +15,8 @@ offending field; the UI maps codes to texts. Every mutating method
 Item types are list entries (D16, D32): a user-defined type needs a pt-BR label and a category; a
 built-in type (the 17 seeded ones) keeps empty labels (its name comes from the UI's ``labels.py``)
 and only its minimum and its ``active`` flag change; it is never deleted. The code and the category
-of a type are frozen once a lot uses it. The minimum (P12) is stored in the type; setting it can
-confirm the P12 placeholder in the same transaction.
+of a type are frozen once a lot uses it. The minimum (P12, empty by default) is stored in the type
+and is written in the same transaction as the type.
 
 A lot is created together with its initial receipt movement (D33) in one transaction. Stock is
 management data only (D19, D38): there is no clinical field anywhere.
@@ -652,7 +652,7 @@ class StockService:
         (``CODE_IMMUTABLE``) and so is the category (``CATEGORY_IMMUTABLE``) once a lot uses the
         type, a minimum is set for it, or its code is named by a stored snapshot reading or
         indicator target (dimension ``item=<code>``).
-        Use :meth:`set_minimum` to confirm P12 together with a new minimum.
+        Use :meth:`set_minimum` to change only the minimum (P12).
         """
         self._require_writable()
         with _translated(), transaction(self._conn):

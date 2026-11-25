@@ -204,10 +204,6 @@
         <translation type="unfinished">O texto não é válido.</translation>
     </message>
     <message>
-        <source>The list of placeholders is not valid.</source>
-        <translation type="unfinished">A lista de valores provisórios não é válida.</translation>
-    </message>
-    <message>
         <source>A stored setting cannot be read.</source>
         <translation type="unfinished">Uma configuração armazenada não pode ser lida.</translation>
     </message>

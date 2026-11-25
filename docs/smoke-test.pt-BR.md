@@ -206,9 +206,10 @@ Abra o programa sem `--demo` e vá para o Painel.
 2. Mude a "Data de referência" na barra de ferramentas para uma data anterior e depois use "Hoje".
    - Resultado esperado: os valores são recalculados para a data escolhida (a partir dos registros
      como são conhecidos hoje) e voltam ao normal com "Hoje".
-3. Em todas as páginas e no Painel, confirme que nenhuma faixa além de DEMO (só no modo de
-   demonstração) e dos lembretes de backup e de somente leitura aparece. Sem `--demo`, não deve
-   haver faixa de DEMO.
+3. Em todas as páginas e no Painel, confirme que nenhuma faixa de versão ou de validação aparece.
+   Faixas de alerta, de local, de lembrete de backup e de somente leitura podem aparecer quando
+   houver motivo. A faixa de DEMO só aparece no modo de demonstração: sem `--demo`, ela não deve
+   aparecer.
 
 ## 9. Modo portátil (opcional)
 

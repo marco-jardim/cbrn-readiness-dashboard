@@ -114,12 +114,10 @@ are the only files designed to leave the machine.
 
 "Sensitive" is this project's working label for data that stays on the local machine. It is **not**
 a classification under the access-to-information law (Lei 12.527/2011) or under military rules. The
-project does not know whether any of the data is classified or access-restricted. As the plan reads
-Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made by a formal
-decision of the competent authority; this is not legal advice. If the data is classified, this
-design (a plain SQLite database, plain automatic backups, commercial cryptography, an unsigned
-binary from a public repository) is probably unsuitable. The question of the formal classification
-(Q19) is answered; this repository records only its status, never the answer.
+data stays on the local machine in a SQLite database in the user's Windows profile; the automatic
+copies in `backups\` are plain copies of that database, and encrypted backups are made by the
+operator (see "Backups"). The design uses commercial cryptography and an unsigned binary from a
+public repository. Q19 is answered (D39); the plan records only its status.
 
 ## Stock data
 

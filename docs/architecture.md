@@ -395,7 +395,7 @@ a language switch. A duplicate key is rejected.
   `budget` (40), `alerts` (50), `reports` (60) and `settings` (90).
 - **Settings sections** (`SETTINGS_SECTIONS`): `settings.general`, `settings.alerts`,
   `settings.targets`, `personnel.rules`, `infrastructure.types`, `stock.types` (the stock item
-  types and the minimum stock, placeholder P12, in the `infrastructure` group), `exercises.metrics`,
+  types and the minimum stock, local-only value P12, in the `infrastructure` group), `exercises.metrics`,
   `budget.sources`, `backup.settings`, `reports.settings` and `snapshots.settings`. The stock lot
   warning window before expiry (P11) is the third field of `settings.alerts`. Each belongs
   to one of the settings groups:

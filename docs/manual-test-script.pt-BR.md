@@ -332,9 +332,10 @@ dados e os registros de prontidão (instantâneos). Esta seção trata do relat�
      execução orçamentária é um valor de fim de exercício, e a nota da página diz que ela é ajustada
      proporcionalmente ao exercício decorrido.
 4. Em "Alertas", observe as janelas de aviso (em dias) de habilitações de EPI e de manutenção.
-5. Percorra as seções de configurações gerais, alertas e metas.
+5. Percorra as seções de configurações gerais, alertas e metas e também as de Pessoal,
+   Infraestrutura, Tipos de item do estoque, Orçamento, Backup, Relatórios e Snapshots.
    - Resultado esperado: nenhum valor mostra marca de valor provisório e nenhuma seção tem botão de
-     confirmação; cada campo pode ser salvo e relido.
+     confirmação, em nenhuma dessas seções; cada campo pode ser salvo e relido.
 6. Nas seções de módulos, confira "Cursos" (`DEMO-C1` a `DEMO-C3`), "Tipos de ativo", "Métricas de
    avaliação" e "Fontes de recursos" (DIRSA e Comando da Aeronáutica entre as predefinidas).
    - Resultado esperado: as fontes predefinidas não podem ser excluídas nem ter o código alterado.

@@ -38,8 +38,6 @@ def test_no_placeholder_is_flagged_and_the_plan_says_so() -> None:
     flagged = flagged_placeholder_ids()
     assert flagged == ()  # D39: since 1.2.0 no flag is set
     assert "From 1.2.0 (D39) no flag is set" in section
-    for placeholder_id in flagged:  # kept for a future release that flags a value again
-        assert re.search(rf"\b{re.escape(placeholder_id)}\b", section), placeholder_id
 
 
 def test_the_withdrawn_p07_is_not_declared_in_the_code() -> None:
