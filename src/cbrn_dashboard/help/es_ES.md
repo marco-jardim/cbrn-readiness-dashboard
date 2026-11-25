@@ -72,7 +72,7 @@ La pestaña también muestra un resumen de cada tipo de artículo: la cantidad v
 
 Filtro de tipo. El filtro Tipo sobre las pestañas enumera "Todos los tipos", los tipos de activo y los tipos de artículo de existencias. Un tipo de activo muestra la primera pestaña, y un tipo de artículo de existencias muestra esta pestaña solo con los lotes de ese tipo. "Todos los tipos" no filtra nada y mantiene la pestaña en la que está. Cambiar de pestaña a mano nunca cambia el filtro.
 
-Ajustes. Las existencias mínimas de cada tipo de artículo se definen en la sección "Tipos de artículo de existencias" de Ajustes, y el plazo de aviso antes de una caducidad se define en los ajustes de Alertas. Ambos son valores provisionales hasta que el comité los confirme.
+Ajustes. Las existencias mínimas de cada tipo de artículo se definen en la sección "Tipos de artículo de existencias" de Ajustes, y el plazo de aviso antes de una caducidad se define en los ajustes de Alertas.
 
 Alertas. Un lote caducado que aún tiene existencias es crítico, un lote próximo a caducar es una advertencia, y un tipo de artículo cuya cantidad válida está por debajo del mínimo es crítico. Un tipo sin mínimo nunca está por debajo. El Panel también muestra indicadores de las existencias válidas, de los lotes próximos a caducar, de los lotes caducados en existencias y de los artículos por debajo de las existencias mínimas.
 
@@ -187,13 +187,11 @@ Archivo, "Abrir carpeta de datos" muestra la carpeta de datos en el Explorador d
 La página Ajustes tiene una pestaña por cada grupo de ajustes y un recuadro por cada sección:
 
 - General: el idioma, una etiqueta de operador opcional que se registra con cada cambio y los nombres de la institución y de la unidad.
-- Alertas: cuántos días antes de un vencimiento o de una fecha prevista se genera una alerta. Esto incluye el campo "Lotes de existencias: antelación del aviso de caducidad (días)", el plazo de aviso antes de la caducidad de un lote de existencias (valor provisional P11, 90 días hasta que el comité lo confirme).
+- Alertas: cuántos días antes de un vencimiento o de una fecha prevista se genera una alerta. Esto incluye el campo "Lotes de existencias: antelación del aviso de caducidad (días)", el plazo de aviso antes de la caducidad de un lote de existencias (90 días por defecto).
 - Metas: las metas de los indicadores, que se pueden añadir, editar, activar o desactivar y eliminar. Mientras no se defina una meta, el indicador muestra "Sin meta".
 - Personal, Infraestructura, Ejercicios y Presupuesto: las listas y reglas de cada módulo, como se describe en sus páginas.
-- Infraestructura también tiene la sección "Tipos de artículo de existencias": los 17 tipos de artículo integrados y los suyos. Para cada tipo se pueden definir las existencias mínimas, que quedan vacías (sin mínimo) hasta que usted las define, y dejar el tipo activo o inactivo; un tipo integrado no se puede eliminar, y la categoría de un tipo no cambia una vez que tiene lotes. Las existencias mínimas son el valor provisional P12: llevan la marca "Valor provisional - por confirmar" y un botón Confirmar, y se guardan solo en este equipo.
+- Infraestructura también tiene la sección "Tipos de artículo de existencias": los 17 tipos de artículo integrados y los suyos. Para cada tipo se pueden definir las existencias mínimas, que quedan vacías (sin mínimo) hasta que usted las define, y dejar el tipo activo o inactivo; un tipo integrado no se puede eliminar, y la categoría de un tipo no cambia una vez que tiene lotes. Las existencias mínimas se guardan solo en este equipo.
 - Copia de seguridad, Informes e Instantáneas: los ajustes de las copias de seguridad, de los informes y de las instantáneas.
-
-Algunos valores son provisionales y el comité todavía debe confirmarlos. Llevan la marca "Valor provisional - por confirmar" y un botón Confirmar.
 
 ## Privacidad
 <!-- topic: privacy -->

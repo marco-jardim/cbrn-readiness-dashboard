@@ -133,9 +133,12 @@ has none marked. The count was made over the `.ts` files in `src/cbrn_dashboard/
 message, one `type="unfinished"` translation); a test compares it with the files. No message was
 added at the opening of this cycle. Task T12.7 removed three messages of the Settings context from
 each of the pt-BR and es-ES catalogues, all three marked unfinished ("Placeholder - to be
-confirmed", "Confirm" and "This placeholder is not known."): 1237 - 3 = 1234 per language.
+confirmed", "Confirm" and "This placeholder is not known."): 1237 - 3 = 1234 per language. Tasks
+T12.8 to T12.11 removed the same badge, Confirm and unknown-placeholder messages of the Stock (4),
+Personnel (3), Infrastructure (2), Budget (3), Backup (3) and ReportsUi (3) contexts, all marked
+unfinished: 1234 - 18 = 1216 per language.
 
-- Messages still marked unfinished: 2468 (1234 in the pt-BR catalogues and 1234 in the es-ES
+- Messages still marked unfinished: 2432 (1216 in the pt-BR catalogues and 1216 in the es-ES
   catalogues), pending terminology review (Q14)
 
 ### Known limits

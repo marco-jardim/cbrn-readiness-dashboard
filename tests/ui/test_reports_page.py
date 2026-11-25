@@ -17,7 +17,7 @@ from types import ModuleType
 import pytest
 from PySide6.QtCore import QAbstractItemModel, QDate, Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QDialogButtonBox, QLabel, QWidget
+from PySide6.QtWidgets import QDialogButtonBox, QLabel, QPushButton, QWidget
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard.paths import DATABASE_FILE_NAME, DataLocation, LocationSource
@@ -173,7 +173,6 @@ EXPECTED_ENGLISH: dict[str, str] = {
     "INVALID_TEXT": "The text is not valid or is too long.",
     "INVALID_TYPE": "The value has the wrong type.",
     "CORRUPT_SETTING": "A stored setting cannot be read.",
-    "UNKNOWN_PLACEHOLDER": "This placeholder is not known.",
 }
 
 
@@ -1293,7 +1292,6 @@ def test_the_settings_sections_follow_read_only_mode(
         assert not section.save_action.isEnabled()
     assert not reports.threshold_spin.isEnabled()
     assert not reports.notice_edit.isEnabled()
-    assert not reports.threshold_row.confirm.isEnabled()
     assert not snapshots.monthly_check.isEnabled()
     assert not snapshots.on_report_check.isEnabled()
 
@@ -1333,25 +1331,21 @@ def test_a_threshold_below_one_is_refused_with_the_message(
     assert section.threshold_spin.value() == 5
 
 
-def test_the_reports_section_badges_follow_the_placeholders(
+def test_the_settings_sections_show_no_placeholder_badge_or_confirm_button(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
-    section = ReportsSettingsSection(app_context)
-    qtbot.addWidget(section)
-    config = _config(app_context)
-    assert section.threshold_row.placeholder == "A11"
-    assert section.notice_row.placeholder == "P10"
-    for row in (section.threshold_row, section.notice_row):
-        assert not row.badge.isHidden()
-        assert row.badge.text() == "Placeholder - to be confirmed"
-        assert row.confirm.text() == "Confirm"
-    section.threshold_row.confirm.click()
-    assert config.badge_for_field("small_count_threshold") is None
-    assert section.threshold_row.badge.isHidden()
-    assert section.threshold_row.confirm.isHidden()
-    assert not section.notice_row.badge.isHidden()
-    section.notice_row.confirm.click()
-    assert config.badge_for_field("report_handling_notice") is None
+    for section in (
+        ReportsSettingsSection(app_context),
+        SnapshotsSettingsSection(app_context),
+    ):
+        qtbot.addWidget(section)
+        # The settings are confirmed code defaults: nothing to confirm.
+        for button in section.findChildren(QPushButton):
+            assert button.text() != "Confirm"
+        for label in section.findChildren(QLabel):
+            assert "laceholder" not in label.text()
+        names = {child.objectName() for child in section.findChildren(QWidget)}
+        assert not {name for name in names if name.endswith(("_badge", "_confirm"))}
 
 
 def test_the_snapshots_section_stores_the_p04_switches(
@@ -1368,18 +1362,6 @@ def test_the_snapshots_section_stores_the_p04_switches(
     section.on_report_check.setChecked(False)
     section.save_action.trigger()
     assert _config(app_context).load().snapshot_on_report is False
-
-
-def test_the_snapshots_section_badges_follow_p04(app_context: AppContext, qtbot: QtBot) -> None:
-    section = SnapshotsSettingsSection(app_context)
-    qtbot.addWidget(section)
-    config = _config(app_context)
-    assert section.monthly_row.placeholder == "P04"
-    assert section.on_report_row.placeholder == "P04"
-    section.monthly_row.confirm.click()
-    assert config.badge_for_field("snapshot_monthly") is None
-    assert section.monthly_row.badge.isHidden()
-    assert section.on_report_row.badge.isHidden()  # one placeholder, both fields
 
 
 def _corrupt_setting(context: AppContext) -> None:
@@ -1418,14 +1400,6 @@ def test_an_unreadable_setting_is_explained_and_the_inputs_wait_for_the_repair(
         assert not section.config_error_label.isHidden()
         assert section.config_error_label.text() == "A stored setting cannot be read."
         assert not section.save_action.isEnabled()
-    for row in (
-        reports.threshold_row,
-        reports.notice_row,
-        snapshots.monthly_row,
-        snapshots.on_report_row,
-    ):
-        assert row.badge.isHidden()
-        assert row.confirm.isHidden()
     assert not any(widget.isEnabled() for widget in inputs)
     assert fake_prompts.calls == []
 
@@ -1447,7 +1421,6 @@ def test_an_unreadable_setting_is_explained_and_the_inputs_wait_for_the_repair(
         assert section.config_error_label.isHidden()
         assert section.save_action.isEnabled()
     assert all(widget.isEnabled() for widget in inputs)
-    assert not reports.threshold_row.badge.isHidden()
 
 
 def test_the_sections_and_the_page_are_reachable_through_the_registry(

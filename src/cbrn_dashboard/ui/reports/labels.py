@@ -14,7 +14,7 @@ from PySide6.QtCore import QCoreApplication
 
 from cbrn_dashboard.reports.pdf import REPORT_FAILED
 from cbrn_dashboard.services.budget import EXECUTION_OUTSIDE_FISCAL_YEAR
-from cbrn_dashboard.services.config import CORRUPT_SETTING, UNKNOWN_PLACEHOLDER
+from cbrn_dashboard.services.config import CORRUPT_SETTING
 from cbrn_dashboard.services.errors import INVALID_DATE, NOT_FOUND, READ_ONLY, REQUIRED
 from cbrn_dashboard.services.exercises import END_BEFORE_START, VALUE_OUT_OF_SCALE
 from cbrn_dashboard.services.export import EXPORT_FAILED, UNKNOWN_ENTITY
@@ -191,9 +191,6 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     ),
     CORRUPT_SETTING: lambda: QCoreApplication.translate(
         "ReportsUi", "A stored setting cannot be read."
-    ),
-    UNKNOWN_PLACEHOLDER: lambda: QCoreApplication.translate(
-        "ReportsUi", "This placeholder is not known."
     ),
 }
 

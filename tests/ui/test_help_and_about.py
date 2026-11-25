@@ -258,7 +258,6 @@ QUOTED_NAMES: tuple[tuple[str, str], ...] = (
     ("ReportsUi", "Record snapshot"),
     ("ReportsUi", "Withdraw snapshot..."),
     ("ReportsUi", "Show withdrawn snapshots"),
-    ("ReportsUi", "Placeholder - to be confirmed"),
     ("Backup", "Back up..."),
     ("Backup", "Restore..."),
     ("Backup", "Open data folder"),

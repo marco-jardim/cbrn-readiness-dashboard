@@ -72,7 +72,7 @@ A aba também mostra um resumo de cada tipo de item: a quantidade válida, a qua
 
 Filtro de tipo. O filtro Tipo acima das abas lista "Todos os tipos", os tipos de ativo e os tipos de item de estoque. Um tipo de ativo mostra a primeira aba, e um tipo de item de estoque mostra esta aba apenas com os lotes desse tipo. "Todos os tipos" não filtra nada e mantém a aba em que você está. Trocar de aba manualmente nunca muda o filtro.
 
-Configurações. O estoque mínimo de cada tipo de item é definido na seção "Tipos de item de estoque" das Configurações, e o prazo de aviso antes de um vencimento é definido nas configurações de Alertas. Ambos são valores provisórios até que o comitê os confirme.
+Configurações. O estoque mínimo de cada tipo de item é definido na seção "Tipos de item de estoque" das Configurações, e o prazo de aviso antes de um vencimento é definido nas configurações de Alertas.
 
 Alertas. Um lote vencido que ainda tem estoque é crítico, um lote a vencer é um aviso, e um tipo de item cuja quantidade válida está abaixo do mínimo é crítico. Um tipo sem mínimo nunca está abaixo dele. O Painel também mostra indicadores do estoque válido, dos lotes a vencer, dos lotes vencidos em estoque e dos itens abaixo do estoque mínimo.
 
@@ -187,13 +187,11 @@ Arquivo, "Abrir pasta de dados" mostra a pasta de dados no Explorador de Arquivo
 A página Configurações tem uma aba para cada grupo de configurações e uma caixa para cada seção:
 
 - Geral: o idioma, um rótulo de operador opcional registrado em cada alteração e os nomes da instituição e da unidade.
-- Alertas: quantos dias antes de um vencimento ou de uma data prevista um alerta é gerado. Isso inclui o campo "Lotes de estoque: antecedência do alerta de vencimento (dias)", o prazo de aviso antes do vencimento de um lote de estoque (valor provisório P11, 90 dias até que o comitê o confirme).
+- Alertas: quantos dias antes de um vencimento ou de uma data prevista um alerta é gerado. Isso inclui o campo "Lotes de estoque: antecedência do alerta de vencimento (dias)", o prazo de aviso antes do vencimento de um lote de estoque (90 dias por padrão).
 - Metas: as metas dos indicadores, que podem ser adicionadas, editadas, ativadas ou desativadas e excluídas. Enquanto uma meta não for definida, o indicador mostra "Sem meta".
 - Pessoal, Infraestrutura, Exercícios e Orçamento: as listas e as regras de cada módulo, como descrito em suas páginas.
-- Infraestrutura também tem a seção "Tipos de item de estoque": os 17 tipos de item padrão e os seus próprios. Para cada tipo é possível definir o estoque mínimo, que fica vazio (sem mínimo) até você defini-lo, e deixar o tipo ativo ou inativo; um tipo padrão não pode ser excluído, e a categoria de um tipo não muda depois que ele tem lotes. O estoque mínimo é o valor provisório P12: traz a marca "Valor provisório - a confirmar" e um botão Confirmar, e é guardado apenas neste computador.
+- Infraestrutura também tem a seção "Tipos de item de estoque": os 17 tipos de item padrão e os seus próprios. Para cada tipo é possível definir o estoque mínimo, que fica vazio (sem mínimo) até você defini-lo, e deixar o tipo ativo ou inativo; um tipo padrão não pode ser excluído, e a categoria de um tipo não muda depois que ele tem lotes. O estoque mínimo é guardado apenas neste computador.
 - Backup, Relatórios e Instantâneos: as configurações de backups, de relatórios e de instantâneos.
-
-Alguns valores são provisórios e ainda precisam ser confirmados pelo comitê. Eles trazem a marca "Valor provisório - a confirmar" e um botão Confirmar.
 
 ## Privacidade
 <!-- topic: privacy -->

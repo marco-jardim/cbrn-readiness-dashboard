@@ -6,9 +6,9 @@ CSV import wizard and the snapshot list where snapshots are recorded and withdra
 snapshot stays stored and is hidden by default; there is no delete action). The report, the CSV
 export and the validation export stay available in read-only mode; importing and recording or
 withdrawing a snapshot are edit actions. The settings sections hold the small-count threshold
-(A11) and the handling notice (P10), and the two snapshot switches (P04), each with the "to be
-confirmed" badge of its placeholder. Settings are read and written ONLY through
-``context.services.config``.
+(A11) and the handling notice (P10), and the two snapshot switches (P04). Their defaults are
+confirmed code defaults; the handling notice is local-only and empty by default. Settings are
+read and written ONLY through ``context.services.config``.
 
 The module-level factories are what the registries of the shell call; they build without services
 and never prompt, open a dialog or touch the database.
@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -314,19 +313,15 @@ class ReportsPage(QWidget):
 
 
 class _Row:
-    """One setting: its editor, placeholder badge and Confirm button."""
+    """One setting: its editor and, for some rows, the caption naming it."""
 
-    def __init__(self, field: str, editor: QWidget, badge: QLabel, confirm: QPushButton) -> None:
-        self.field = field
+    def __init__(self, editor: QWidget) -> None:
         self.editor = editor
-        self.badge = badge
-        self.confirm = confirm
         self.caption: QLabel | None = None
-        self.placeholder: str | None = None
 
 
 class _SettingsSection(QWidget):
-    """Shared plumbing of the two settings sections: rows with badges, load, confirm."""
+    """Shared plumbing of the two settings sections: rows, load and save."""
 
     def __init__(self, context: AppContext, name: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -346,20 +341,12 @@ class _SettingsSection(QWidget):
             self.save_settings,
         )
 
-    def _add_row(self, field: str, editor: QWidget, name: str, caption: QLabel | None) -> _Row:
-        badge = QLabel(self)
-        badge.setObjectName(f"{name}_badge")
-        confirm = QPushButton(self)
-        confirm.setObjectName(f"{name}_confirm")
-        badge.setVisible(False)
-        confirm.setVisible(False)
-        row = _Row(field, editor, badge, confirm)
+    def _add_row(self, editor: QWidget, caption: QLabel | None) -> _Row:
+        row = _Row(editor)
         row.caption = caption
         if caption is not None:
             caption.setBuddy(editor)  # the caption names the input (a screen reader, Alt+key)
-        for target in (editor, confirm):
-            self.context.register_edit_action(target)
-        confirm.clicked.connect(lambda: self._confirm(row))
+        self.context.register_edit_action(editor)
         self._rows.append(row)
         return row
 
@@ -368,17 +355,10 @@ class _SettingsSection(QWidget):
         if row.caption is not None:
             line.addWidget(row.caption)
         line.addWidget(row.editor)
-        line.addWidget(row.badge)
-        line.addWidget(row.confirm)
         line.addStretch(1)
         return line
 
     def _retranslate_rows(self) -> None:
-        badge = QCoreApplication.translate("ReportsUi", "Placeholder - to be confirmed")
-        confirm = QCoreApplication.translate("ReportsUi", "Confirm")
-        for row in self._rows:
-            row.badge.setText(badge)
-            row.confirm.setText(confirm)
         self.save_action.retranslate()
         self._show_config_error()
 
@@ -407,7 +387,7 @@ class _SettingsSection(QWidget):
         return found if isinstance(found, ConfigService) else None
 
     def refresh(self) -> None:
-        """Show the stored settings with their badges."""
+        """Show the stored settings."""
         config = self._config()
         stored = ReadinessConfig()
         self._config_error = None
@@ -420,24 +400,8 @@ class _SettingsSection(QWidget):
         self._show_config_error()
         self._show_values(stored)
         for row in self._rows:
-            row.placeholder = None
-            if config is not None:
-                try:
-                    row.placeholder = config.badge_for_field(row.field)
-                except ServiceError:
-                    row.placeholder = None
-            row.badge.setVisible(row.placeholder is not None)
-            row.confirm.setVisible(row.placeholder is not None)
             self.context.set_edit_enabled(row.editor, config is not None)
-            self.context.set_edit_enabled(row.confirm, config is not None)
         self.context.set_edit_enabled(self.save_action, config is not None)
-
-    def _confirm(self, row: _Row) -> None:
-        config = self._config()
-        placeholder = row.placeholder
-        if config is None or placeholder is None:
-            return
-        apply_change(self.context, self, error_label, lambda: config.confirm(placeholder))
 
 
 class ReportsSettingsSection(_SettingsSection):
@@ -451,12 +415,8 @@ class ReportsSettingsSection(_SettingsSection):
         self.notice_edit = QLineEdit(self)
         self.notice_edit.setObjectName("notice_edit")
         self.notice_edit.setMaxLength(MAX_TEXT_LENGTH)
-        self.threshold_row = self._add_row(
-            "small_count_threshold", self.threshold_spin, "threshold", QLabel(self)
-        )
-        self.notice_row = self._add_row(
-            "report_handling_notice", self.notice_edit, "notice", QLabel(self)
-        )
+        self.threshold_row = self._add_row(self.threshold_spin, QLabel(self))
+        self.notice_row = self._add_row(self.notice_edit, QLabel(self))
         self.notice_hint = QLabel(self)
         self.notice_hint.setWordWrap(True)
 
@@ -525,10 +485,8 @@ class SnapshotsSettingsSection(_SettingsSection):
         self.monthly_check.setObjectName("monthly_check")
         self.on_report_check = QCheckBox(self)
         self.on_report_check.setObjectName("on_report_check")
-        self.monthly_row = self._add_row("snapshot_monthly", self.monthly_check, "monthly", None)
-        self.on_report_row = self._add_row(
-            "snapshot_on_report", self.on_report_check, "on_report", None
-        )
+        self.monthly_row = self._add_row(self.monthly_check, None)
+        self.on_report_row = self._add_row(self.on_report_check, None)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.config_error_label)

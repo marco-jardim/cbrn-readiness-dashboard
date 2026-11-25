@@ -307,10 +307,6 @@
         <translation>A stored setting cannot be read.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation>This placeholder is not known.</translation>
-    </message>
-    <message>
         <source>Stock item types</source>
         <translation>Stock item types</translation>
     </message>
@@ -592,14 +588,6 @@
         <source>Save settings</source>
         <extracomment>The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation>Save settings</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation>Placeholder - to be confirmed</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation>Confirm</translation>
     </message>
     <message>
         <source>Small-count threshold (smaller counts are hidden)</source>

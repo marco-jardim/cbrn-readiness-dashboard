@@ -307,10 +307,6 @@
         <translation type="unfinished">Uma configuração armazenada não pode ser lida.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation type="unfinished">Este valor provisório não é conhecido.</translation>
-    </message>
-    <message>
         <source>Stock item types</source>
         <translation type="unfinished">Tipos de item de estoque</translation>
     </message>
@@ -592,14 +588,6 @@
         <source>Save settings</source>
         <extracomment>The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation type="unfinished">Salvar configurações</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Valor provisório - a confirmar</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation type="unfinished">Confirmar</translation>
     </message>
     <message>
         <source>Small-count threshold (smaller counts are hidden)</source>

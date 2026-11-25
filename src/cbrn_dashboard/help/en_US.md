@@ -72,7 +72,7 @@ The tab also shows a summary for each item type: the valid quantity, the quantit
 
 Type filter. The Type filter above the tabs lists "All types", the asset types and the stock item types. An asset type shows the first tab, and a stock item type shows this tab with only the lots of that type. "All types" filters nothing and keeps the tab you are on. Changing the tab by hand never changes the filter.
 
-Settings. The minimum stock of each item type is set in the Settings section "Stock item types", and the warning period before an expiry is set in the Alerts settings. Both are placeholders until the committee confirms them.
+Settings. The minimum stock of each item type is set in the Settings section "Stock item types", and the warning period before an expiry is set in the Alerts settings.
 
 Alerts. An expired lot that still has stock is critical, a lot expiring soon is a warning, and an item type whose valid quantity is below its minimum is critical. A type with no minimum is never below it. The Dashboard also shows tiles for the valid stock, the lots expiring soon, the expired lots still in stock and the item types below the minimum stock.
 
@@ -187,13 +187,11 @@ File, "Open data folder" shows the data folder in Windows Explorer. It only open
 The Settings page has one tab for each group of settings and a box for each section:
 
 - General: the language, an optional operator label that is recorded with each change, and the names of the institution and the unit.
-- Alerts: the number of days before an expiry or a due date that raises an alert. This includes the field "Stock lots: warning before expiry (days)", the warning period before a stock lot expires (placeholder P11, 90 days until the committee confirms it).
+- Alerts: the number of days before an expiry or a due date that raises an alert. This includes the field "Stock lots: warning before expiry (days)", the warning period before a stock lot expires (90 days by default).
 - Targets: the indicator targets, which you can add, edit, enable or disable, and delete. Until a target is set, an indicator shows "No target".
 - Personnel, Infrastructure, Exercises and Budget: the lists and rules of each module, as described on their pages.
-- Infrastructure also holds the section "Stock item types": the 17 built-in item types and your own. For each type you can set the minimum stock, which is empty (no minimum) until you set it, and make the type active or inactive; a built-in type cannot be deleted, and the category of a type cannot change once it has lots. The minimum stock is placeholder P12: it carries the mark "Placeholder - to be confirmed" and a Confirm button, and it is kept only on this computer.
+- Infrastructure also holds the section "Stock item types": the 17 built-in item types and your own. For each type you can set the minimum stock, which is empty (no minimum) until you set it, and make the type active or inactive; a built-in type cannot be deleted, and the category of a type cannot change once it has lots. The minimum stock is kept only on this computer.
 - Backup, Reports and Snapshots: the settings of backups, of reports and of snapshots.
-
-Some values are placeholders that the committee still has to confirm. They carry the mark "Placeholder - to be confirmed" and a Confirm button.
 
 ## Privacy
 <!-- topic: privacy -->
