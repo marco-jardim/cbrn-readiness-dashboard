@@ -5,10 +5,9 @@ descrevem. Nenhuma pessoa o executou ainda, nem em um computador Windows limpo, 
 resultado abaixo foi observado: cada "resultado esperado" é o que o programa deve fazer segundo o
 código e a documentação, e é isso que o teste deve confirmar ou desmentir.
 
-A versão 1.2.0 está em preparação: ainda não tem tag nem execução do fluxo de publicação. A última
-versão publicada é a 1.1.0, publicada em 21/11/2026, por decisão do responsável, antes da execução
-deste roteiro. Execute-o sobre os arquivos da página pública da versão (ou, para a 1.2.0, sobre o
-rascunho dela, quando existir; troque 1.2.0 por 1.1.0 nos nomes de arquivo ao testar a 1.1.0). O fluxo de publicação
+A versão 1.2.0 é a última versão publicada: foi publicada em 25/11/2026, por decisão do
+responsável, antes da execução deste roteiro. Execute-o sobre os arquivos da página pública da
+versão (troque 1.2.0 pela versão testada nos nomes de arquivo ao testar outra, como a 1.1.0). O fluxo de publicação
 (`.github/workflows/release.yml`) cria um *rascunho* de lançamento; nas próximas versões, **uma
 pessoa executa este roteiro sobre o rascunho, antes de publicá-lo**. Se algum passo falhar, avise o
 responsável pelo projeto.

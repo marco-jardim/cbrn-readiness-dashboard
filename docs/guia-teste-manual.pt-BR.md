@@ -116,8 +116,8 @@ como os arquivos chegaram (navegador, pen drive ou pasta compartilhada) na folha
    `SHA256SUMS.txt`. Os valores devem ser iguais. Para a versão 1.2.0, os valores esperados são:
 
    ```text
-   (preenchido na publicação da 1.2.0)  cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe
-   (preenchido na publicação da 1.2.0)  cbrn-readiness-dashboard-1.2.0-win-x64.zip
+   d254503886e4c45fc9f27dc39b9eaac8ded0d757414ee5df8eed8f4a40c39404  cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe
+   4ec628dc260e8cea9e8d6ed8c63f1456ea3d3e335938a9fc5a4b27be9fceb588  cbrn-readiness-dashboard-1.2.0-win-x64.zip
    ```
 
    O `Get-FileHash` mostra o valor em

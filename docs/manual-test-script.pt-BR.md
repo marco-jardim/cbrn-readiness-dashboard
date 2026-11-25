@@ -5,8 +5,8 @@ documentação descrevem. Nenhuma pessoa o executou ainda. Nenhum resultado abai
 "resultado esperado" é o que o programa deve fazer segundo o código e os documentos, e é isso que o
 teste deve confirmar ou desmentir.
 
-A versão 1.2.0 está em preparação e ainda não foi publicada. A última versão publicada é a 1.1.0,
-publicada em 21/11/2026, antes da execução deste roteiro. Se você testar uma versão anterior, a
+A versão 1.2.0 é a última versão publicada: foi publicada em 25/11/2026, antes da execução deste
+roteiro. Se você testar uma versão anterior, a
 janela "Sobre" e o relatório mostram o número dela no lugar de 1.2.0.
 
 Este roteiro é para o comitê de defesa QBRN do hospital. Ele percorre, com os **dados de

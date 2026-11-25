@@ -51,15 +51,16 @@ WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 TEMPLATE = ROOT / ".github" / "release-body.template.md"
 LANGUAGES = ("pt-BR", "en-US", "es-ES")
 
-#: The last version published on GitHub (1.1.0, on 2026-11-21). The current version in the source
+#: The last version published on GitHub (1.2.0, on 2026-11-25). The current version in the source
 #: may be newer and not published yet; the documents then name both.
-LAST_PUBLISHED = "1.1.0"
-LAST_PUBLISHED_DATE = "2026-11-21"
+LAST_PUBLISHED = "1.2.0"
+LAST_PUBLISHED_DATE = "2026-11-25"
 
 #: SHA-256 of the text of every published (dated) changelog entry, by version. The text of a
 #: published entry never changes (P11-01): the values are filled by the person who publishes, from
 #: the failure message of ``test_every_dated_changelog_entry_is_published_text_that_never_changes``.
 PUBLISHED_ENTRY_SHA256: dict[str, str] = {
+    "1.2.0": "696533399ad20df43bd308115b86795023e15895278bf4c25f71ad12c8d39c10",
     "1.1.0": "cd2d298c14369965806c362bf2ed6108d47966f882faee761a8482b93f65efa5",
     "1.0.2": "2c9dc0a05101c08c0666339f983781c1df2d5c953ca56f514e325e402d0eec89",
     "1.0.1": "a2e13f62bdb05372f4d1f01becea3167d07ec1e4b40444ba569d7c891a45f9aa",

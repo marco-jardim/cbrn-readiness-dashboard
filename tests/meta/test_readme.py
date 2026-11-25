@@ -50,5 +50,5 @@ def test_the_status_no_longer_says_there_is_no_code() -> None:
     text = README.read_text(encoding="utf-8")
     assert "no code yet" not in text
     assert __version__ in text
-    assert "was published on GitHub on 2026-11-21" in text
+    assert "was published on GitHub on 2026-11-25" in text
     assert "No release has been published" not in text

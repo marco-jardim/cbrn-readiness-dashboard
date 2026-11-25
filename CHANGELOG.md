@@ -9,28 +9,64 @@ This file records only the **status** of each open question (open / answered and
 answered and implemented in task Tn), never the content of an answer. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and section 12 of [PLAN.md](PLAN.md).
 
-## [1.2.0] - unreleased
+## [1.2.0] - 2026-11-25
 
-**Status of this entry: not published.** Version 1.2.0 is in preparation. There is no tag `v1.2.0`
-and no GitHub release; the release workflow has never run for it, and the installer
-`cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe` and the zip have not been built by it. The
-manual test has not been executed yet: neither the manual smoke test
-([docs/smoke-test.pt-BR.md](docs/smoke-test.pt-BR.md)) nor the manual test script for the committee
+**Status of this entry: published.** Version 1.2.0 was published on GitHub on 2026-11-25 as the
+tag `v1.2.0` (commit `447dc6a`), marked Latest:
+<https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.2.0>. The release
+carries the installer `cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe` (SHA-256
+`d254503886e4c45fc9f27dc39b9eaac8ded0d757414ee5df8eed8f4a40c39404`), the portable zip
+`cbrn-readiness-dashboard-1.2.0-win-x64.zip` (SHA-256
+`4ec628dc260e8cea9e8d6ed8c63f1456ea3d3e335938a9fc5a4b27be9fceb588`), the source archives
+`qt-everywhere-src-6.12.0.tar.xz` (SHA-256
+`98ff4f44bac6ec3e1e62ee2a4316ae0e3d15badb015d753cc0268a20db52f165`) and
+`pyside-setup-everywhere-src-6.12.0.tar.xz` (SHA-256
+`099c1a597cf33c1b000e11cf68a0b82d216fb802bf81726efc720394f10c7751`), their pinned SHA-256
+verified, `SHA256SUMS.txt` and `SHA256-FILES.txt`. The CI run 45531957127 on the tagged commit and
+the release workflow run 45535505982 succeeded, and the optional signing job was skipped because
+SignPath is not configured. Checks made on the downloaded assets: every hash matches
+`SHA256SUMS.txt`; `gh attestation verify` passed for the installer and for the zip; and the
+downloaded installer passed the smoke test (`scripts/smoke_installer.ps1`: silent install,
+self-test of the installed program, silent uninstall, data folder kept). The released installer was
+also installed for the current user on the owner's computer, replacing 1.1.0: the frozen self-test
+of the installed program passed, and screenshots taken in demo mode show the DEMO banner and no
+version or validation banner, no placeholder badge and no Confirm button. That is not the manual
+test on a clean Windows profile, which is **still pending**: the manual smoke test
+([docs/smoke-test.pt-BR.md](docs/smoke-test.pt-BR.md)) and the manual test script for the committee
 ([docs/manual-test-script.pt-BR.md](docs/manual-test-script.pt-BR.md), with the guide
-[docs/guia-teste-manual.pt-BR.md](docs/guia-teste-manual.pt-BR.md)) has a result. The last published version is 1.1.0 (2026-11-21; see its entry below). The entry is dated
-only by the person who publishes it.
+[docs/guia-teste-manual.pt-BR.md](docs/guia-teste-manual.pt-BR.md)) have not been executed yet, and
+the result will be recorded in this entry. The previous published version is 1.1.0 (2026-11-21; see
+its entry below). The installer and the zip are unsigned.
 
-### Changes in 1.2.0
+### Removed
 
-On 2026-11-24 the owner decided (D39) to remove the preliminary-version notice, the warning
-against entering real data, and the placeholder badges of the settings page together with their
-Confirm action. Phase 12 of the plan carries this out; the release is not published yet.
+On 2026-11-24 the owner decided (D39; a development decision of the project owner, not an
+institutional validation or homologation) to remove the notices and the placeholder confirmation.
+Phase 12 of the plan carried this out. Version 1.2.0 removes:
 
-- The DEMO banner stays: it marks the fictitious demo data and is not part of that change.
-- Decision D39 also clears the code-level flags of the placeholders and withdraws `P07` (see the
-  next section).
-- This entry is rewritten with what shipped when the release is prepared. Nothing is claimed
-  about the result of any review or test until it has happened.
+- **A. The preliminary-version notice.** The notice is gone from the interface banner, the PDF
+  reports, the About dialog, the first-run notes, the release notes and the help. Its wording `P07`
+  is withdrawn.
+- **B. The real-data gate.** The warning against entering real data until Q19, Q4, Q11 and Q13 are
+  answered is gone. Those questions are answered; only their status is recorded here, never the
+  content of an answer. The data-protection notice stays, without the gate sentence.
+- **C. The placeholder badges and the Confirm action** of the settings page and of the module
+  sections, with the confirmation machinery behind them (the confirmation of a placeholder when a
+  value is saved, the per-installation confirmation rows and their reading, and the messages that
+  belonged to them).
+
+The DEMO banner stays: it marks the fictitious demo data and is not part of that change. Nothing
+in this release claims that the indicators or the program are validated, approved or homologated.
+
+### Changed since 1.1.0
+
+- The version is 1.2.0 in the source, the install guides, the manual test documents and the
+  readiness tests. After the publication the readiness tests and the documents name 1.2.0 as the
+  last published version (1.1.0 stays in this changelog as published history).
+- The generic defaults became confirmed code defaults; no default value was changed (see the next
+  section).
+- The manual test documents and the manual-test guide are for 1.2.0, and the guide lists the
+  SHA-256 of the 1.2.0 installer and zip.
 
 ### Placeholders still flagged in `domain/config.py`
 
@@ -134,9 +170,9 @@ were marked unfinished.
 - The release workflow ran for the tag `v1.0.0`, whose draft release was never published and was
   withdrawn, then for the tag `v1.0.1`, whose release was published on 2026-11-13 before the
   manual test on a clean profile, then for the tag `v1.0.2`, published on 2026-11-14, and then
-  for the tag `v1.1.0`, published on 2026-11-21, both also before that test. The optional signing
-  job was skipped on `v1.0.2` and on `v1.1.0` because SignPath is not configured. It has never run
-  for 1.2.0.
+  for the tag `v1.1.0`, published on 2026-11-21, and then for the tag `v1.2.0`, published on
+  2026-11-25, all three also before that test. The optional signing job was skipped on `v1.0.2`,
+  on `v1.1.0` and on `v1.2.0` because SignPath is not configured.
 - The Visual C++ runtime files are redistributed under Microsoft's terms (see
   `licenses\MSVC-RUNTIME.md`); the full Visual Studio licence text was not reviewed by counsel.
 - The warning about writing reports or CSV exports to removable media is never shown, because the
@@ -145,9 +181,11 @@ were marked unfinished.
 - The branch protection of `main` is a setting of the hosting site (configured); it cannot be
   checked from the repository's files.
 - The manual smoke test has not been run, the manual test script for the committee has not been
-  run either, and none of the published zips and installers (1.0.2 and 1.1.0) has been tried by a
-  person on a clean Windows machine without administrator rights. The 1.0.2 and 1.1.0 installers
-  passed only the automated smoke test (silent install, self-test, silent uninstall).
+  run either, and none of the published zips and installers (1.0.2, 1.1.0 and 1.2.0) has been
+  tried by a person on a clean Windows machine without administrator rights. The 1.0.2, 1.1.0 and
+  1.2.0 installers passed the automated smoke test (silent install, self-test, silent uninstall);
+  the 1.2.0 installer was also installed by the owner on their own computer over 1.1.0, which is
+  not a clean profile.
 
 ## [1.1.0] - 2026-11-21
 
