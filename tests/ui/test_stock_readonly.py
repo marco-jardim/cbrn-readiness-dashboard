@@ -121,7 +121,7 @@ def test_settings_stock_types_and_the_p11_field_are_disabled(
     for action in types._actions:
         assert action in registered
         assert not action.isEnabled()
-    for control in (alerts.stock_edit, alerts.stock_badge.confirm, alerts.save_button):
+    for control in (alerts.stock_edit, alerts.save_button):
         assert control in registered
         assert not control.isEnabled()
     assert types.view.isEnabled()  # the list can still be read and selected

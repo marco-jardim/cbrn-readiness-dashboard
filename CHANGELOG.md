@@ -131,9 +131,11 @@ The terminology review (Q14) by the committee is pending. The pt-BR and es-ES ca
 and their messages are still marked `unfinished`; the en-US catalogue is the source language and
 has none marked. The count was made over the `.ts` files in `src/cbrn_dashboard/i18n` (one
 message, one `type="unfinished"` translation); a test compares it with the files. No message was
-added or changed at the opening of this cycle.
+added at the opening of this cycle. Task T12.7 removed three messages of the Settings context from
+each of the pt-BR and es-ES catalogues, all three marked unfinished ("Placeholder - to be
+confirmed", "Confirm" and "This placeholder is not known."): 1237 - 3 = 1234 per language.
 
-- Messages still marked unfinished: 2474 (1237 in the pt-BR catalogues and 1237 in the es-ES
+- Messages still marked unfinished: 2468 (1234 in the pt-BR catalogues and 1234 in the es-ES
   catalogues), pending terminology review (Q14)
 
 ### Known limits

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""A changing save confirms the placeholder of the changed field in every settings section.
+"""A changing save confirms the placeholder of the changed field in the settings sections that still
+show badges (the General, Alerts and Targets sections have none since T12.7).
 
 PLAN.md 3.5: the badge stays "until the operator confirms or changes the value" and T6.1 Accept 4.
 ``ConfigService.save`` does it in the same transaction, so a section needs no second step: the badge
@@ -12,14 +13,11 @@ from PySide6.QtWidgets import QLabel
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard.services.config import ConfigService
-from cbrn_dashboard.services.indicators import IndicatorService
 from cbrn_dashboard.ui.backup.page import BackupSettingsSection
 from cbrn_dashboard.ui.budget.page import BudgetSettingsSection
 from cbrn_dashboard.ui.infrastructure.page import InfrastructureSettingsSection
 from cbrn_dashboard.ui.personnel.page import PersonnelSettingsSection
 from cbrn_dashboard.ui.reports.page import ReportsSettingsSection, SnapshotsSettingsSection
-from cbrn_dashboard.ui.settings.dialogs import TargetDialog
-from cbrn_dashboard.ui.settings.sections import AlertsSection, GeneralSection, TargetsSection
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.stock.settings import StockTypeSettingsDialog, StockTypesSection
 from tests.ui._fakes import FakePrompts
@@ -33,63 +31,8 @@ def _config(context: AppContext) -> ConfigService:
     return service
 
 
-def _indicators(context: AppContext) -> IndicatorService:
-    service = context.services.indicators
-    assert service is not None
-    return service
-
-
 def _shown(label: QLabel) -> bool:
     return not label.isHidden()
-
-
-def test_the_general_section_confirms_the_names_when_they_change(
-    app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
-) -> None:
-    section = GeneralSection(app_context)
-    qtbot.addWidget(section)
-    assert _shown(section.names_badge.badge)
-
-    section.institution_edit.setText("Institute")
-    section.save()
-
-    assert section.names_badge.badge.isHidden()
-    assert _config(app_context).needs_badge("D18") is False
-    assert fake_prompts.calls_of("warning") == []
-
-
-def test_the_alerts_section_confirms_only_the_window_that_changed(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
-    section = AlertsSection(app_context)
-    qtbot.addWidget(section)
-
-    section.cert_edit.setText("120")
-    section.save()
-
-    assert section.cert_badge.badge.isHidden()
-    assert _shown(section.maintenance_badge.badge)
-    assert _shown(section.stock_badge.badge)
-    assert _config(app_context).needs_badge("P01") is False
-    assert _config(app_context).needs_badge("P02") is True
-    assert _config(app_context).needs_badge("P11") is True
-
-
-def test_the_alerts_section_confirms_p11_when_the_stock_window_changes(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
-    section = AlertsSection(app_context)
-    qtbot.addWidget(section)
-    assert _shown(section.stock_badge.badge)
-
-    section.stock_edit.setText("120")
-    section.save()
-
-    assert section.stock_badge.badge.isHidden()
-    assert section.stock_badge.confirm.isHidden()
-    assert _shown(section.cert_badge.badge)  # P01 was not touched
-    assert _config(app_context).needs_badge("P11") is False
-    assert _config(app_context).needs_badge("P01") is True
 
 
 def test_the_stock_types_section_confirms_p12_when_a_minimum_is_set(
@@ -123,41 +66,6 @@ def test_the_stock_types_section_confirms_p12_with_its_button(
     assert section.badge_label.isHidden()
     assert section.confirm_button.isHidden()
     assert _config(app_context).needs_badge("P12") is False
-
-
-def test_the_targets_section_confirms_p03_when_a_target_is_switched(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
-    _indicators(app_context).set_target(
-        "PERS_CERT_VALID", "level=A", warning_value=10, critical_value=5
-    )
-    section = TargetsSection(app_context)
-    qtbot.addWidget(section)
-    assert _shown(section.badge.badge)  # storing a target through the service confirms nothing
-    section.view.selectRow(0)
-
-    section.toggle_action.trigger()
-
-    assert section.badge.badge.isHidden()
-    assert _config(app_context).needs_badge("P03") is False
-
-
-def test_the_target_dialog_confirms_p03_in_the_same_call(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
-    section = TargetsSection(app_context)
-    qtbot.addWidget(section)
-    dialog = TargetDialog(app_context)
-    qtbot.addWidget(dialog)
-    dialog.indicator_combo.setCurrentIndex(dialog.indicator_combo.findData("PERS_CERT_VALID"))
-    dialog.dimension_combo.setEditText("level=A")
-    dialog.warning_edit.setText("10")
-    dialog.critical_edit.setText("5")
-
-    dialog.accept()
-
-    assert section.badge.badge.isHidden()
-    assert _config(app_context).needs_badge("P03") is False
 
 
 def test_the_backup_section_confirms_the_changed_value_only(

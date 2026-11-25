@@ -68,9 +68,6 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     CORRUPT_SETTING: lambda: QCoreApplication.translate(
         "Settings", "A stored setting cannot be read."
     ),
-    UNKNOWN_PLACEHOLDER: lambda: QCoreApplication.translate(
-        "Settings", "This placeholder is not known."
-    ),
     # indicator service
     UNKNOWN_INDICATOR: lambda: QCoreApplication.translate(
         "Settings", "The indicator is not known."
@@ -105,8 +102,14 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     TOO_LARGE: lambda: QCoreApplication.translate("Settings", "The number is too large."),
 }
 
-# Every error code the Settings UI can present (for the completeness test).
-ALL_ERROR_CODES: tuple[str, ...] = tuple(dict.fromkeys((*_ERROR_LABELS, *CONFIG_ERROR_CODES)))
+# Every error code the Settings UI can present (for the completeness test). The Settings UI no
+# longer confirms placeholders, so it cannot receive UNKNOWN_PLACEHOLDER (the service still lists it
+# until its placeholder machinery is removed, PLAN.md T12.12).
+ALL_ERROR_CODES: tuple[str, ...] = tuple(
+    dict.fromkeys(
+        (*_ERROR_LABELS, *(code for code in CONFIG_ERROR_CODES if code != UNKNOWN_PLACEHOLDER))
+    )
+)
 
 _INDICATOR_LABELS: dict[str, Callable[[], str]] = {
     # The same wording as the dashboard (ui/dashboard/labels.py), which follows PLAN.md 5.4.

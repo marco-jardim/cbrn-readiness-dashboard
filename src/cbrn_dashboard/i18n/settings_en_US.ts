@@ -48,10 +48,6 @@
         <translation>A stored setting cannot be read.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation>This placeholder is not known.</translation>
-    </message>
-    <message>
         <source>The indicator is not known.</source>
         <translation>The indicator is not known.</translation>
     </message>
@@ -306,14 +302,6 @@
     <message>
         <source>This indicator has no dimension.</source>
         <translation>This indicator has no dimension.</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation>Placeholder - to be confirmed</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation>Confirm</translation>
     </message>
     <message>
         <source>Language</source>

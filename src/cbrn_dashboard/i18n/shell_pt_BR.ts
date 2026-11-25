@@ -297,7 +297,7 @@
     </message>
     <message>
         <source>Classification: &quot;sensitive&quot; is only a working label for data that stays on this computer; it is not a formal classification.</source>
-        <translation type="unfinished">Classificação: "sensível" é apenas um rótulo de trabalho para dados que ficam neste computador; não é uma classificação formal.</translation>
+        <translation type="unfinished">Classificação: &quot;sensível&quot; é apenas um rótulo de trabalho para dados que ficam neste computador; não é uma classificação formal.</translation>
     </message>
     <message>
         <source>Shared computer: several people can take turns on one computer only with one shared Windows account, or with --data-dir pointing to a local folder restricted to the committee. With separate Windows accounts each person gets a separate database.</source>

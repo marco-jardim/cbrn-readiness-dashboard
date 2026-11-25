@@ -39,16 +39,12 @@ from cbrn_dashboard.ui.shell.widgets import (
 )
 
 __all__ = [
-    "PLACEHOLDER_TARGETS",
     "TargetDialog",
     "input_text",
     "parse_whole",
     "reformat_number",
     "show_error",
 ]
-
-# The placeholder of the indicator targets (PLAN.md 3.5, P03).
-PLACEHOLDER_TARGETS = "P03"
 
 
 def show_error(
@@ -283,14 +279,12 @@ class TargetDialog(FormDialog):
         enabled = self.enabled_check.isChecked()
 
         def save() -> None:
-            # One service call, one transaction: a changed target also confirms its placeholder.
             service.set_target(
                 code,
                 dimension,
                 warning_value=warning,
                 critical_value=critical,
                 enabled=enabled,
-                confirm_placeholder=PLACEHOLDER_TARGETS,
             )
 
         return apply_change(self.context, self, error_label, save)

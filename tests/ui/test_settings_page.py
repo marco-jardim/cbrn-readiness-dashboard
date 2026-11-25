@@ -10,7 +10,7 @@ from types import ModuleType
 import pytest
 from PySide6.QtCore import QCoreApplication, Qt
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtWidgets import QLabel, QPushButton, QWidget
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard.domain.config import ReadinessConfig
@@ -252,7 +252,6 @@ def test_the_general_section_stores_the_names_and_the_operator_label(
 ) -> None:
     section = GeneralSection(app_context)
     qtbot.addWidget(section)
-    assert not section.names_badge.badge.isHidden()
     section.operator_edit.setText("Op One")
     section.institution_edit.setText("Institute")
     section.unit_edit.setText("Unit 7")
@@ -264,24 +263,17 @@ def test_the_general_section_stores_the_names_and_the_operator_label(
         "Unit 7",
     )
     assert app_context.operator_label() == "Op One"
-    # Changing the names confirms D18: the badge is gone and the database says so.
-    assert section.names_badge.badge.isHidden()
-    assert _config(app_context).needs_badge("D18") is False
 
 
-def test_changing_only_the_operator_label_keeps_the_names_badge(
+def test_changing_only_the_operator_label_keeps_the_names(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
     section = GeneralSection(app_context)
     qtbot.addWidget(section)
     section.operator_edit.setText("Only me")
     section.save()
-    assert _config(app_context).load().operator_label == "Only me"
-    assert not section.names_badge.badge.isHidden()
-    assert _config(app_context).needs_badge("D18") is True
-    section.names_badge.confirm.click()
-    assert section.names_badge.badge.isHidden()
-    assert _config(app_context).needs_badge("D18") is False
+    stored = _config(app_context).load()
+    assert (stored.operator_label, stored.institution_name, stored.unit_name) == ("Only me", "", "")
 
 
 def test_the_stored_operator_label_is_given_to_the_context(
@@ -342,9 +334,7 @@ def test_the_language_selector_switches_the_language(app_context: AppContext, qt
 # --------------------------------------------------------------------------- alerts
 
 
-def test_the_alert_windows_are_stored_and_the_badges_follow_the_change(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
+def test_the_alert_windows_are_stored(app_context: AppContext, qtbot: QtBot) -> None:
     section = AlertsSection(app_context)
     qtbot.addWidget(section)
     assert (
@@ -352,9 +342,6 @@ def test_the_alert_windows_are_stored_and_the_badges_follow_the_change(
         section.maintenance_edit.text(),
         section.stock_edit.text(),
     ) == ("90", "30", "90")
-    assert not section.cert_badge.badge.isHidden()
-    assert not section.maintenance_badge.badge.isHidden()
-    assert not section.stock_badge.badge.isHidden()
     section.cert_edit.setText("120")
     section.maintenance_edit.setText("45")
     section.stock_edit.setText("60")
@@ -365,12 +352,6 @@ def test_the_alert_windows_are_stored_and_the_badges_follow_the_change(
         stored.maintenance_warning_days,
         stored.stock_expiry_warning_days,
     ) == (120, 45, 60)
-    assert section.cert_badge.badge.isHidden()
-    assert section.maintenance_badge.badge.isHidden()
-    assert section.stock_badge.badge.isHidden()
-    assert _config(app_context).needs_badge("P01") is False
-    assert _config(app_context).needs_badge("P02") is False
-    assert _config(app_context).needs_badge("P11") is False
 
 
 def test_the_stock_window_is_saved_and_read_by_the_stock_rules(
@@ -388,24 +369,7 @@ def test_the_stock_window_is_saved_and_read_by_the_stock_rules(
     assert _config(app_context).load().stock_expiry_warning_days == 45
     assert stock.stock_rules().expiry_warning_days == 45  # the next evaluation uses it
     assert section.stock_edit.text() == "45"
-    assert section.stock_badge.badge.isHidden()
-    assert not section.cert_badge.badge.isHidden()  # the other windows were not touched
-
-
-def test_confirming_the_stock_window_keeps_the_value_and_the_other_badges(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
-    section = AlertsSection(app_context)
-    qtbot.addWidget(section)
-
-    section.stock_badge.confirm.click()
-
-    assert section.stock_badge.badge.isHidden()
-    assert section.stock_badge.confirm.isHidden()
-    assert not section.cert_badge.badge.isHidden()
-    assert _config(app_context).needs_badge("P11") is False
-    assert _config(app_context).needs_badge("P01") is True
-    assert _config(app_context).load().stock_expiry_warning_days == 90
+    assert _config(app_context).load().cert_warning_days == 90  # the other windows were not touched
 
 
 @pytest.mark.parametrize(
@@ -434,22 +398,7 @@ def test_an_invalid_stock_window_is_refused_and_nothing_is_written(
     assert _warnings(fake_prompts) == [error_label(code)]
     assert section.stock_edit.text() == typed
     assert _config(app_context).load().stock_expiry_warning_days == 90
-    assert _config(app_context).needs_badge("P11") is True
     assert _log_rows(app_context) == rows
-
-
-def test_confirming_one_window_hides_only_its_badge_and_keeps_the_value(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
-    section = AlertsSection(app_context)
-    qtbot.addWidget(section)
-    section.cert_badge.confirm.click()
-    assert section.cert_badge.badge.isHidden()
-    assert section.cert_badge.confirm.isHidden()
-    assert not section.maintenance_badge.badge.isHidden()
-    assert _config(app_context).needs_badge("P01") is False
-    assert _config(app_context).needs_badge("P02") is True
-    assert _config(app_context).load().cert_warning_days == 90
 
 
 def test_the_windows_are_typed_and_shown_in_the_active_language(
@@ -503,13 +452,12 @@ def test_an_invalid_window_is_refused_and_nothing_is_written(
 # --------------------------------------------------------------------------- targets
 
 
-def test_the_dialog_stores_a_target_and_the_table_and_badge_follow(
+def test_the_dialog_stores_a_target_and_the_table_follows(
     app_context: AppContext, qtbot: QtBot
 ) -> None:
     section = TargetsSection(app_context)
     qtbot.addWidget(section)
     assert section.model.rowCount() == 0
-    assert not section.badge.badge.isHidden()
     assert section.add_action.isEnabled()
     assert not section.edit_action.isEnabled()
     rows = _log_rows(app_context)
@@ -530,8 +478,6 @@ def test_the_dialog_stores_a_target_and_the_table_and_badge_follow(
         "5",
         "Enabled",
     ]
-    assert section.badge.badge.isHidden()
-    assert _config(app_context).needs_badge("P03") is False
 
     section.view.selectRow(0)
     assert section.edit_action.isEnabled()
@@ -616,7 +562,6 @@ def test_a_refused_target_is_shown_translated_and_nothing_is_written(
     assert dialog.warning_edit.text() == warning
     assert _indicators(app_context).list_targets() == []
     assert _log_rows(app_context) == rows
-    assert _config(app_context).needs_badge("P03") is True
 
 
 def test_a_target_error_is_translated_in_the_active_language(
@@ -712,17 +657,6 @@ def test_a_target_can_be_switched_off_and_on_and_deleted(
     assert not section.delete_action.isEnabled()
 
 
-def test_the_targets_badge_is_confirmed_without_changing_a_target(
-    app_context: AppContext, qtbot: QtBot
-) -> None:
-    section = TargetsSection(app_context)
-    qtbot.addWidget(section)
-    section.badge.confirm.click()
-    assert section.badge.badge.isHidden()
-    assert _config(app_context).needs_badge("P03") is False
-    assert _indicators(app_context).list_targets() == []
-
-
 # --------------------------------------------------------------------------- read-only, no service
 
 
@@ -740,19 +674,14 @@ def test_read_only_mode_disables_every_edit(app_context: AppContext, qtbot: QtBo
         general.institution_edit,
         general.unit_edit,
         general.save_button,
-        general.names_badge.confirm,
         alerts.cert_edit,
         alerts.maintenance_edit,
         alerts.save_button,
-        alerts.cert_badge.confirm,
-        alerts.maintenance_badge.confirm,
         alerts.stock_edit,
-        alerts.stock_badge.confirm,
-        targets.badge.confirm,
         *targets._actions,
     ]
     registered = app_context.edit_targets()
-    assert len(controls) == 17
+    assert len(controls) == 12
     for control in controls:
         assert control in registered
         assert not control.isEnabled()
@@ -778,10 +707,6 @@ def test_the_sections_build_without_services(app_context: AppContext, qtbot: QtB
     ):
         assert not widget.isEnabled()
     assert general.language_combo.isEnabled()
-    assert general.names_badge.badge.isHidden()
-    assert alerts.cert_badge.badge.isHidden()
-    assert alerts.stock_badge.badge.isHidden()
-    assert targets.badge.badge.isHidden()
     assert targets.model.rowCount() == 0
     dialog = demo_target_dialog(app_context, None)
     qtbot.addWidget(dialog)
@@ -801,13 +726,12 @@ def test_the_demo_dialog_builds_without_writing(app_context: AppContext, qtbot: 
     assert _log_rows(app_context) == rows
 
 
-def test_a_fake_configuration_service_drives_the_badges(
+def test_a_fake_configuration_service_needs_only_load_and_save(
     app_context: AppContext, fake_prompts: FakePrompts, qtbot: QtBot
 ) -> None:
     class Fake:
         def __init__(self) -> None:
             self.config = ReadinessConfig()
-            self.confirmed: list[str] = []
 
         def load(self) -> ReadinessConfig:
             return self.config
@@ -816,23 +740,43 @@ def test_a_fake_configuration_service_drives_the_badges(
             self.config = config
             return ()
 
-        def badge_for_field(self, field: str) -> str | None:
-            return "P01" if field == "cert_warning_days" else None
-
-        def needs_badge(self, placeholder_id: str) -> bool:
-            return False
-
-        def confirm(self, placeholder_id: str) -> None:
-            self.confirmed.append(placeholder_id)
-
     fake = Fake()
     vars(app_context.services)["config"] = fake
     section = AlertsSection(app_context)
     qtbot.addWidget(section)
-    assert not section.cert_badge.badge.isHidden()
-    assert section.maintenance_badge.badge.isHidden()
-    section.cert_badge.confirm.click()
-    assert fake.confirmed == ["P01"]
+    section.cert_edit.setText("100")
+    section.save()
+    assert fake.config.cert_warning_days == 100
+    assert fake_prompts.calls == []
+
+
+# --------------------------------------------------------------------------- no placeholder badges
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_no_section_shows_a_placeholder_badge_or_confirm_button(
+    app_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    """D39: no Settings section has a "to be confirmed" badge or a Confirm button."""
+    app_context.translator_manager.set_language(lang)
+    sections = (
+        GeneralSection(app_context),
+        AlertsSection(app_context),
+        TargetsSection(app_context),
+    )
+    for section in sections:
+        qtbot.addWidget(section)
+    for root in sections:
+        names = [w.objectName() for w in root.findChildren(QWidget)]
+        assert not [n for n in names if n.endswith(("_badge", "_confirm"))], names
+        labels = [w.text() for w in root.findChildren(QLabel)]
+        buttons = [w.text() for w in root.findChildren(QPushButton)]
+        for text in (*labels, *buttons):
+            assert "Placeholder" not in text, text
+            assert "Valor provisório" not in text, text
+            assert "Valor provisional" not in text, text
+        assert "Confirm" not in buttons
+        assert "Confirmar" not in buttons
 
 
 # --------------------------------------------------------------------------- pseudo-locale walk
@@ -866,12 +810,9 @@ def test_the_walk_carries_the_marker_of_each_language(
     assert_fully_translated(widget, lang)
 
 
-def test_the_walk_with_data_and_hidden_badges(pseudo_context: AppContext, qtbot: QtBot) -> None:
+def test_the_walk_with_data(pseudo_context: AppContext, qtbot: QtBot) -> None:
     _put_target(pseudo_context, "PERS_CERT_VALID", "level=A", 10, 5)
     _put_target(pseudo_context, "BUD_EXEC_RATE", "currency=BRL;source=DIRSA", 0.9, 0.7)
-    config = _config(pseudo_context)
-    for placeholder in ("P01", "P02", "P03", "P11", "P12", "D18"):
-        config.confirm(placeholder)
     with registry.registered(
         registry.SettingsSectionSpec(
             "test.walk",
@@ -885,7 +826,6 @@ def test_the_walk_with_data_and_hidden_badges(pseudo_context: AppContext, qtbot:
     targets = page.section_widget("settings.targets")
     assert isinstance(targets, TargetsSection)
     targets.view.selectRow(0)
-    assert targets.badge.badge.isHidden()
     assert_fully_translated(page)
     edit = TargetDialog(pseudo_context, None, _indicators(pseudo_context).list_targets()[0])
     qtbot.addWidget(edit)
@@ -999,8 +939,10 @@ def test_all_error_codes_list_the_codes_of_the_services() -> None:
     assert {"READ_ONLY", "NOT_FOUND", "REQUIRED"} <= mapped
     stored = _defined_constants(config_module)
     assert {"CORRUPT_SETTING", "UNKNOWN_PLACEHOLDER"} == stored
-    assert stored <= mapped
-    assert set(CONFIG_ERROR_CODES) <= mapped
+    # The Settings UI no longer confirms placeholders, so it cannot receive UNKNOWN_PLACEHOLDER.
+    assert "UNKNOWN_PLACEHOLDER" not in mapped
+    assert stored - {"UNKNOWN_PLACEHOLDER"} <= mapped
+    assert set(CONFIG_ERROR_CODES) - {"UNKNOWN_PLACEHOLDER"} <= mapped
     typed = _defined_constants(formatting_module)
     assert {"EMPTY", "INVALID_NUMBER", "AMBIGUOUS_NUMBER", "TOO_LARGE"} <= typed
     assert {"EMPTY", "INVALID_NUMBER", "AMBIGUOUS_NUMBER", "TOO_LARGE"} <= mapped

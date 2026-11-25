@@ -48,10 +48,6 @@
         <translation type="unfinished">No se puede leer un ajuste almacenado.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation type="unfinished">Este valor provisional no se conoce.</translation>
-    </message>
-    <message>
         <source>The indicator is not known.</source>
         <translation type="unfinished">El indicador no se conoce.</translation>
     </message>
@@ -306,14 +302,6 @@
     <message>
         <source>This indicator has no dimension.</source>
         <translation type="unfinished">Este indicador no tiene dimensión.</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Provisional - por confirmar</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation type="unfinished">Confirmar</translation>
     </message>
     <message>
         <source>Language</source>

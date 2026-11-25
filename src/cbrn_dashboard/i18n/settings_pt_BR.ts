@@ -48,10 +48,6 @@
         <translation type="unfinished">Não foi possível ler uma configuração armazenada.</translation>
     </message>
     <message>
-        <source>This placeholder is not known.</source>
-        <translation type="unfinished">Este valor provisório não é conhecido.</translation>
-    </message>
-    <message>
         <source>The indicator is not known.</source>
         <translation type="unfinished">O indicador não é conhecido.</translation>
     </message>
@@ -306,14 +302,6 @@
     <message>
         <source>This indicator has no dimension.</source>
         <translation type="unfinished">Este indicador não tem dimensão.</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Provisório - a confirmar</translation>
-    </message>
-    <message>
-        <source>Confirm</source>
-        <translation type="unfinished">Confirmar</translation>
     </message>
     <message>
         <source>Language</source>
