@@ -9,6 +9,162 @@ This file records only the **status** of each open question (open / answered and
 answered and implemented in task Tn), never the content of an answer. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and section 12 of [PLAN.md](PLAN.md).
 
+## [1.2.0] - unreleased
+
+**Status of this entry: not published.** Version 1.2.0 is in preparation. There is no tag `v1.2.0`
+and no GitHub release; the release workflow has never run for it, and the installer
+`cbrn-readiness-dashboard-1.2.0-win-x64-setup.exe` and the zip have not been built by it. The
+manual test has not been executed yet: neither the manual smoke test
+([docs/smoke-test.pt-BR.md](docs/smoke-test.pt-BR.md)) nor the manual test script for the committee
+([docs/manual-test-script.pt-BR.md](docs/manual-test-script.pt-BR.md), with the guide
+[docs/guia-teste-manual.pt-BR.md](docs/guia-teste-manual.pt-BR.md)) has a result. The last published version is 1.1.0 (2026-11-21; see its entry below). The entry is dated
+only by the person who publishes it.
+
+### Planned for 1.2.0
+
+This section is a plan, not a record of finished work. Nothing listed here has been changed in the
+code yet; each item states what the owner decided and what the release is meant to do.
+
+- On 2026-11-24 the owner decided to remove the notices that mark the application as preliminary.
+  The release is meant to remove the "Preliminary version" notice, the warning against entering
+  real data until Q19, Q4, Q11 and Q13 are answered, and the "Placeholder - to be confirmed" badges
+  of the settings page together with their Confirm action.
+- The DEMO banner stays: it marks the fictitious demo data and is not part of that change.
+- The code-level flags of the placeholders (see the next section) are not part of this plan; the
+  list below is the state of the code at the opening of the cycle.
+- This entry will be rewritten with what actually shipped, replacing this section, when the
+  release is prepared. Nothing is claimed about the result of any review or test until it has
+  happened.
+
+### Placeholders still flagged in `domain/config.py`
+
+These are the code-level flags of section 3.5 of the plan, as returned by
+`flagged_placeholder_ids()`; a test compares this list with the code. No flag was cleared and no
+default was changed at the opening of this cycle.
+
+Generic defaults (the flag may be cleared in code only when the project owner judges the value not
+sensitive):
+
+- `P01` - warning window before a PPE qualification expires
+- `P02` - warning window before maintenance is due
+- `P04` - automatic snapshots
+- `P05` - minimum backup passphrase length
+- `P06` - number of automatic daily local backups kept
+- `P07` - wording of the preliminary-version notice
+- `P08` - pro-rating of the budget execution target
+- `P09` - backup reminder period
+- `P11` - warning window before a stock lot expires
+- `A02` - PPE levels counted independently
+- `A04` - PPE qualification validity period per level
+- `A05` - degraded assets count as unavailable
+- `A06` - maintenance intervals
+- `A07` - evaluation metrics
+- `A08` - default currency
+- `A09` - course list
+- `A10` - degree status
+- `A11` - small-count threshold of the anonymised report
+
+Local-only values (never given a code default, flag never cleared in code, confirmed per
+installation in Settings only):
+
+- `P03` - indicator targets (local-only)
+- `P10` - handling notice of the internal report (local-only)
+- `D18` - institution and unit names (local-only)
+- `P12` - minimum stock per item type (local-only)
+
+### Assumptions without a setting
+
+The assumptions A01, A03, A12, A13, A14, A15 and A16 carry no flag and are listed only through the
+open question each depends on:
+
+- A01 depends on Q5
+- A03 depends on Q2
+- A12 depends on Q12
+- A13 depends on Q7
+- A14 depends on Q4 and Q5
+- A15 depends on Q26
+- A16 depends on Q25
+
+### Open questions
+
+Status of each question of section 12 of the plan at the time of this entry. This repository
+records no answer to any of them.
+
+- Q1: open
+- Q2: open
+- Q3: open
+- Q4: open
+- Q5: open
+- Q6: open
+- Q7: open
+- Q8: open
+- Q9: open
+- Q10: open
+- Q11: open
+- Q12: open
+- Q13: open
+- Q14: open
+- Q15: open
+- Q16: open
+- Q17: open
+- Q18: answered and applied locally
+- Q19: open
+- Q20: answered and applied locally
+- Q21: answered and implemented in task T9.2
+- Q22: answered and implemented in task T9.2
+- Q23: open
+- Q24: answered and applied locally
+- Q25: open
+- Q26: open
+- Q27: open
+- Q28: open
+- Q29: open
+
+Q19 (formal classification), Q4, Q11 and Q13 gate the entry of real data. Until they are answered,
+use only demo data. "Sensitive" is a working label of this project, not a classification. Q25 to
+Q29 (stock by lot) were added to the plan on 2026-11-20 with the stock module; none of them gates
+the entry of real data.
+
+### Translations (Q14)
+
+The terminology review (Q14) by the committee is pending. The pt-BR and es-ES catalogues are drafts
+and their messages are still marked `unfinished`; the en-US catalogue is the source language and
+has none marked. The count was made over the `.ts` files in `src/cbrn_dashboard/i18n` (one
+message, one `type="unfinished"` translation); a test compares it with the files. No message was
+added or changed at the opening of this cycle.
+
+- Messages still marked unfinished: 2476 (1238 in the pt-BR catalogues and 1238 in the es-ES
+  catalogues), pending terminology review (Q14)
+
+### Known limits
+
+- The executable and the files beside it are unsigned, and so is the installer: the signing
+  integration is off until the project is accepted and configured. Windows SmartScreen, Smart App
+  Control, AppLocker or WDAC may warn about or block them (see the install guides).
+- A per-user install under `%LOCALAPPDATA%\Programs` may be blocked by the default AppLocker
+  rules; IT can choose the all-users install in the setup dialog, or allow the installed program
+  with hash rules.
+- Inno Setup's licence ("Inno Setup License", permissive; `license.txt` in its install folder)
+  applies to the setup stub of the installer. It is not part of the bundle, so it is not in the
+  bundle's `licenses\` folder.
+- The release workflow ran for the tag `v1.0.0`, whose draft release was never published and was
+  withdrawn, then for the tag `v1.0.1`, whose release was published on 2026-11-13 before the
+  manual test on a clean profile, then for the tag `v1.0.2`, published on 2026-11-14, and then
+  for the tag `v1.1.0`, published on 2026-11-21, both also before that test. The optional signing
+  job was skipped on `v1.0.2` and on `v1.1.0` because SignPath is not configured. It has never run
+  for 1.2.0.
+- The Visual C++ runtime files are redistributed under Microsoft's terms (see
+  `licenses\MSVC-RUNTIME.md`); the full Visual Studio licence text was not reviewed by counsel.
+- The warning about writing reports or CSV exports to removable media is never shown, because the
+  application does not detect removable drives.
+- A read-only database on a network (UNC) path was never tried on a real network share.
+- The branch protection of `main` is a setting of the hosting site (configured); it cannot be
+  checked from the repository's files.
+- The manual smoke test has not been run, the manual test script for the committee has not been
+  run either, and none of the published zips and installers (1.0.2 and 1.1.0) has been tried by a
+  person on a clean Windows machine without administrator rights. The 1.0.2 and 1.1.0 installers
+  passed only the automated smoke test (silent install, self-test, silent uninstall).
+
 ## [1.1.0] - 2026-11-21
 
 **Status of this entry: published.** Version 1.1.0 was published on GitHub on 2026-11-21 as the

@@ -10,7 +10,8 @@ reales: vea [data-protection.md](data-protection.md) (en inglés).
 
 ## 1. Estado de esta guía
 
-La versión del árbol de código es `1.1.0`, que también es la última versión **publicada**: se
+La versión del árbol de código es `1.2.0`, que está **en preparación**: todavía no tiene etiqueta,
+ejecución del flujo de publicación ni prueba manual. La última versión **publicada** es la 1.1.0: se
 publicó en GitHub el 2026-11-21, con la etiqueta
 `v1.1.0`: [página de la versión](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.1.0).
 La versión anterior a esa, la 1.0.2, se publicó el 2026-11-14

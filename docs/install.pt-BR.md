@@ -10,7 +10,8 @@ veja [data-protection.md](data-protection.md) (em inglês).
 
 ## 1. Situação deste guia
 
-A versão na árvore de código é `1.1.0`, que também é a última versão **publicada**: foi publicada
+A versão na árvore de código é `1.2.0`, que está **em preparação**: ainda não tem tag, execução do
+fluxo de publicação nem teste manual. A última versão **publicada** é a 1.1.0: foi publicada
 no GitHub em 2026-11-21, com a tag
 `v1.1.0`: [página da versão](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.1.0).
 A versão anterior a ela, a 1.0.2, foi publicada em 2026-11-14

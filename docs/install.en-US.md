@@ -10,8 +10,9 @@ zip's first-run notes (`README-first-run.*.txt`) is shorter and says the same.
 
 ## 1. Status of this guide
 
-The version in the source tree is `1.1.0`, which is also the latest **published** release: it was
-published on GitHub on 2026-11-21, as the tag `v1.1.0`:
+The version in the source tree is `1.2.0`, which is **in preparation**: it has no tag, no release
+workflow run and no manual test yet. The latest **published** release is 1.1.0: it was published on
+GitHub on 2026-11-21, as the tag `v1.1.0`:
 [release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.1.0).
 The release before it, 1.0.2, was published on 2026-11-14
 ([release page](https://github.com/marco-jardim/cbrn-readiness-dashboard/releases/tag/v1.0.2)),

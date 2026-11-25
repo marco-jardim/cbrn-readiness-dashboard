@@ -1,4 +1,4 @@
-# Roteiro de teste manual (smoke test) - versão 1.1.0
+# Roteiro de teste manual (smoke test) - versão 1.2.0
 
 **Status da execução: NÃO EXECUTADO.** Este roteiro foi escrito a partir do que o código e os guias
 descrevem. Nenhuma pessoa o executou ainda, nem em um computador Windows limpo, nem em outro. Nenhum
@@ -7,8 +7,10 @@ código e a documentação, e é isso que o teste deve confirmar ou desmentir.
 
 **Versão preliminar - indicadores não validados institucionalmente.**
 
-A versão 1.1.0 foi publicada em 21/11/2026, por decisão do responsável, antes da execução deste
-roteiro. Execute-o sobre os arquivos da página pública da versão. O fluxo de publicação
+A versão 1.2.0 está em preparação: ainda não tem tag nem execução do fluxo de publicação. A última
+versão publicada é a 1.1.0, publicada em 21/11/2026, por decisão do responsável, antes da execução
+deste roteiro. Execute-o sobre os arquivos da página pública da versão (ou, para a 1.2.0, sobre o
+rascunho dela, quando existir; troque 1.2.0 por 1.1.0 nos nomes de arquivo ao testar a 1.1.0). O fluxo de publicação
 (`.github/workflows/release.yml`) cria um *rascunho* de lançamento; nas próximas versões, **uma
 pessoa executa este roteiro sobre o rascunho, antes de publicá-lo**. Se algum passo falhar, avise o
 responsável pelo projeto.
@@ -38,7 +40,7 @@ dúvida, o texto em inglês do código-fonte é a referência (por exemplo, "Bac
 ## 1. Verificar o download
 
 1. Abra o PowerShell na pasta do zip e execute
-   `Get-FileHash .\cbrn-readiness-dashboard-1.1.0-win-x64.zip -Algorithm SHA256`.
+   `Get-FileHash .\cbrn-readiness-dashboard-1.2.0-win-x64.zip -Algorithm SHA256`.
    - Resultado esperado: o valor de `Hash` é igual ao da linha do zip em `SHA256SUMS.txt`, e igual ao
      valor mostrado no corpo do rascunho do lançamento.
 2. Opcional (precisa de rede e do GitHub CLI): `gh attestation verify` com o zip, como em
