@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The banner area above the pages (PLAN.md T1.9, D02, D23, D25, I06, P07).
+"""The banner area above the pages (PLAN.md T1.9, D02, D23, D25).
 
 Each banner has a code and is drawn as an ICON plus TEXT, never colour alone (D23). ``DEMO`` is
 permanent once shown: ``hide_banner`` leaves it alone. Texts go through

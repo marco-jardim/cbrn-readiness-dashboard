@@ -1,7 +1,5 @@
 # Guia prático para executar o teste manual - versão 1.1.0
 
-**Versão preliminar - indicadores não validados institucionalmente.**
-
 Este guia é para a pessoa que vai executar os roteiros de teste da versão 1.1.0 em um **perfil limpo
 do Windows, sem direitos de administrador**. Ele diz como preparar o computador, como obter e conferir
 o instalador e o zip, o que executar e como registrar o resultado. Os testes em si estão nestes dois
@@ -15,9 +13,8 @@ Os dois partem de um perfil em que o programa nunca foi usado. O guia de instala
 [install.pt-BR.md](install.pt-BR.md), explica o mesmo caminho para quem instala de verdade.
 
 **Não insira dados reais.** Todo o teste usa dados fictícios (códigos como `TESTE-001`) e o modo de
-demonstração (`--demo`). Dados reais só podem ser inseridos depois que a instituição responder às
-perguntas Q19, Q4, Q11 e Q13 (veja [questionario-comite.pt-BR.md](questionario-comite.pt-BR.md) e
-[data-protection.md](data-protection.md), em inglês).
+demonstração (`--demo`). Sobre a proteção dos dados, veja
+[data-protection.md](data-protection.md), em inglês.
 
 ## 0. O que você precisa
 
@@ -217,8 +214,7 @@ portátil e das equipes de TI, e vale como segundo teste, se o responsável pedi
 
    (por exemplo, `EXECUTADO em 2026-12-01, resultado: aprovado`; a data pode ser escrita também como
    `DD/MM/AAAA`).
-3. Só então o responsável pelo projeto **publica o rascunho** da versão. O registro não substitui a
-   decisão do comitê sobre dados reais.
+3. Só então o responsável pelo projeto **publica o rascunho** da versão.
 
 ## 8. Limpeza
 

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The About dialog (PLAN.md T10.2, section 8 "Licences", P07).
+"""The About dialog (PLAN.md T10.2, section 8 "Licences").
 
 It shows the application name, the version (``cbrn_dashboard.__version__``), the GPL-3.0-or-later
 notice with the absence of any warranty, the source URL as plain, selectable text, and one line per

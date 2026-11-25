@@ -1,22 +1,20 @@
 # Questionário para o comitê de defesa QBRN (CDQBRN/HFAG)
 
-**Versão preliminar - indicadores não validados institucionalmente.**
-
 ## Para que serve este questionário
 
 O CBRN Readiness Dashboard é um aplicativo para Windows, que funciona sem rede, para acompanhar a
 prontidão do hospital diante de incidentes químicos, biológicos, radiológicos e nucleares: pessoal
 habilitado, leitos, baias e equipamentos, exercícios, orçamento, alertas e relatórios. A versão atual
-(1.0.2) é **preliminar**: ela ainda não foi validada pela instituição.
+(1.2.0) é uma ferramenta de apoio e não afirma nenhuma homologação institucional.
 
 Muitas decisões do aplicativo dependem de respostas do comitê. Enquanto uma pergunta não é
 respondida, o aplicativo usa uma **resposta de trabalho** provisória, descrita em cada pergunta no
 campo "Como o aplicativo funciona hoje". Nenhuma pergunta impede o uso do aplicativo com dados de
 demonstração.
 
-**Atenção: nenhum dado real pode ser inserido no aplicativo até que as perguntas Q19, Q4, Q11 e Q13
-(seção 1) sejam respondidas.** Até lá, use só os dados fictícios do modo de demonstração
-(`--demo`). Veja também [data-protection.md](data-protection.md) (em inglês).
+As perguntas Q19, Q4, Q11 e Q13 (seção 1) e a Q15 estão respondidas (D39); cada uma traz a linha
+"Situação". O repositório não guarda dados reais: o modo de demonstração (`--demo`) usa só dados
+fictícios. Veja também [data-protection.md](data-protection.md) (em inglês).
 
 ### Onde as respostas ficam
 
@@ -42,9 +40,11 @@ perguntas Q25 a Q29, sobre o estoque, fazem parte deste questionário (seção 4
 
 ---
 
-## 1. Perguntas que bloqueiam dados reais
+## 1. Perguntas sobre dados reais
 
 ### Q19 - Classificação formal
+
+Situação: respondida (D39)
 
 **Pergunta.** Algum destes dados está formalmente classificado ou tem acesso restrito, pela lei de
 acesso à informação (Lei 12.527/2011, arts. 23 a 28) ou por normas militares? Pela leitura do plano
@@ -56,7 +56,7 @@ classificados, este projeto (banco SQLite sem criptografia, backups automáticos
 criptografia comercial, binário não assinado vindo de repositório público) não serve, e dados reais
 não devem ser inseridos.
 
-**Como o aplicativo funciona hoje.** Só dados de demonstração são usados. "Sensível", neste projeto,
+**Como o aplicativo funciona hoje.** Os dados ficam só neste computador. "Sensível", neste projeto,
 é um rótulo de trabalho, não uma classificação.
 
 **Quem responde.** O comitê, com os assessores de segurança da informação e jurídico da instituição.
@@ -70,6 +70,8 @@ _______________________________________________________________________________
 Decisão registrada em: ____ / ____ / ________  por: ______________________________
 
 ### Q4 - Dados do pessoal e categorias
+
+Situação: respondida (D39)
 
 **Pergunta.** Quais dados pessoais o aplicativo pode guardar, segundo a leitura da instituição sobre a
 LGPD? O plano propõe um código interno por pessoa e um rótulo curto opcional, sem CPF ou outros
@@ -97,6 +99,8 @@ Decisão registrada em: ____ / ____ / ________  por: ___________________________
 
 ### Q11 - Segurança da informação
 
+Situação: respondida (D39)
+
 **Pergunta.** Quais normas da instituição se aplicam a estes dados? Em especial: é exigida a
 criptografia do próprio arquivo do banco de dados, além da criptografia de disco completo da estação
 de trabalho? Onde os backups podem ser guardados? Existe uma política de frases secretas? Exige-se
@@ -118,6 +122,8 @@ _______________________________________________________________________________
 Decisão registrada em: ____ / ____ / ________  por: ______________________________
 
 ### Q13 - Implantação
+
+Situação: respondida (D39)
 
 **Pergunta.** Como o aplicativo será instalado nos computadores do hospital? Um executável não
 assinado, entregue em um zip com uma pasta, é aceitável? Um arquivo `.exe` único é obrigatório?
@@ -375,6 +381,8 @@ _______________________________________________________________________________
 Decisão registrada em: ____ / ____ / ________  por: ______________________________
 
 ### Q15 - Aviso de versão preliminar
+
+Situação: respondida (D39)
 
 **Pergunta.** O que deve dizer o aviso "versão preliminar, não validada institucionalmente" e onde ele
 deve aparecer na interface e nos relatórios?

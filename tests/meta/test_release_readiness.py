@@ -481,7 +481,6 @@ def test_the_smoke_test_covers_what_the_plan_asks_for() -> None:
         "fazer backup",
         "restaurar",
         "painel",
-        "versão preliminar",
         "get-filehash",
         "--demo",
         "demo-walkthrough.md",
@@ -611,3 +610,89 @@ def test_no_placeholder_confirmation_remains_in_the_source() -> None:
         for match in _REMOVED_CONFIRMATION_IDENTIFIERS.finditer(line)
     ]
     assert not found, f"placeholder confirmation code is back: {found}"
+
+
+# --- no preliminary notice and no real-data gate anywhere (PLAN.md D39, T12.14) --------------
+
+#: The wordings of the removed notices, matched on lower-case text with the whitespace collapsed.
+#: "Do not enter real data" alone is not listed: the test scripts keep "Não insira dados reais."
+#: (it refers to the test runs); only the gate form (until / yet) is removed.
+_REMOVED_NOTICE_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"preliminary version",
+        r"vers[ãa]o preliminar",
+        r"versi[óo]n preliminar",
+        r"institutionally validated",
+        r"validad[oa]s? institucionalmente",
+        r"placeholder [-\u2013\u2014] to be confirmed",
+        r"valor provis[óo]rio [-\u2013\u2014] a confirmar",
+        r"valor provisional [-\u2013\u2014] por confirmar",
+        r"do not enter real data",
+        r"real data must not be entered",
+        r"n[ãa]o (?:insira|digite) dados reais (?:at[ée]|ainda)",
+        r"no introduzca (?:todav[íi]a )?datos reales",
+    )
+)
+
+#: Files that may still quote the removed notices: the history (CHANGELOG, PLAN), the committee
+#: questionnaire (it quotes the original question texts) and this test suite.
+_NOTICE_EXEMPT = frozenset({"docs/questionario-comite.pt-BR.md", "CHANGELOG.md", "PLAN.md"})
+
+
+def _files_scanned_for_the_removed_notices() -> list[Path]:
+    src = ROOT / "src"
+    packaging = ROOT / "packaging"
+    files = [
+        *src.rglob("*.py"),
+        *src.rglob("*.md"),
+        *src.rglob("*.ts"),
+        *packaging.rglob("*.txt"),
+        TEMPLATE,
+        ROOT / "README.md",
+        *DOCS.glob("*.md"),
+    ]
+    return sorted(
+        path
+        for path in set(files)
+        if path.is_file() and path.relative_to(ROOT).as_posix() not in _NOTICE_EXEMPT
+    )
+
+
+def test_no_file_shows_the_preliminary_notice_or_the_real_data_gate() -> None:
+    files = _files_scanned_for_the_removed_notices()
+    names = {path.relative_to(ROOT).as_posix() for path in files}
+    # The scan must really cover the places the notices lived in.
+    assert "README.md" in names
+    assert ".github/release-body.template.md" in names
+    assert "docs/install.pt-BR.md" in names
+    assert any(name.endswith(".py") for name in names)
+    assert any(name.endswith(".ts") for name in names)
+    assert not names & _NOTICE_EXEMPT
+    found = [
+        f"{path.relative_to(ROOT).as_posix()}: {match.group(0)!r}"
+        for path in files
+        for match in (
+            pattern.search(_one_line(path.read_text(encoding="utf-8")))
+            for pattern in _REMOVED_NOTICE_PATTERNS
+        )
+        if match
+    ]
+    assert not found, f"a removed notice or gate is back: {found}"
+
+
+def test_the_notice_guard_matches_the_removed_wordings_only() -> None:
+    def hits(text: str) -> bool:
+        line = _one_line(text)
+        return any(pattern.search(line) for pattern in _REMOVED_NOTICE_PATTERNS)
+
+    assert hits("**Preliminary version - indicators not institutionally validated.**")
+    assert hits("Versão  preliminar\n- indicadores")
+    assert hits("Versión preliminar — indicadores no validados institucionalmente.")
+    assert hits("Valor provisório - a confirmar")
+    assert hits("Do not enter real data yet")
+    assert hits("Não insira dados reais até que as perguntas sejam respondidas")
+    assert hits("No introduzca todavía datos reales")
+    assert not hits("Versions below 1.0.0 are preliminary and are published as pre-releases.")
+    assert not hits("**Não insira dados reais.** Todos os dados deste roteiro são fictícios.")
+    assert not hits("No real data in the repository; sensitive is a working label.")

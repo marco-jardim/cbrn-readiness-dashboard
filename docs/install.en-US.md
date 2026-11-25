@@ -5,8 +5,7 @@ allow it to run. It exists in three languages with the same structure:
 [pt-BR](install.pt-BR.md), [en-US](install.en-US.md) and [es-ES](install.es-ES.md). The text of the
 zip's first-run notes (`README-first-run.*.txt`) is shorter and says the same.
 
-**Preliminary version — indicators not institutionally validated.** Do not enter real data yet: see
-[data-protection.md](data-protection.md).
+For where the data is kept and how it is protected, see [data-protection.md](data-protection.md).
 
 ## 1. Status of this guide
 
@@ -325,5 +324,4 @@ media are not touched by either.
   PDF writer, so two renderings of one report differ in that field.
 - The pt-BR and es-ES translations are drafts and still marked `unfinished`; the committee has not
   reviewed the terminology.
-- The indicators have no targets until the committee enters them, and are not institutionally
-  validated.
+- The indicators have no targets until the committee enters them.

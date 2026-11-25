@@ -34,10 +34,10 @@ The appendix states intent, not specifications. It names the modules and what th
 - lists the decisions the committee must take (§12).
 
 Two releases are planned:
-- **MVP v0.1** (Phases 0–7, plus readiness snapshots (T8.1), the licence bundle, the release pipeline, the first-run notes and the release task T9.6). It contains all five modules with data entry, indicators evaluated for any as-of date from the records as known today and with the current configuration, alerts, the dashboard, readiness snapshots (the only record of what was known and configured at the time; withdrawn, never deleted), the trilingual UI, a change log, encrypted backup and restore, and the portable build. This is enough for the committee to review the indicators and placeholders with demo data first. Entering real data waits for the answers to Q19 (formal classification), Q4, Q11 and Q13 (§12); after that the committee can record readings from the start.
+- **MVP v0.1** (Phases 0–7, plus readiness snapshots (T8.1), the licence bundle, the release pipeline, the first-run notes and the release task T9.6). It contains all five modules with data entry, indicators evaluated for any as-of date from the records as known today and with the current configuration, alerts, the dashboard, readiness snapshots (the only record of what was known and configured at the time; withdrawn, never deleted), the trilingual UI, a change log, encrypted backup and restore, and the portable build. This is enough for the committee to review the indicators and placeholders with demo data first. Until 1.2.0 (D39), entering real data waited for the answers to Q19 (formal classification), Q4, Q11 and Q13 (§12); from 1.2.0 that gate is lifted and the committee can record readings from the start.
 - **v1.0** (the rest of Phases 8–10). It adds PDF reports (internal, and aggregated/anonymised), CSV import and export for the 2022–2025 retroactive data, the export needed for the predictive-validity comparison (L87), the final build and the user documentation.
 
-v1.0 is a preliminary tool that has not been validated by the institution. Homologation (L87) is an institutional step outside the software.
+Until 1.2.0 (D39) v1.0 was handed over as a preliminary tool that had not been validated by the institution; from 1.2.0 no wording states or denies validation. Homologation (L87) is an institutional step outside the software.
 
 Labels used in this plan:
 - **R**: explicit requirement from the appendix.
@@ -418,7 +418,7 @@ The project's source code is GPL-3.0-or-later. Because the binary bundle include
   - the internal report, for the committee, DIRSA and the Air Force Command (R11, R12);
   - the aggregated, anonymised report (R13, A11), for internal use; any external release is a decision of the chain of command.
 
-  Both carry the preliminary-version notice (I06, P07). CSV serves data exchange and the retroactive import (R29, D04).
+  Until 1.2.0 both carried the preliminary-version notice (I06, P07; withdrawn by D39). CSV serves data exchange and the retroactive import (R29, D04).
 - The appendix calls for reports and accountability (L65, L69, L95) but does not mention spreadsheets. XLSX is therefore deferred item X3, pending Q10. `openpyxl` (MIT) would be compatible if it is needed.
 - *Pagination:* `QTextDocument.print()` has no per-page footer, so T8.6 paginates manually with `QPainter` and draws the footer notice and page number on every page.
 - *Tradeoff:* Qt's subset of HTML gives less layout control than ReportLab (BSD) or WeasyPrint. But it adds no dependency, uses the same fonts and chart rendering as the UI, and is enough for tables, key figures and embedded charts.
@@ -811,7 +811,7 @@ The three stock kinds are added by Phase 11 (v1.1.0). An empty lot never raises 
 ### 7.1 Data classification
 - **Sensitive** (real data, local only): personnel records — qualifications of identifiable staff, which the plan treats as personal data under Brazil's LGPD — infrastructure status, budget figures and, from v1.1, stock data (lots, quantities, expiry dates, prices, movements; Q27, D37). "Sensitive" is this plan's working label for data that stays local. It is not a classification under the access-to-information law or military rules.
 - **Public:** code, fictitious demo data, translations, documentation.
-- **Formal classification is not known (Q19).** The plan does not know whether any of this data is classified or access-restricted under Lei 12.527/2011 (arts. 23–28) or under military rules. As the plan reads Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made by a formal decision of the competent authority; this is not legal advice. The statute text: Decreto 7.845/2012 requires, for classified information, cryptographic resources based on a State algorithm and isolated equipment (arts. 31, 39, 40). The plan's reading, not legal advice: if the data is classified, this design — plaintext SQLite, plaintext automatic backups, commercial cryptography, an unsigned binary from a public repository — is unsuitable, and real data must not be entered. Q19 gates the entry of real data.
+- **Formal classification is not known (Q19).** The plan does not know whether any of this data is classified or access-restricted under Lei 12.527/2011 (arts. 23–28) or under military rules. As the plan reads Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made by a formal decision of the competent authority; this is not legal advice. The statute text: Decreto 7.845/2012 requires, for classified information, cryptographic resources based on a State algorithm and isolated equipment (arts. 31, 39, 40). The plan's reading, not legal advice: if the data is classified, this design — plaintext SQLite, plaintext automatic backups, commercial cryptography, an unsigned binary from a public repository — is unsuitable, and real data must not be entered. Until 1.2.0 (D39) Q19 gated the entry of real data; the gate is lifted, Q19 is answered, and only its status is recorded (§12), never the content of the answer.
 - **Committee answers are not public.** The repository and the changelog record only the status of each question, never the content of an answer (T10.5, §7.3).
 
 ### 7.2 Threats considered
@@ -1222,7 +1222,7 @@ What can run in parallel:
   - `AppContext` holds the services, the clock, the as-of date (default today, with a selector in the toolbar, D13), the read-only flag and the demo flag, and emits change signals.
   - A page registry, one line per module.
   - A prompts interface wrapping message boxes and file dialogs; tests substitute a fake. The T1.8 crash callback is wired to it.
-  - A banner area for the demo banner (D25), the read-only banner, location warnings and the permanent preliminary notice (I06, P07).
+  - A banner area for the demo banner (D25), the read-only banner, location warnings and the permanent preliminary notice (I06, P07; withdrawn by D39, T12.4).
   - The pseudo-locale walk (check 6 of §6) over every registered page and every registered dialog.
 - Accept:
   - a page registered in the test appears in the navigation;
@@ -1232,7 +1232,7 @@ What can run in parallel:
   - while one instance holds the lock, a second start shows the translated message and exits without opening the database;
   - with a fake clock earlier than the newest `change_log` timestamp, the banner appears and the snapshot and rotation hooks do not run;
   - a database whose `app_meta.is_demo` is 1 shows the demo banner, whatever the command-line flag;
-  - the preliminary notice is always visible;
+  - the preliminary notice is always visible (withdrawn by D39);
   - the pseudo-locale walk passes for the shell (pages and the dialog registry).
 - Check: `uv run pytest tests/ui/test_shell.py tests/ui/test_no_hardcoded_strings.py`
 
@@ -1830,7 +1830,7 @@ This phase covers I02, R33 and D02–D04. Its first task, T7.1, follows T1.9, th
     - where the data lives;
     - that full-disk encryption is required by documentation (D03), that the app cannot check it, and that it does not protect files exported to removable media;
     - how backups work;
-    - that "sensitive" is not a formal classification, and that real data must not be entered until the classification question (Q19) and Q4, Q11 and Q13 are answered;
+    - that "sensitive" is not a formal classification, and (until 1.2.0; withdrawn by D39, T12.5) that real data must not be entered until the classification question (Q19) and Q4, Q11 and Q13 are answered;
     - that several people can take turns on one machine only with one shared Windows account, or with `--data-dir` pointing to a local folder restricted to the committee; with separate Windows accounts each person gets a separate database (A12).
   - `docs/data-protection.md` documents the threats, controls and LGPD note of §7, including that values already written to backups persist until those backups are deleted, and that a mandatory or non-persistent Windows profile discards `%LOCALAPPDATA%` at logoff (K05).
 - Accept:
@@ -1957,7 +1957,7 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
 - Work:
   - A Qt-free report document for an as-of date contains:
     - a header with the institution and unit names (D18), the as-of date, the generation time, the app version and the operator label;
-    - the preliminary notice (I06, P07);
+    - the preliminary notice (I06, P07; withdrawn by D39);
     - key figures per module;
     - an indicator table with statuses and targets;
     - an alert summary;
@@ -1985,14 +1985,14 @@ This phase covers R11–R13, R29, R31 and R35. T8.1 is part of the MVP, because 
 - Work:
   - Start with a spike: check whether pypdf extracts text reliably from a Qt-generated PDF. If it does not, content assertions move to the Qt-free report model (T8.5) and the PDF test checks page count, page size and metadata only (K18).
   - Render the report document to an A4 PDF with Qt's text-document and PDF-writer classes (D09). `QTextDocument.print()` has no per-page footer, so paginate manually with `QPainter`, drawing the footer notice and the page number on every page.
-  - Include the title, page numbers, the preliminary notice in every page footer, and charts embedded through the T6.4 adapter. When the report model carries the demo marker (`app_meta.is_demo` is 1), every page, in both variants, carries a "DEMO — FICTITIOUS DATA" watermark and the PDF title says so.
+  - Include the title, page numbers, the preliminary notice in every page footer (withdrawn by D39, T12.3), and charts embedded through the T6.4 adapter. When the report model carries the demo marker (`app_meta.is_demo` is 1), every page, in both variants, carries a "DEMO — FICTITIOUS DATA" watermark and the PDF title says so.
   - Set the PDF document metadata (Info and XMP) explicitly, with no operator label, institution name or identifier in the anonymised variant.
   - The language is chosen per report. The renderer loads its own `QTranslator` set for that language and calls those translators directly, formats with an explicit `QLocale`, and never swaps the application's installed translators. Labels shared with the UI come from the Qt-free code→message-key map in `reports/message_keys.py`, so `reports/` does not import `ui/`.
-  - **Status (QA finding P8-04, decided):** pypdf was added to the `dev` group (tests only, BSD-3-Clause, never bundled). `tests/reports/test_report_pdf_parse.py` opens the rendered PDFs with pypdf and asserts the page count, the A4 page size and, when pypdf extracts text from page 1, the preliminary notice and the page number on every page (K18: the text checks are skipped if extraction returns nothing). The content assertions on the layout built before painting (text and chart data) stay in `tests/reports/test_report_pdf.py`.
+  - **Status (QA finding P8-04, decided):** pypdf was added to the `dev` group (tests only, BSD-3-Clause, never bundled). `tests/reports/test_report_pdf_parse.py` opens the rendered PDFs with pypdf and asserts the page count, the A4 page size and, when pypdf extracts text from page 1, the preliminary notice (withdrawn by D39, T12.3) and the page number on every page (K18: the text checks are skipped if extraction returns nothing). The content assertions on the layout built before painting (text and chart data) stay in `tests/reports/test_report_pdf.py`.
 - Accept:
   - the output parses with pypdf;
   - the pages are A4;
-  - if the spike shows extraction is reliable: the extracted text contains the localized title in each of the three languages, and the preliminary notice on every page, and the anonymised PDF's text contains none of the fixture identifiers; otherwise the same assertions are made on the report model and the PDF test checks page count, page size and metadata only;
+  - if the spike shows extraction is reliable: the extracted text contains the localized title in each of the three languages, and the preliminary notice on every page (withdrawn by D39), and the anonymised PDF's text contains none of the fixture identifiers; otherwise the same assertions are made on the report model and the PDF test checks page count, page size and metadata only;
   - the document metadata (Info and XMP) of the anonymised PDF contains no operator label, institution name or identifier of the fixture;
   - with a demo model, every page of both variants carries the watermark and the PDF title says "DEMO"; with a real model, none does;
   - generating a report in another language leaves the application's installed translators and default locale unchanged;
@@ -2083,7 +2083,7 @@ T9.2, T9.3 and T9.4 belong to the MVP: T9.2 and T9.3 can start any time after T0
     5. `make_release_zip.py`, which writes `cbrn-readiness-dashboard-<version>-win-x64.zip` with the top folder `cbrn-readiness-dashboard\`, entries in a fixed order with fixed timestamps, and `SHA256SUMS.txt` in the `<sha256>  <file name>` format, and a per-file SHA-256 manifest of the bundle (`SHA256-FILES.txt`, every file inside the folder, `.pyd` and DLL files included) for IT teams that allow-list by file hash.
     6. GitHub's build-provenance attestation of the zip.
     7. `gh release create --draft` with the zip, the checksum file and the per-file manifest, adding `--prerelease` when the version is below 1.0.0 (the choice is made by a small function in `scripts/make_release_zip.py`, tested for 0.1.0 and 1.0.0; the workflow test asserts that the step uses it).
-  - The release body, built from `.github/release-body.template.md`, states that the executable is unsigned (D10), that the tool is preliminary and not institutionally validated (I06), how to verify the checksum, what the checksum and the attestation do and do not prove (`SHA256SUMS.txt` on the same release page proves transfer integrity, not authenticity; the attestation proves where and how the build ran, not that the program is safe), and which placeholders are still flagged in `domain/config.py` (the code-level flags of §3.5). It links the matching source tag of this project and the exact Qt and PySide6 source release matching the bundled version, and carries the written offer for that source (§4.2, §8).
+  - The release body, built from `.github/release-body.template.md`, states that the executable is unsigned (D10), that the tool is preliminary and not institutionally validated (I06; withdrawn by D39, T12.6), how to verify the checksum, what the checksum and the attestation do and do not prove (`SHA256SUMS.txt` on the same release page proves transfer integrity, not authenticity; the attestation proves where and how the build ran, not that the program is safe), and which placeholders are still flagged in `domain/config.py` (the code-level flags of §3.5). It links the matching source tag of this project and the exact Qt and PySide6 source release matching the bundled version, and carries the written offer for that source (§4.2, §8).
   - The workflow has two jobs; the steps above are not one job and there is no second build. A read-only `build` job runs steps 1–3, where the packaging suite builds the bundle once into `dist/` and runs its frozen self-test; step 5 zips that same tested folder; the release notes and the pre-release flag are written there; and the zip, the checksum files and the notes are uploaded as one workflow artefact. The `release` job, which needs `build` and alone has the write permissions, has no checkout and installs nothing: it downloads that artefact with the pinned `actions/download-artifact`, attests the zip (step 6) and creates the draft (step 7) (QA findings P9-01, P9-03).
   - The per-file manifest `SHA256-FILES.txt` is for verifying each extracted file. Allow-listing rules are then made from the verified folder with the organisation's own policy tooling, as the release body says. This supersedes the premise of step 5 and of D10, §8, T9.4 and T10.3 that IT teams allow-list by file hash straight from the manifest (QA finding P9-02; see the note on K02 in §11).
 - Accept:
@@ -2091,7 +2091,7 @@ T9.2, T9.3 and T9.4 belong to the MVP: T9.2 and T9.3 can start any time after T0
   - two runs produce byte-identical zips;
   - the checksum line verifies with `hashlib`;
   - the per-file manifest lists every file of the fake folder with the right hash, and is the same on two runs;
-  - a test asserts that the release-body template contains the preliminary notice, the unsigned statement, the statement of what the checksum and attestation prove, and the link to the matching source tag, and that the Qt and PySide6 source links and the written offer are present;
+  - a test asserts that the release-body template contains the preliminary notice (withdrawn by D39), the unsigned statement, the statement of what the checksum and attestation prove, and the link to the matching source tag, and that the Qt and PySide6 source links and the written offer are present;
   - the workflow test confirms: the tag trigger; every `uses:` pinned to a full SHA; elevated permissions scoped to the release job only; `uv sync --locked --all-groups`; the attestation step; the version-check step; that the release is created as a draft; and the `--prerelease` handling for versions below 1.0.0.
 - Check: `uv run pytest tests/scripts/test_make_release_zip.py tests/meta/test_workflows.py`
 
@@ -2109,14 +2109,14 @@ T9.2, T9.3 and T9.4 belong to the MVP: T9.2 and T9.3 can start any time after T0
     - where the data lives;
     - portable mode;
     - the full-disk-encryption requirement (D03);
-    - the preliminary status;
+    - the preliminary status (withdrawn by D39, T12.4);
     - the licence and the source URL.
   - `portable.ini.example` explains in comments what portable mode does and the risk that copying the folder copies the data (D02).
 - Accept:
   - the zip contains the three notes and the example at the folder root;
   - the three notes have the same section structure;
   - each note mentions `Get-FileHash`, `%LOCALAPPDATA%\cbrn-readiness-dashboard`, the per-file manifest and the statement that "sensitive" is not a classification (Q19);
-  - each first-run note contains the preliminary notice (I06, P07).
+  - each first-run note contains the preliminary notice (I06, P07; withdrawn by D39).
   - Packaging test (on the T0.9 build):
     1. Copy the built folder to `tmp_path` and rename the example to `portable.ini`.
     2. Clear `CBRN_DASHBOARD_DATA_DIR` and point `LOCALAPPDATA` at a temporary folder.
@@ -2141,7 +2141,7 @@ T9.2, T9.3 and T9.4 belong to the MVP: T9.2 and T9.3 can start any time after T0
   - Set the version to `0.1.0`.
   - Create `CHANGELOG.md` with a 0.1.0 entry that lists the placeholders still flagged in `domain/config.py` (§3.5, marking the local-only values, which are never cleared in code) and, as open questions only, the A-items without a setting (A01, A03, A12, A13, A14). It lists each question by its status only (open / answered and applied locally / answered and implemented in task Tn), never the content of an answer. It states the review status of the translations (Q14).
   - Update `README.md`: the status, the version and a link to the releases page. It no longer says "no code yet".
-  - Write a short manual smoke checklist in pt-BR, `docs/smoke-test.pt-BR.md`: start the executable on a clean profile, enter one record per module, switch language, back up and restore, check the dashboard and the preliminary notice.
+  - Write a short manual smoke checklist in pt-BR, `docs/smoke-test.pt-BR.md`: start the executable on a clean profile, enter one record per module, switch language, back up and restore, check the dashboard and the preliminary notice (withdrawn by D39).
   - Tag `v0.1.0`; T9.3 creates the draft pre-release.
 - Accept:
   - `CHANGELOG.md` has an entry for `__version__`;
@@ -2174,14 +2174,14 @@ This phase covers R28, R32 and I06, plus D23 with T6.5. It closes v1.0.
 **T10.2 — In-app help in three languages and the About dialog** (M) · Depends on: T9.2, T1.9, T8.7
 - Files: `src/cbrn_dashboard/help/pt_BR.md`, `help/en_US.md`, `help/es_ES.md`, `ui/shell/help.py`, `ui/shell/about.py`, `i18n/shell_pt_BR.ts`, `i18n/shell_en_US.ts`, `i18n/shell_es_ES.ts`, `tests/ui/test_help_and_about.py`.
 - Work:
-  - The help is written from scratch (F06), with no clinical content (D19). It covers each page, the as-of date, alerts, backups and restore, import, reports, snapshots, privacy and the preliminary status.
+  - The help is written from scratch (F06), with no clinical content (D19). It covers each page, the as-of date, alerts, backups and restore, import, reports, snapshots, privacy and (until 1.2.0; withdrawn by D39) the preliminary status.
   - It is rendered as Markdown inside the app and follows the current UI language.
   - The About dialog shows:
     - the version;
     - the GPL-3.0-or-later notice and the absence of any warranty;
     - the source URL `https://github.com/marco-jardim/cbrn-readiness-dashboard` as plain, selectable text;
     - one entry per component from the T9.2 licence index;
-    - the preliminary notice (P07).
+    - the preliminary notice (P07; withdrawn by D39).
 - Accept:
   - the help loads in each language and switches with the UI language;
   - the three help files have the same heading structure;
@@ -2497,73 +2497,73 @@ Rules that hold for every task of the phase:
 - Accept: `PLAN.md` has D39, K24, K25, §13.2 and T12.1–T12.15, and the question statuses are unchanged.
 - Check: `uv run pytest tests/meta`
 
-**T12.3 — No preliminary notice in reports** (S) · Depends on: T12.2 · **Status: pending**
+**T12.3 — No preliminary notice in reports** (S) · Depends on: T12.2 · **Status: done**
 - Files: `reports/model.py`, `reports/message_keys.py`, `reports/labels.py`, `reports/pdf.py`, `reports/anonymise.py`, `tests/reports/`.
 - Work: remove `ReportDocument.preliminary_notice_code`, `PRELIMINARY_NOTICE_CODE`, `ReportTexts.preliminary_notice`, `PRELIMINARY_KEY`, the PDF notice box and the footer notice; keep the footer rule and "Page %1 of %2".
 - Accept: neither report model nor PDF text carries a preliminary notice; every page still has the footer rule and the page counter.
 - Check: `uv run pytest tests/reports`
 
-**T12.4 — Shell without the preliminary banner** (S) · Depends on: T12.2 · **Status: pending**
+**T12.4 — Shell without the preliminary banner** (S) · Depends on: T12.2 · **Status: done**
 - Files: `ui/shell/`, `ui/help/` (or the equivalent module), `help/{pt_BR,en_US,es_ES}.md`, `i18n/` catalogues of the `shell` area, `tests/ui/test_shell.py`, `tests/ui/test_help_and_about.py`.
 - Work: remove the PRELIMINARY banner, the About line and the help topic "preliminary" in the three languages; the DEMO banner stays permanent in demo mode (D25). Q15 is answered and implemented here.
 - Accept: no banner, About line or help topic mentions a preliminary version; the DEMO banner is still shown in demo mode; the help has the same headings in the three languages.
 - Check: `uv run pytest tests/ui/test_shell.py tests/ui/test_help_and_about.py`
 
-**T12.5 — Lift the real-data gate in the app** (S) · Depends on: T12.2 · **Status: pending**
+**T12.5 — Lift the real-data gate in the app** (S) · Depends on: T12.2 · **Status: done**
 - Files: `ui/shell/` (first-run notice), `help/{pt_BR,en_US,es_ES}.md` (privacy topic), `i18n/` catalogues, `tests/ui/test_first_run_and_location.py`, `tests/ui/test_help_and_about.py`.
 - Work: the first-run classification paragraph keeps only the sentence that "sensitive" is a working label, not a formal classification; the help privacy topic loses the warning against real data. Q19, Q4, Q11 and Q13 are answered and implemented here.
 - Accept: no text in the app tells the operator to wait for an answer before entering real data; the working-label sentence is still shown.
 - Check: `uv run pytest tests/ui/test_first_run_and_location.py tests/ui/test_help_and_about.py`
 
-**T12.6 — Shipped notes without notices** (S) · Depends on: T12.2 · **Status: pending**
+**T12.6 — Shipped notes without notices** (S) · Depends on: T12.2 · **Status: done**
 - Files: `packaging/README-first-run.*.txt`, `packaging/installer/cbrn-dashboard.iss`, `.github/release-body.template.md`, `tests/packaging/`.
 - Work: remove the preliminary notice and the gate sentence from the first-run notes, the installer before-install notices and the release body template; the template keeps the unsigned-executable statement, the checksum and attestation text, the source links and the written offer (D10, §8).
 - Accept: no shipped note mentions a preliminary version or the gate; the checksum and licence statements are unchanged.
 - Check: `uv run pytest tests/packaging tests/meta/test_release_readiness.py`
 
-**T12.7 — Settings General, Alerts and Targets without badges** (M) · Depends on: T12.2 · **Status: pending**
+**T12.7 — Settings General, Alerts and Targets without badges** (M) · Depends on: T12.2 · **Status: done**
 - Files: `ui/settings/sections.py`, `ui/settings/page.py`, `i18n/` catalogues of the `settings` area, `tests/ui/test_settings_page.py`, `tests/ui/test_placeholder_confirmation.py` (deleted).
 - Work: remove the badges and Confirm actions of the General, Alerts and Targets sections; delete `PlaceholderBadge` and `tests/ui/test_placeholder_confirmation.py`. Saving, validation and the local-only fields behave as before.
 - Accept: the three sections show no badge or Confirm action; every field still saves and reloads; `PlaceholderBadge` no longer exists.
 - Check: `uv run pytest tests/ui/test_settings_page.py`
 
-**T12.8 — Stock item types without the P12 badge** (S) · Depends on: T12.7 · **Status: pending**
+**T12.8 — Stock item types without the P12 badge** (S) · Depends on: T12.7 · **Status: done**
 - Files: `ui/settings/` (stock types section), `tests/ui/test_stock_settings.py`.
 - Work: remove the P12 badge from the stock item types section; the minimum stays an empty-by-default, per-installation value (D35).
 - Accept: the section shows no badge; a minimum still saves and clears.
 - Check: `uv run pytest tests/ui/test_stock_settings.py`
 
-**T12.9 — Personnel and Infrastructure sections without badges** (S) · Depends on: T12.7 · **Status: pending**
+**T12.9 — Personnel and Infrastructure sections without badges** (S) · Depends on: T12.7 · **Status: done**
 - Files: `ui/settings/` (personnel and infrastructure sections), `tests/ui/test_settings_page.py`.
 - Work: remove the badges and Confirm actions of the two sections.
 - Accept: neither section shows a badge or Confirm action; their fields behave as before.
 - Check: `uv run pytest tests/ui/test_settings_page.py`
 
-**T12.10 — Budget and Backup sections without badges** (S) · Depends on: T12.7 · **Status: pending**
+**T12.10 — Budget and Backup sections without badges** (S) · Depends on: T12.7 · **Status: done**
 - Files: `ui/settings/` (budget and backup sections), `tests/ui/test_settings_page.py`.
 - Work: remove the badges and Confirm actions of the two sections.
 - Accept: neither section shows a badge or Confirm action; their fields behave as before.
 - Check: `uv run pytest tests/ui/test_settings_page.py`
 
-**T12.11 — Reports and Snapshots sections and help texts without badges** (S) · Depends on: T12.7 · **Status: pending**
+**T12.11 — Reports and Snapshots sections and help texts without badges** (S) · Depends on: T12.7 · **Status: done**
 - Files: `ui/settings/` (reports and snapshots sections), `help/{pt_BR,en_US,es_ES}.md`, `i18n/` catalogues, `tests/ui/test_settings_page.py`, `tests/ui/test_help_and_about.py`.
 - Work: remove the badges and Confirm actions of the two sections; remove the sentences about badges and confirmation from the help texts in the three languages.
 - Accept: no section and no help text mentions a badge, a placeholder flag or a confirmation.
 - Check: `uv run pytest tests/ui/test_settings_page.py tests/ui/test_help_and_about.py`
 
-**T12.12 — Services and storage: delete the confirmation machinery** (M) · Depends on: T12.7, T12.8, T12.9, T12.10, T12.11 · **Status: pending**
+**T12.12 — Services and storage: delete the confirmation machinery** (M) · Depends on: T12.7, T12.8, T12.9, T12.10, T12.11 · **Status: done**
 - Files: `storage/settings_repo.py`, `services/settings_service.py`, `tests/storage/test_settings_repo.py`, `tests/services/`.
 - Work: delete the `confirmed.<ID>` keys handling, the confirmation functions and their call sites. Existing `confirmed.<ID>` rows in `app_settings` stay unused: no migration, no deletion. The snapshot configuration hash does not change (no hashed field is touched; K24).
 - Accept: no code reads or writes `confirmed.<ID>`; a database with such rows opens and works; a snapshot taken before and after the change has the same configuration hash.
 - Check: `uv run pytest tests/storage/test_settings_repo.py tests/services`
 
-**T12.13 — Clear every placeholder flag and withdraw P07** (M) · Depends on: T12.12 · **Status: pending**
+**T12.13 — Clear every placeholder flag and withdraw P07** (M) · Depends on: T12.12 · **Status: done**
 - Files: `domain/config.py`, `PLAN.md` (§3.5), `docs/indicators.md`, readiness rules in `tests/meta/`, `tests/domain/`.
 - Work: clear the placeholder flag of every generic default (they become confirmed code defaults) and of the local-only values P03, P10, D18 and P12, which keep empty code defaults; withdraw P07 and remove it from the registry; update §3.5, `docs/indicators.md` and the readiness rules that list flagged placeholders. The `ReadinessConfig()` defaults test and the snapshot configuration hash do not change (K24).
 - Accept: no placeholder flag is set; `flagged_placeholder_ids()` is empty; the plan and the code agree on §3.5; the defaults test and the hash test pass unchanged.
 - Check: `uv run pytest tests/domain tests/meta/test_placeholders_documented.py tests/meta/test_docs.py`
 
-**T12.14 — Documentation, question statuses and the no-notice guard** (M) · Depends on: T12.3, T12.4, T12.5, T12.6, T12.13 · **Status: pending**
+**T12.14 — Documentation, question statuses and the no-notice guard** (M) · Depends on: T12.3, T12.4, T12.5, T12.6, T12.13 · **Status: done**
 - Files: `PLAN.md` (§3.5, §7.1, §12, K12, K19), `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `docs/`, `tests/meta/`.
 - Work: set the status of Q15 to "answered and implemented in task T12.4" and of Q19, Q4, Q11 and Q13 to "answered and implemented in task T12.5", never the content of an answer; update §7.1, K12 and K19 and the documents that name the notice or the gate; add a no-notice guard test in `tests/meta` that scans the sources, catalogues, help, shipped notes and templates for the removed notices and for validation claims, and allows the DEMO banner and the working-label sentence.
 - Accept: the guard test and the readiness tests pass; the documents state no gate and no preliminary notice; no answer content is recorded.
@@ -2589,7 +2589,7 @@ Rules that hold for every task of the phase:
 - the demo mode;
 - the one-folder executable with self-test, bundled licences, first-run notes in three languages, checksums and a provenance attestation, released as a draft pre-release. The install guides (T10.3) and the About dialog (T10.2) arrive in v1.0.
 
-That is enough for the committee to review the indicators and placeholders with demo data, and to start entering real data on their own machine once the questions that gate real data are answered: the formal-classification question (Q19), Q4, Q11 and Q13 (§12). "Sensitive" is a working label, not a classification (§7.1).
+That is enough for the committee to review the indicators and placeholders with demo data, and to start entering real data on their own machine; until 1.2.0 (D39) the entry of real data was gated by the answers to the formal-classification question (Q19), Q4, Q11 and Q13 (§12). "Sensitive" is a working label, not a classification (§7.1).
 
 **v1.0** adds:
 - the rest of Phase 8 (T8.2–T8.7): the validation export, CSV export and import, and PDF reports, internal and anonymised, with the snapshot and settings user interface (T8.1 is in the MVP);
@@ -2641,7 +2641,7 @@ Honest remarks on size:
 - The MVP is about four fifths of the task count of v1.0 (56 of 69). Phase 11 adds 19 tasks for 1.1.0 and Phase 12 adds 15 for 1.2.0, so the plan has 103 tasks in all.
 - The longest chain of tasks that must run one after another is 16 tasks (§10.2): T0.1 → T0.5 or T0.6 → T0.7 → T1.3 → T1.4 → T1.8 → T1.9 → a module UI task (T2.4, T3.4, T4.5 or T5.4) → T6.1 → T6.2 → T6.5 → T8.5 → T8.6 → T8.7 → T10.2 or T10.4 → T10.5. The branch T6.5 → T8.1 → T8.2 → T8.7 is equally long. The documentation branch T9.3 → T9.4 → T10.3 → T10.5 is shorter. Running modules and Phase 7 in parallel shortens the elapsed time, but not this chain.
 - The UI tasks carry most of the effort and most of the translation work. Each UI task also adds translations in three languages, which the committee still has to review (Q14).
-- Answers to §12 may add work. Most answers are applied in Settings without code: P01–P06, P08, P09, targets, A02, A04, A05, A06 intervals, A07 metrics, A09 courses and the A11 threshold. P07 (the disclaimer wording) lives in the translations and needs a commit. A01, A03, A12, A13 and A14 have no setting: they are assumptions, and an answer that contradicts them, like one that contradicts A08 or A10 or requests X1–X6, needs new tasks. Clearing a placeholder flag in `domain/config.py` is always a commit (§3.5).
+- Answers to §12 may add work. Most answers are applied in Settings without code: P01–P06, P08, P09, targets, A02, A04, A05, A06 intervals, A07 metrics, A09 courses and the A11 threshold. P07 (the disclaimer wording; withdrawn by D39) lived in the translations and needed a commit. A01, A03, A12, A13 and A14 have no setting: they are assumptions, and an answer that contradicts them, like one that contradicts A08 or A10 or requests X1–X6, needs new tasks. Clearing a placeholder flag in `domain/config.py` is always a commit (§3.5).
 - No calendar estimate is given. Agent throughput and review time are unknown, and the institutional steps (§10.5) dominate the elapsed time.
 
 ### 10.5 Relation to the appendix timeline
@@ -2651,7 +2651,7 @@ The appendix describes the process as requirements gathering with the committee,
 - **Incremental prototyping (R28).** MVP v0.1 (T9.6), any point releases, then v1.0. Each release is a draft GitHub release with checksums; releases below 1.0.0 are marked pre-release. Feedback goes into §3.5, §12 and new tasks.
 - **Retroactive tests, 2022–2025 (R29).** On the committee's own machine, records are entered by hand or imported from CSV (T8.4, with templates matched to the existing records' structure — Q16). The indicators are then read for past as-of dates (I03), and retroactive snapshots (T8.1) record those readings. Snapshots are available from v0.1.0, so readings can be recorded early; CSV import follows in v1.0. The data never enters the repository (F05).
 - **Predictive validity (R31).** The comparison needs snapshots taken before the next EXBRAMED edition and that edition's evaluation results, which the validation export (T8.2) joins. It therefore cannot be completed before that edition has taken place. The plan assumes no date for it.
-- **Homologation (R30).** This is an institutional step after v1.0 and outside the software. v1.0 is handed over as a preliminary, not yet validated tool (I06).
+- **Homologation (R30).** This is an institutional step after v1.0 and outside the software. Until 1.2.0, v1.0 was handed over as a preliminary, not yet validated tool (I06; withdrawn by D39).
 - **Duration (R34).** The twelve to eighteen months of L91 are the appendix's estimate for the whole process, of which software development is one part. The plan makes no calendar commitment. Outside the software, the critical path is answering §12, entering the retroactive data and the institutional steps.
 - **Partner team (R32).** The task breakdown, the architecture notes (T10.3) and the contribution rules (T0.3) let any development team — including a partner institution, as the appendix suggests (L91) — continue the work.
 
@@ -2673,14 +2673,14 @@ Likelihood and impact are rated H (high), M (medium) or L (low).
 | K09 | Qt Charts is deprecated since Qt 6.10 in favour of Qt Graphs, whose 2D graphs need Qt Quick/QML (excluded from the bundle) and are GPL-3.0 as well, so the replacement is not a local swap. | M / M | All charts go through one adapter, the single touch point (D08, T6.4). Every chart has a table view (T6.5). A deprecation warning, if any, is added to `qt_log_ignore` by exact text (T6.4). The PySide6 upper bound limits exposure (K17). Replacing the backend is deferred item X9. | D08 |
 | K10 | Dependencies drift: PySide6, PyInstaller or Python changes break the build, or a dependency's licence changes. | M / M | `uv.lock` with hashes, pinned runner image and actions (T0.8). Dependabot pull requests run the packaging suite (T9.5). Frozen self-test in CI (T0.9, T9.1). The licence allow-list test fails on any disallowed or unknown licence (T9.2). | §4.2 |
 | K11 | Scope creeps towards clinical or procedural content, which might import non-GPL text such as the WHO guide or internal documents. | M / H | Non-goal (§2.2) and design decision D19. Contribution rules and the pull-request checklist forbid it (T0.3). The help is written from scratch (T10.2). Anything clinical belongs to PTT 1, which is out of scope. | F06, D19 |
-| K12 | The tool is read as institutionally validated, or its readings as an official readiness standard. | M / H | A permanent preliminary notice in the UI banner, every PDF page, the About dialog, the first-run notes and the release body (I06, P07). "No target" is the default status (D14). Indicator definitions are documented (T10.3). Snapshots record the configuration hash, the hashed configuration itself and the app version (T8.1). Homologation stays outside the software (R30). | I06, Q15 |
+| K12 | The tool is read as institutionally validated, or its readings as an official readiness standard. | M / H | Until 1.2.0, a permanent preliminary notice in the UI banner, every PDF page, the About dialog, the first-run notes and the release body (I06, P07; withdrawn by D39). From 1.2.0 a no-notice guard test (T12.14) and the rule that no wording claims validation, approval or homologation (K25). "No target" is the default status (D14). Indicator definitions are documented (T10.3). Snapshots record the configuration hash, the hashed configuration itself and the app version (T8.1). Homologation stays outside the software (R30). | I06, Q15 |
 | K13 | Retroactive readings are mistaken for readings taken at the time, or a snapshot is removed to hide an unfavourable reading. | M / M | The service sets the origin `retroactive` whenever a snapshot is taken after its as-of date, whatever triggered it; snapshots cannot be updated or deleted (triggers), only withdrawn by an append-only record with a reason (T8.1). The validation export carries the origin, `taken_at_utc` and age of every reading, prefers non-retroactive, non-withdrawn snapshots, and ignores withdrawn ones (T8.2). | R29, R31 |
 | K14 | The database is used from a network share, or by several people at once, and gets corrupted. | L / H | Network-path warning (D02, T7.5). Single-operator design (D05, A12) and a single-instance lock (T1.9). Shared use is deferred item X2 (Q12). | D02, D05 |
 | K15 | The change log and the backups keep personal data after the record itself has been deleted or changed, and the LGPD right to erasure cannot be met by deleting a row. | M / H | Data minimisation (D17); no free-text notes columns; personal free-text values are not copied into the log (§5.1). A "pseudonymise person" action removes the identifier and free text while keeping history (T2.3). Values already written to backups persist until those backups are deleted; this is documented in the data-protection guide (T7.5). Retention is Q12; a redaction tool is deferred item X8. | D05, Q4, Q12 |
 | K16 | Parallel coding agents conflict over migrations, catalogues or registries. | M / L | Reserved migration numbers (T1.3). One catalogue per area (D07). One-line registrations. Tasks that touch the same shared file (§10.2 hot spots, including the `shell` catalogue) merge one at a time. Rebase and run the full suite before merging (§10.2). | §10.1, §10.2 |
 | K17 | Qt 6.12 is the last Qt release that supports Windows 10, so PySide6 is capped at `<6.13` while Windows 10 is a target; the cap blocks newer Qt fixes and may block Dependabot updates. | M / L | The constraint is explicit (T0.1, §4.2, §8). The yearly stack review (§4.2) checks whether Windows 10 is still a target. Dependabot pull requests run the packaging suite (T9.5). | §4.2, §8, K10 |
 | K18 | Text extraction with pypdf from Qt-generated PDFs is unverified, and Qt's `QTextDocument.print()` has no per-page footer, so the PDF tests or the pagination may not work as planned. | M / L | T8.6 starts with a spike and paginates manually with `QPainter`. If extraction is unreliable, content assertions move to the Qt-free report model and the PDF test checks page count, page size and metadata only. | D09, T8.6 |
-| K19 | The data, or part of it, is formally classified or access-restricted (Lei 12.527/2011, arts. 23–28, or military rules), and real data is entered into a design that is not suitable for it. | M / H | Q19 is first in §12 and gates the entry of real data, together with Q4, Q11 and Q13. §1, §7.1, §10.4, the first-run notice (T7.5) and the first-run notes (T9.4) say that "sensitive" is not a classification and that real data must not be entered until the question is answered. Until then only demo data is used. As the plan reads Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made by a formal decision of the competent authority; this is not legal advice, and the plan gives no legal conclusion. | F05, §7.1, Q19 |
+| K19 | The data, or part of it, is formally classified or access-restricted (Lei 12.527/2011, arts. 23–28, or military rules), and real data is entered into a design that is not suitable for it. | M / H | Q19 is first in §12. Until 1.2.0 it gated the entry of real data, together with Q4, Q11 and Q13, and the first-run notice (T7.5) and the first-run notes (T9.4) said that real data must not be entered until the question was answered (D39 lifted the gate; only the status of the question is recorded). §1, §7.1, §10.4 and the first-run notice keep the statement that "sensitive" is a working label, not a classification. As the plan reads Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made by a formal decision of the competent authority; this is not legal advice, and the plan gives no legal conclusion. | F05, §7.1, Q19 |
 | K20 | Clinical creep through the antidote and decontaminant stock: item names, lot codes or notes start to carry indications, doses or protocols, which would import clinical content (K11) and possibly non-GPL text. | M / H | The stock tables have no dose, indication or protocol column (D38). The built-in names are item types only. The lot-code input and the notes carry a hint that no clinical information belongs there. The help for the stock features is written from scratch and has no clinical content or links (T11.17). The non-goal of §2.2 is amended, not removed, and the pull-request checklist still forbids clinical content. | K11, D19, D38, §2.2 |
 | K21 | Snapshots taken before 1.1.0 are not comparable with later ones: the configuration hash changes once on upgrade, because the hashed fields grow by `stock_expiry_warning_days` and `stock_item_type_minimum_quantity`, and the `STOCK_*` indicators are missing from older snapshots. | H / L | The change is documented in the changelog entry for 1.1.0 and in T8.1. T11.7 checks that an indicator missing from an older snapshot is read as "no data", never as zero. Old snapshots are not rewritten (they cannot be changed, K13). | K13, T8.1, T11.7 |
 | K22 | Tile inflation: stock adds many tiles to the dashboard (one per item type, plus lot and minimum counts), and the committee stops reading it. | M / M | A `STOCK_VALID_QTY` value exists only for a type that is in use on the date or has a minimum (D36). Stock tiles form their own "Estoque" group. A fresh real database shows no stock tiles. The antidotes page and the dashboard shortcut carry the detail instead of the overview. | D36, T11.7, T11.12 |
@@ -2693,12 +2693,13 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 ---
 
 ## 12. Open questions for the author
-"Committee" means the hospital's CBRN defence committee. Every question about the application has a working answer in the app (§3.5) until it is answered; Q18 concerns the plan's traceability, not app behaviour, and has no in-app working answer. None blocks building the MVP; Q19, Q4, Q11 and Q13 gate the entry of real data. Q25–Q29 were added on 2026-11-20 with Phase 11 (stock); none of them blocks version 1.1.0. This document records only the status of each question (open / answered and applied locally / answered and implemented in task Tn), never the content of an answer (T10.5).
+"Committee" means the hospital's CBRN defence committee. Every question about the application has a working answer in the app (§3.5) until it is answered; Q18 concerns the plan's traceability, not app behaviour, and has no in-app working answer. None blocks building the MVP; Q19, Q4, Q11 and Q13 gated the entry of real data until answered (D39). Q25–Q29 were added on 2026-11-20 with Phase 11 (stock); none of them blocks version 1.1.0. This document records only the status of each question (open / answered and applied locally / answered and implemented in task Tn), never the content of an answer (T10.5).
 
-**Q19 — Formal classification (gates real-data use).** Is any of this data formally classified or access-restricted under the access-to-information law (Lei 12.527/2011, arts. 23–28) or under military rules? As the plan reads Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made by a formal decision of the competent authority; this is not legal advice. The statute text: Decreto 7.845/2012 requires, for classified information, cryptographic resources based on a State algorithm and isolated equipment (arts. 31, 39, 40). The plan's reading, not legal advice: if the data is classified, this design (plaintext SQLite, plaintext automatic backups, commercial cryptography, an unsigned binary from a public repository) is unsuitable, and real data must not be entered.
+**Q19 — Formal classification (gates real-data use) (gate lifted by D39).** Is any of this data formally classified or access-restricted under the access-to-information law (Lei 12.527/2011, arts. 23–28) or under military rules? As the plan reads Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made by a formal decision of the competent authority; this is not legal advice. The statute text: Decreto 7.845/2012 requires, for classified information, cryptographic resources based on a State algorithm and isolated equipment (arts. 31, 39, 40). The plan's reading, not legal advice: if the data is classified, this design (plaintext SQLite, plaintext automatic backups, commercial cryptography, an unsigned binary from a public repository) is unsuitable, and real data must not be entered.
 - Answered by: the committee, with the institution's information-security and legal advisers.
 - Confirms: F05, §7.1 and the first-run notice (T7.5).
 - Until answered: only demo data is used; "sensitive" in this plan is a working label, not a classification.
+- Status: answered and implemented in task T12.5
 
 **Q1 — Indicators and targets.** Is the proposed indicator list (§5.4) right, including the design proposal `EX_DAYS_SINCE_LAST`? Which indicators make up the "padrão esperado de prontidão" (L82), and what warning and critical values apply to each — for example, a minimum number of staff with a valid level-A PPE qualification?
 - Answered by: the committee.
@@ -2718,8 +2719,9 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 
 **Q4 — Staff data and categories.** Which personal data may the app hold under the institution's reading of the LGPD? The plan proposes an internal code per person plus an optional short label, and no national ID numbers, birth dates, contact or health data. Should a professional category be recorded, and with which categories? Is the "pseudonymise person" action (identifier replaced by a random code, free text cleared or replaced by random codes, history kept) an acceptable response to an erasure request? Can a person who leaves and later returns be entered as a new record (A14)? *The plan's reading, not legal advice:* the national-defence exclusion (LGPD art. 4, III) requires an exclusive purpose and probably does not cover staff-management data, and an internal code is pseudonymisation, so the data stays personal (art. 13, §4).
 - Answered by: the committee.
-- Confirms: D17, A14 and the category list. Gates the entry of real data.
+- Confirms: D17, A14 and the category list. Gated the entry of real data until D39.
 - Until answered: only the internal code, an optional label and a free, empty category list are available; no real data is entered.
+- Status: answered and implemented in task T12.5
 
 **Q5 — Beds and bays.** Does "leitos e baias disponíveis" (L76) mean installed units in working order, or units free at a given moment? Which status categories are needed, and does "degraded" count as available? Is equipment that leaves service and returns entered as a new record (A14)?
 - Answered by: the committee.
@@ -2752,20 +2754,22 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Until answered: the two PDF variants of T8.5 and T8.6 are produced in the chosen UI language, personnel-derived counts below 5 (zeros included) are suppressed with secondary suppression, and differencing is a documented residual risk. The anonymised report is for internal use; the app never sends anything, and any external release is decided by the chain of command.
 - Also recorded as residual (QA findings P8-01, P8-16): the anonymised variant prints the operator-entered codes as they are (funding-source, asset-type and edition codes), and the built-in source `DIRSA` by its code, as a proper name (the built-in source `COMAER` is printed by its translated name); and the undeclared relation `active_staff - valid:<level>` can reveal a hidden expired count (T8.5).
 
-**Q11 — Information security (L91).** Which institutional rules apply to this data? In particular: is encryption of the database file itself required, in addition to full-disk encryption of the workstation? Where may backups be stored? Is there a passphrase policy? Is Argon2id required instead of scrypt for the backup key? After how many days should the reminder for an old encrypted backup appear (P09)? Gates the entry of real data, together with Q19, Q4 and Q13.
+**Q11 — Information security (L91).** Which institutional rules apply to this data? In particular: is encryption of the database file itself required, in addition to full-disk encryption of the workstation? Where may backups be stored? Is there a passphrase policy? Is Argon2id required instead of scrypt for the backup key? After how many days should the reminder for an old encrypted backup appear (P09)? Gated the entry of real data, together with Q19, Q4 and Q13, until D39.
 - Answered by: the committee.
 - Confirms: R33, D03, P05 (12 characters) and P09. Database encryption would be deferred item X1; Argon2id would be deferred item X13.
 - Until answered: OS-level protection, data minimisation, encrypted manual backups and a 12-character minimum passphrase, with a reminder after 30 days; no real data is entered.
+- Status: answered and implemented in task T12.5
 
 **Q12 — Users and history.** Will one person per installation maintain the data, or must several people edit the same data? May the change history record an operator name, and how long should the history be kept? If several people take turns on one machine, will they share one Windows account, or use a local folder restricted to the committee through `--data-dir` (separate Windows accounts give separate databases)? How long may backups that hold erased or pseudonymised values be kept?
 - Answered by: the committee.
 - Confirms: A12 and D05. Shared use would be deferred item X2; a retention or redaction tool would be X8.
 - Until answered: a single local operator, an optional operator label, and change history kept indefinitely (personal free-text values are not logged).
 
-**Q13 — Deployment.** How will the app be deployed on the hospital's machines? Is an unsigned executable delivered as a zip folder acceptable? Is a single `.exe` file mandatory? Is code signing expected? What type of Windows profile is used (roaming, mandatory, non-persistent/VDI — a mandatory or non-persistent profile discards `%LOCALAPPDATA%` at logoff)? Is AppLocker/WDAC or Smart App Control enforced, and which folders may run programs? Gates the entry of real data, together with Q19, Q4 and Q11.
+**Q13 — Deployment.** How will the app be deployed on the hospital's machines? Is an unsigned executable delivered as a zip folder acceptable? Is a single `.exe` file mandatory? Is code signing expected? What type of Windows profile is used (roaming, mandatory, non-persistent/VDI — a mandatory or non-persistent profile discards `%LOCALAPPDATA%` at logoff)? Is AppLocker/WDAC or Smart App Control enforced, and which folders may run programs? Gated the entry of real data, together with Q19, Q4 and Q11, until D39.
 - Answered by: the committee, with whoever manages those machines.
 - Confirms: D01, D10 and the default data location (D02). A single file would be deferred item X5; signing would be X6.
 - Until answered: a one-folder zip, unsigned, with checksums, a per-file manifest and a provenance attestation; no real data is entered.
+- Status: answered and implemented in task T12.5
 
 **Q14 — Terminology.** Can the committee review the interface terms in pt-BR, en-US and es-ES — for example the PPE level names, "baia", "reciclagem", and the Spanish and English equivalents of "prontidão"?
 - Answered by: the committee.
@@ -2777,6 +2781,7 @@ Note on K02 (QA finding P9-02): the mitigation "allow-listing by file hash for I
 - Answered by: the thesis author, with the committee.
 - Confirms: P07 and I06.
 - Until answered: the placeholder text appears in the UI banner, on every PDF page, in the About dialog, in the first-run notes and in the release notes.
+- Status: answered and implemented in task T12.4
 
 **Q16 — Retroactive data, 2022–2025 (L87).** In what form do these records exist — spreadsheets, documents, tables — so that the CSV import templates can match their structure? Only the structure is needed, never the data.
 - Answered by: the committee.

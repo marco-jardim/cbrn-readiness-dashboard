@@ -8,8 +8,7 @@ the CSV formats are in [import-templates.md](import-templates.md). `tests/meta/t
 checks that the package list, the migration list, the page and settings registries, the start-up
 hooks and the translation areas named here match the code.
 
-**Preliminary version — indicators not institutionally validated.** All example data in the
-repository is fictitious; demo identifiers start with `DEMO`.
+All example data in the repository is fictitious; demo identifiers start with `DEMO`.
 
 ## 1. What the program is
 
@@ -330,7 +329,7 @@ which accepts an existing local folder only.
 The Help menu opens the in-app help (`ui/shell/help.py`, F1 at the topic of the page shown) and the
 About dialog (`ui/shell/about.py`). Both are ordinary `QDialog`s that open without blocking and are
 built on the first request. The About dialog shows the version, the GPL-3.0-or-later notice, the
-source URL as plain text, the preliminary notice and one line per entry of `licenses\index.json`,
+source URL as plain text and one line per entry of `licenses\index.json`,
 which the bundle ships beside the executable; running from source there is no such index and the
 dialog says so. Neither dialog makes a network connection or opens a link.
 

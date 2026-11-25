@@ -20,21 +20,17 @@ manual test has not been executed yet: neither the manual smoke test
 [docs/guia-teste-manual.pt-BR.md](docs/guia-teste-manual.pt-BR.md)) has a result. The last published version is 1.1.0 (2026-11-21; see its entry below). The entry is dated
 only by the person who publishes it.
 
-### Planned for 1.2.0
+### Changes in 1.2.0
 
-This section is a plan, not a record of finished work. Nothing listed here has been changed in the
-code yet; each item states what the owner decided and what the release is meant to do.
+On 2026-11-24 the owner decided (D39) to remove the preliminary-version notice, the warning
+against entering real data, and the placeholder badges of the settings page together with their
+Confirm action. Phase 12 of the plan carries this out; the release is not published yet.
 
-- On 2026-11-24 the owner decided to remove the notices that mark the application as preliminary.
-  The release is meant to remove the "Preliminary version" notice, the warning against entering
-  real data until Q19, Q4, Q11 and Q13 are answered, and the "Placeholder - to be confirmed" badges
-  of the settings page together with their Confirm action.
 - The DEMO banner stays: it marks the fictitious demo data and is not part of that change.
 - Decision D39 also clears the code-level flags of the placeholders and withdraws `P07` (see the
   next section).
-- This entry will be rewritten with what actually shipped, replacing this section, when the
-  release is prepared. Nothing is claimed about the result of any review or test until it has
-  happened.
+- This entry is rewritten with what shipped when the release is prepared. Nothing is claimed
+  about the result of any review or test until it has happened.
 
 ### Placeholders still flagged in `domain/config.py`
 
@@ -77,22 +73,22 @@ records no answer to any of them.
 - Q1: open
 - Q2: open
 - Q3: open
-- Q4: open
+- Q4: answered and implemented in task T12.5
 - Q5: open
 - Q6: open
 - Q7: open
 - Q8: open
 - Q9: open
 - Q10: open
-- Q11: open
+- Q11: answered and implemented in task T12.5
 - Q12: open
-- Q13: open
+- Q13: answered and implemented in task T12.5
 - Q14: open
-- Q15: open
+- Q15: answered and implemented in task T12.4
 - Q16: open
 - Q17: open
 - Q18: answered and applied locally
-- Q19: open
+- Q19: answered and implemented in task T12.5
 - Q20: answered and applied locally
 - Q21: answered and implemented in task T9.2
 - Q22: answered and implemented in task T9.2
@@ -104,9 +100,9 @@ records no answer to any of them.
 - Q28: open
 - Q29: open
 
-Q19 (formal classification), Q4, Q11 and Q13 gate the entry of real data. "Sensitive" is a working
-label of this project, not a classification. Q25 to Q29 (stock by lot) were added to the plan on
-2026-11-20 with the stock module; none of them gates the entry of real data.
+Q19, Q4, Q11 and Q13 no longer gate the entry of real data (D39); the plan records only their
+status. "Sensitive" is a working label of this project, not a classification. Q25 to Q29 (stock by
+lot) were added to the plan on 2026-11-20 with the stock module.
 
 ### Translations (Q14)
 

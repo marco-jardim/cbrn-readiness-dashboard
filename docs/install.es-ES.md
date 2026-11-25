@@ -5,8 +5,8 @@ autorizan su ejecución. Existe en tres idiomas con la misma estructura:
 [pt-BR](install.pt-BR.md), [en-US](install.en-US.md) y [es-ES](install.es-ES.md). El texto de las
 notas de primera ejecución del zip (`README-first-run.*.txt`) es más corto y dice lo mismo.
 
-**Versión preliminar — indicadores no validados institucionalmente.** No introduzca todavía datos
-reales: vea [data-protection.md](data-protection.md) (en inglés).
+Para saber dónde se guardan los datos y cómo se protegen, vea
+[data-protection.md](data-protection.md) (en inglés).
 
 ## 1. Estado de esta guía
 
@@ -346,5 +346,4 @@ Las copias cifradas guardadas en otros medios no se ven afectadas en ninguno de 
   campo.
 - Las traducciones al pt-BR y al es-ES son borradores y siguen marcadas como `unfinished`; el comité
   aún no ha revisado la terminología.
-- Los indicadores no tienen metas hasta que el comité las introduzca, y no están validados
-  institucionalmente.
+- Los indicadores no tienen metas hasta que el comité las introduzca.

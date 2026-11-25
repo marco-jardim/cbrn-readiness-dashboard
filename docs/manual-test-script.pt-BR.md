@@ -5,8 +5,6 @@ documentação descrevem. Nenhuma pessoa o executou ainda. Nenhum resultado abai
 "resultado esperado" é o que o programa deve fazer segundo o código e os documentos, e é isso que o
 teste deve confirmar ou desmentir.
 
-**Versão preliminar - indicadores não validados institucionalmente.**
-
 A versão 1.2.0 está em preparação e ainda não foi publicada. A última versão publicada é a 1.1.0,
 publicada em 21/11/2026, antes da execução deste roteiro. Se você testar uma versão anterior, a
 janela "Sobre" e o relatório mostram o número dela no lugar de 1.2.0.
@@ -35,8 +33,8 @@ nos arquivos e pastas que você escolhe.
 - Uma frase secreta inventada para o teste, com pelo menos 12 caracteres e que não seja uma palavra
   comum. Não a escreva na folha de resultado.
 - **Não insira dados reais.** Este roteiro usa apenas os dados fictícios do modo de demonstração
-  (identificadores que começam com `DEMO`). Os dados reais só devem ser inseridos depois que a
-  instituição responder às perguntas Q19, Q4, Q11 e Q13 (veja [data-protection.md](data-protection.md)).
+  (identificadores que começam com `DEMO`). Sobre a proteção dos dados, veja
+  [data-protection.md](data-protection.md).
 - As situações dos dados de demonstração são as **do dia em que o banco de demonstração foi criado**
   (veja [demo-walkthrough.md](demo-walkthrough.md)). Execute o roteiro no mesmo dia da criação e
   **não altere o relógio do computador**. Em um banco criado em outro dia, as situações envelhecem e
@@ -52,8 +50,8 @@ nos arquivos e pastas que você escolhe.
    ```
 
    - Resultado esperado: abre-se a janela principal em português do Brasil. Uma faixa permanente
-     "DEMO — dados fictícios" está visível, junto com a faixa "Versão preliminar — indicadores não
-     validados institucionalmente.". O aviso de proteção de dados não aparece no modo de demonstração.
+     "DEMO — dados fictícios" está visível, e nenhuma outra faixa de versão ou de validação
+     aparece. O aviso de proteção de dados não aparece no modo de demonstração.
      O banco de demonstração é um arquivo separado, `demo\demo.sqlite3`, dentro de `C:\Temp\cbrn-teste`.
 2. Observe a navegação ("Navegação").
    - Resultado esperado: as nove páginas existem, nesta ordem: **Painel**, **Pessoal**,
@@ -278,8 +276,8 @@ dados e os registros de prontidão (instantâneos). Esta seção trata do relat�
      interno.
 2. Abra o PDF.
    - Resultado esperado: título "Relatório de Prontidão QBRN" e "Relatório interno"; a marca "DEMO -
-     DADOS FICTÍCIOS"; a data de referência, a versão do aplicativo (1.2.0) e o aviso de versão
-     preliminar em todas as páginas; seções de principais números, indicadores, alertas abertos e
+     DADOS FICTÍCIOS"; a data de referência, a versão do aplicativo (1.2.0) e a numeração de
+     página em todas as páginas, sem nenhum aviso de versão ou de validação; seções de principais números, indicadores, alertas abertos e
      gráficos; os identificadores do pessoal (`DEMO-P...`) aparecem no relatório interno. Os nomes da
      instituição e da unidade e o aviso de manuseio só aparecem se tiverem sido preenchidos em
      Configurações; no banco de demonstração novo estão vazios.
@@ -334,9 +332,9 @@ dados e os registros de prontidão (instantâneos). Esta seção trata do relat�
      execução orçamentária é um valor de fim de exercício, e a nota da página diz que ela é ajustada
      proporcionalmente ao exercício decorrido.
 4. Em "Alertas", observe as janelas de aviso (em dias) de habilitações de EPI e de manutenção.
-5. Procure um valor marcado "Valor provisório - a confirmar" com o botão "Confirmar".
-   - Resultado esperado: valores ainda provisórios mostram a marca e o botão; confirmar muda o estado
-     apenas desta instalação.
+5. Percorra as seções de configurações gerais, alertas e metas.
+   - Resultado esperado: nenhum valor mostra marca de valor provisório e nenhuma seção tem botão de
+     confirmação; cada campo pode ser salvo e relido.
 6. Nas seções de módulos, confira "Cursos" (`DEMO-C1` a `DEMO-C3`), "Tipos de ativo", "Métricas de
    avaliação" e "Fontes de recursos" (DIRSA e Comando da Aeronáutica entre as predefinidas).
    - Resultado esperado: as fontes predefinidas não podem ser excluídas nem ter o código alterado.
@@ -378,8 +376,8 @@ demonstração forem recriados.
 ## 12. Troca de idioma
 
 1. No menu "Idioma", escolha English (United States), ou use Ctrl+Shift+2.
-   - Resultado esperado: a janela inteira muda para inglês **sem reiniciar** (menus, navegação,
-     páginas, faixa preliminar: "Preliminary version - indicators not institutionally validated.").
+   - Resultado esperado: a janela inteira muda para inglês **sem reiniciar** (menus, navegação
+     e páginas).
 2. Escolha Español (España), ou use Ctrl+Shift+3.
    - Resultado esperado: a janela muda para espanhol, também sem reiniciar.
 3. Volte para Português (Brasil) pelo menu ou com Ctrl+Shift+1.
@@ -512,8 +510,7 @@ documento passa de "NÃO EXECUTADO" para "EXECUTADO em AAAA-MM-DD, resultado: ..
 
 ## 17. O que este roteiro não cobre
 
-- Dados reais: nenhum passo usa dados reais, e este roteiro não substitui a decisão sobre a
-  classificação formal dos dados (Q19) nem as respostas a Q4, Q11 e Q13.
+- Dados reais: nenhum passo usa dados reais.
 - Uma pasta de dados em um caminho de rede (UNC): nunca foi testada em um compartilhamento real.
 - O perfil limpo do Windows, o download e as somas de verificação: estão em
   [smoke-test.pt-BR.md](smoke-test.pt-BR.md).

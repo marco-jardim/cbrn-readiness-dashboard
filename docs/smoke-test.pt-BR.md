@@ -5,8 +5,6 @@ descrevem. Nenhuma pessoa o executou ainda, nem em um computador Windows limpo, 
 resultado abaixo foi observado: cada "resultado esperado" é o que o programa deve fazer segundo o
 código e a documentação, e é isso que o teste deve confirmar ou desmentir.
 
-**Versão preliminar - indicadores não validados institucionalmente.**
-
 A versão 1.2.0 está em preparação: ainda não tem tag nem execução do fluxo de publicação. A última
 versão publicada é a 1.1.0, publicada em 21/11/2026, por decisão do responsável, antes da execução
 deste roteiro. Execute-o sobre os arquivos da página pública da versão (ou, para a 1.2.0, sobre o
@@ -33,8 +31,7 @@ dúvida, o texto em inglês do código-fonte é a referência (por exemplo, "Bac
 - Uma frase secreta inventada para o teste, com pelo menos 12 caracteres e que não seja uma palavra
   comum. Não a escreva na folha de resultado.
 - **Não insira dados reais.** Todos os dados deste roteiro são fictícios (códigos como `TESTE-001`).
-  Os dados reais só devem ser inseridos depois que a instituição responder às perguntas Q19, Q4, Q11
-  e Q13 (veja [data-protection.md](data-protection.md)).
+  Sobre a proteção dos dados, veja [data-protection.md](data-protection.md).
 - Ao terminar, registre o resultado na seção 11.
 
 ## 1. Verificar o download
@@ -66,13 +63,13 @@ dúvida, o texto em inglês do código-fonte é a referência (por exemplo, "Bac
    - Não deve ser pedida elevação de administrador em nenhum momento.
 4. Na primeira inicialização com um perfil limpo, aparece o aviso "Aviso de proteção de dados".
    - Resultado esperado: o aviso informa a pasta de dados (`%LOCALAPPDATA%\cbrn-readiness-dashboard`),
-     a exigência de criptografia de disco completo, o funcionamento dos backups, que "sensível" não é
-     uma classificação formal e que dados reais não devem ser inseridos antes das respostas a Q19, Q4,
-     Q11 e Q13, e como várias pessoas podem se revezar em um computador. Feche o aviso.
+     a exigência de criptografia de disco completo, o funcionamento dos backups, que "sensível" é um
+     rótulo de trabalho e não uma classificação formal, e como várias pessoas podem se revezar em um
+     computador. Feche o aviso.
    - Fechando e abrindo o programa de novo, o aviso **não** deve voltar.
 5. Observe a janela principal.
-   - Resultado esperado: o idioma é português do Brasil; a faixa "Versão preliminar - indicadores não
-     validados institucionalmente." está visível; não há faixa de DEMO; há navegação ("Navegação")
+   - Resultado esperado: o idioma é português do Brasil; nenhuma faixa de versão ou de validação
+     é exibida e não há faixa de DEMO; há navegação ("Navegação")
      para Painel, Pessoal, Infraestrutura, Exercícios, Orçamento, Alertas, Relatórios e Configurações.
    - Pode aparecer a faixa de lembrete de backup ("O último backup criptografado é antigo ou não
      existe"): é esperado em um perfil novo, pois nenhum backup criptografado foi feito.
@@ -156,8 +153,8 @@ anote a mensagem exata; ela deve explicar o problema e não alterar nada.
 ## 6. Trocar o idioma
 
 1. No menu "Idioma", escolha English (United States).
-   - Resultado esperado: a janela inteira muda para inglês **sem reiniciar** (menus, navegação, faixa
-     preliminar: "Preliminary version - indicators not institutionally validated.").
+   - Resultado esperado: a janela inteira muda para inglês **sem reiniciar** (menus, navegação e
+     textos das páginas).
 2. Escolha Español (España).
    - Resultado esperado: a janela muda para espanhol, também sem reiniciar.
 3. Volte para Português (Brasil).
@@ -198,7 +195,7 @@ anote a mensagem exata; ela deve explicar o problema e não alterar nada.
 7. Menu "Arquivo" > "Abrir pasta de dados".
    - Resultado esperado: o Explorador de Arquivos abre a pasta de dados.
 
-## 8. Painel e aviso preliminar
+## 8. Painel e faixas
 
 Abra o programa sem `--demo` e vá para o Painel.
 
@@ -209,8 +206,9 @@ Abra o programa sem `--demo` e vá para o Painel.
 2. Mude a "Data de referência" na barra de ferramentas para uma data anterior e depois use "Hoje".
    - Resultado esperado: os valores são recalculados para a data escolhida (a partir dos registros
      como são conhecidos hoje) e voltam ao normal com "Hoje".
-3. Em todas as páginas e no Painel, confirme que a faixa "Versão preliminar - indicadores não
-   validados institucionalmente." permanece visível.
+3. Em todas as páginas e no Painel, confirme que nenhuma faixa além de DEMO (só no modo de
+   demonstração) e dos lembretes de backup e de somente leitura aparece. Sem `--demo`, não deve
+   haver faixa de DEMO.
 
 ## 9. Modo portátil (opcional)
 

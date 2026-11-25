@@ -5,10 +5,10 @@ data lives, which threats the design considers, which controls the application p
 duties stay with the institution and the operator. The application shows the main points in a
 notice at its first start.
 
-**Real data must not be entered yet.** Until the open questions on the formal classification of the
-data (Q19), staff data (Q4), information security (Q11) and the deployment environment (Q13) are
-answered, use only the fictitious demo data (`--demo`). The answers are not recorded in this
-repository.
+The questions on the formal classification of the data (Q19), staff data (Q4), information security
+(Q11) and the deployment environment (Q13) are answered (D39). This repository records only their
+status, never the answers. It holds no real data: the demo mode (`--demo`) uses fictitious data
+only.
 
 ## Where the data lives
 
@@ -118,7 +118,8 @@ project does not know whether any of the data is classified or access-restricted
 Lei 12.527/2011 art. 28 and Decreto 7.845/2012 art. 19, a classification is made by a formal
 decision of the competent authority; this is not legal advice. If the data is classified, this
 design (a plain SQLite database, plain automatic backups, commercial cryptography, an unsigned
-binary from a public repository) is probably unsuitable, and real data must not be entered.
+binary from a public repository) is probably unsuitable. The question of the formal classification
+(Q19) is answered; this repository records only its status, never the answer.
 
 ## Stock data
 

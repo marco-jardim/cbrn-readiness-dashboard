@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""PDF rendering of a report document (PLAN.md T8.6; D08, D09, A11, R11-R13, P07, P10).
+"""PDF rendering of a report document (PLAN.md T8.6; D08, D09, A11, R11-R13, P10).
 
 Two steps, so that tests can look at the content without reading a PDF:
 
