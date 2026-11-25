@@ -190,6 +190,5 @@ def anonymise(document: ReportDocument) -> ReportDocument:
         charts=tuple(_chart(chart, state) for chart in document.charts if not chart.internal_only),
         retraining=(),
         overdue_assets=(),
-        preliminary_notice_code=document.preliminary_notice_code,
         stock_lots=(),
     )

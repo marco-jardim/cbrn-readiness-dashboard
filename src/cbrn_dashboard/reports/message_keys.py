@@ -20,7 +20,6 @@ __all__ = [
     "EXERCISE_KIND_KEYS",
     "FUNDING_SOURCE_KEYS",
     "LOT_STATUS_KEYS",
-    "PRELIMINARY_KEY",
     "SHARED_AREAS",
     "STOCK_CATEGORY_KEYS",
     "STOCK_TYPE_KEYS",
@@ -39,12 +38,6 @@ SHARED_AREAS: Final[tuple[str, ...]] = (
     "exercises",
     "budget",
     "stock",
-)
-
-#: The preliminary-version notice (I06, P07), as the shell banner words it (an em dash).
-PRELIMINARY_KEY: Final[MessageKey] = (
-    "Shell",
-    "Preliminary version \u2014 indicators not institutionally validated.",
 )
 
 #: ``CertStatus`` values (the retraining list).
@@ -146,7 +139,7 @@ def all_shared_keys() -> tuple[MessageKey, ...]:
         STOCK_CATEGORY_KEYS,
         LOT_STATUS_KEYS,
     )
-    keys = [PRELIMINARY_KEY]
+    keys: list[MessageKey] = []
     for table in tables:
         keys.extend(table.values())
     return tuple(keys)

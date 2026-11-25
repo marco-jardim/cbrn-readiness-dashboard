@@ -3,7 +3,7 @@
 
 pypdf is a test-only dependency (``dev`` group); it is never bundled. The parse is checked for
 the page count, the A4 page size and, when pypdf can extract text from a Qt-generated PDF, the
-preliminary notice and the page number on every page.
+page number on every page (and that neither half of the removed preliminary notice is there).
 
 Text extraction from Qt PDFs is not guaranteed (PLAN.md K18). The text checks therefore run only
 when ``extract_text()`` returns non-empty text for page 1; the page count and the page size are
@@ -36,7 +36,7 @@ def _application(qapp: QApplication) -> QApplication:
 
 
 def _squeeze(text: str) -> str:
-    """``text`` without any white space (the footer notice wraps in the PDF)."""
+    """``text`` without any white space (text may wrap or space differently in the PDF)."""
     return re.sub(r"\s+", "", text)
 
 
@@ -47,7 +47,7 @@ def _document(variant: ReportVariant, *, extra_assets: int) -> ReportDocument:
 
 @pytest.mark.parametrize("extra_assets", [0, 150], ids=["short", "long"])
 @pytest.mark.parametrize("variant", list(ReportVariant))
-def test_the_pdf_parses_with_pypdf_in_a4_with_the_notice_on_every_page(
+def test_the_pdf_parses_with_pypdf_in_a4_with_page_numbers_and_no_preliminary_notice(
     qm_dir: Path, tmp_path: Path, variant: ReportVariant, extra_assets: int
 ) -> None:
     target = tmp_path / "report.pdf"
@@ -72,6 +72,6 @@ def test_the_pdf_parses_with_pypdf_in_a4_with_the_notice_on_every_page(
     before, _, after = NOTICE_EN.partition("\u2014")  # the dash may not survive the extraction
     for number, page in enumerate(pages, start=1):
         text = _squeeze(page.extract_text())
-        assert _squeeze(before) in text, number
-        assert _squeeze(after) in text, number
+        assert _squeeze(before) not in text, number
+        assert _squeeze(after) not in text, number
         assert _squeeze(f"Page {number} of {len(pages)}") in text, number

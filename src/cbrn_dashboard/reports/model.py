@@ -2,8 +2,8 @@
 """Report model: the content of a report for an as-of date (PLAN.md T8.5; D09, A11, R11-R13).
 
 Qt-free and read-only. The model is codes and numbers only: no translated text (T8.6 renders the
-document to PDF and translates the codes; the wording of the preliminary notice, P07, lives in the
-translations). Two variants are built from the same figures:
+document to PDF and translates the codes using the translations). Two variants are built from the
+same figures:
 
 * ``INTERNAL`` - the full report for the committee, DIRSA and the Air Force Command (R11, R12):
   header with the institution and unit names, the locally set handling notice, key figures, the
@@ -78,7 +78,6 @@ from cbrn_dashboard.storage import app_meta
 from cbrn_dashboard.storage.db import DatabaseConnection
 
 __all__ = [
-    "PRELIMINARY_NOTICE_CODE",
     "AlertCountRow",
     "AlertSource",
     "AssetListRow",
@@ -94,9 +93,6 @@ __all__ = [
     "StaffListRow",
     "StockLotListRow",
 ]
-
-#: The code of the preliminary notice (I06, P07); the wording lives in the translations.
-PRELIMINARY_NOTICE_CODE = "PRELIMINARY"
 
 _PERS_CERT_VALID = "PERS_CERT_VALID"
 _PERS_CERT_EXPIRING = "PERS_CERT_EXPIRING"
@@ -260,7 +256,6 @@ class ReportDocument:
     charts: tuple[ReportChart, ...]
     retraining: tuple[StaffListRow, ...]
     overdue_assets: tuple[AssetListRow, ...]
-    preliminary_notice_code: str = PRELIMINARY_NOTICE_CODE
     #: The expired and expiring lots with stock (internal variant only; empty when anonymised).
     stock_lots: tuple[StockLotListRow, ...] = ()
 

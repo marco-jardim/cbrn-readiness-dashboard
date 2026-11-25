@@ -36,7 +36,6 @@ from cbrn_dashboard.reports.message_keys import (
     DEGREE_LEVEL_KEYS,
     FUNDING_SOURCE_KEYS,
     LOT_STATUS_KEYS,
-    PRELIMINARY_KEY,
     STOCK_CATEGORY_KEYS,
     all_shared_keys,
 )
@@ -77,7 +76,11 @@ AS_OF = date(2026, 3, 5)
 GENERATED = "2026-03-05T12:00:00Z"
 VERSION = "9.9.9-test"
 THRESHOLD = 5
+#: The preliminary-version notice, removed from every report (T12.3, D39): it must never appear.
 NOTICE_EN = "Preliminary version \u2014 indicators not institutionally validated."
+NOTICE_PT = "Vers\u00e3o preliminar \u2014 indicadores n\u00e3o validados institucionalmente."
+NOTICE_ES = "Versi\u00f3n preliminar \u2014 indicadores no validados institucionalmente."
+NOTICES = (NOTICE_EN, NOTICE_PT, NOTICE_ES)
 
 #: Strings that identify the fixture's institution, operator or records.
 FORBIDDEN = (INSTITUTION, UNIT, OPERATOR, HANDLING, IDENTIFIER, TAG, "Fictitious", "FIC-")
@@ -256,7 +259,6 @@ def test_internal_variant_has_the_header_the_handling_notice_and_the_lists(
     assert "Assets with overdue maintenance" in layout.text.splitlines()
     assert GENERATED in layout.text
     assert VERSION in layout.text
-    assert layout.footer_notice == NOTICE_EN
 
 
 def test_anonymised_variant_has_no_identifying_header_notice_or_lists(
@@ -530,7 +532,7 @@ def test_numbers_dates_and_money_follow_the_language_of_the_report(
         ("es_ES", "Informe de Preparación QBRN"),
     ],
 )
-def test_the_title_and_the_notice_are_in_the_report_language(
+def test_the_title_and_the_page_template_are_in_the_report_language(
     internal: ReportDocument, qm_dir: Path, language: str, title: str
 ) -> None:
     layout = _layout(internal, language, qm_dir)
@@ -538,11 +540,25 @@ def test_the_title_and_the_notice_are_in_the_report_language(
     assert title in layout.title
     assert layout.text.splitlines()[0] == title
     assert layout.language == language
-    assert layout.footer_notice
-    if language != "en_US":
-        assert layout.footer_notice != NOTICE_EN
     assert "%1" in layout.page_template
     assert "%2" in layout.page_template
+
+
+@pytest.mark.parametrize("language", i18n.LANGUAGES)
+@pytest.mark.parametrize("variant", list(ReportVariant))
+def test_no_report_shows_the_preliminary_notice(
+    internal: ReportDocument, qm_dir: Path, language: str, variant: ReportVariant
+) -> None:
+    document = internal if variant is ReportVariant.INTERNAL else anonymise(internal)
+    layout = _layout(document, language, qm_dir)
+
+    for notice in NOTICES:
+        assert notice not in layout.text
+        assert notice not in layout.html
+        assert escape(notice) not in layout.html
+    assert "%1" in layout.page_template
+    assert "%2" in layout.page_template
+    assert not hasattr(layout, "footer_notice")
 
 
 @pytest.mark.parametrize("language", i18n.LANGUAGES)
@@ -590,7 +606,7 @@ def test_every_label_code_has_a_translation(qm_dir: Path, language: str) -> None
             label = getattr(texts, method)(code)
             assert label.strip(), (method, code)
             assert label != code, (method, code)
-    assert texts.preliminary_notice("PRELIMINARY").strip()
+    assert not hasattr(texts, "preliminary_notice")
 
 
 def test_unknown_codes_are_shown_as_themselves(qm_dir: Path) -> None:
@@ -605,7 +621,6 @@ def test_unknown_codes_are_shown_as_themselves(qm_dir: Path) -> None:
     assert texts.cert_status("?") == "?"
     assert texts.cell_label("not-a-key") == "not-a-key"
     assert texts.cell_label("kf:PERSONNEL:unknown") == "kf:PERSONNEL:unknown"
-    assert texts.preliminary_notice("OTHER") == "OTHER"
 
 
 @pytest.mark.parametrize("language", i18n.LANGUAGES)
@@ -616,7 +631,7 @@ def test_the_shared_message_keys_exist_in_the_ui_catalogues(language: str) -> No
         found = [m for m in catalogue.messages if m.context == context and m.source == source]
         assert len(found) == 1, (area, source)
         assert found[0].translations[0].strip()
-    assert PRELIMINARY_KEY in all_shared_keys()
+    assert ("Shell", NOTICE_EN) not in all_shared_keys()
 
 
 # --------------------------------------------------------------------------- demo marker

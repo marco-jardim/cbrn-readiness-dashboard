@@ -27,7 +27,6 @@ from cbrn_dashboard.domain.personnel import PpeLevel
 from cbrn_dashboard.domain.stock import LotStatus
 from cbrn_dashboard.reports.anonymise import anonymise
 from cbrn_dashboard.reports.model import (
-    PRELIMINARY_NOTICE_CODE,
     AlertSource,
     Cell,
     IndicatorRow,
@@ -339,7 +338,7 @@ def test_internal_header_notice_and_flags(world: World) -> None:
         app_version=VERSION,
         operator_label=OPERATOR,
     )
-    assert document.preliminary_notice_code == PRELIMINARY_NOTICE_CODE == "PRELIMINARY"
+    assert "preliminary_notice_code" not in {f.name for f in dataclasses.fields(ReportDocument)}
     assert document.handling_notice == HANDLING
     assert document.small_count_threshold == 5
     assert document.is_demo is False
@@ -590,7 +589,7 @@ def test_anonymised_header_lists_and_notice(world: World) -> None:
     assert document.handling_notice == ""
     assert document.retraining == ()
     assert document.overdue_assets == ()
-    assert document.preliminary_notice_code == "PRELIMINARY"
+    assert "preliminary_notice_code" not in {f.name for f in dataclasses.fields(document)}
     assert document.small_count_threshold == 5
     assert [g.module for g in document.key_figures] == [
         Module.PERSONNEL,

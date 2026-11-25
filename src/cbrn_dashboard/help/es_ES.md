@@ -127,7 +127,7 @@ Tres tipos de alerta proceden de las existencias: un lote caducado que aún tien
 
 La página Informes ofrece:
 
-- "Crear informe..." escribe el informe PDF de la fecha de referencia, interno o anonimizado. El informe anonimizado contiene solo recuentos, y los recuentos por debajo de un umbral se suprimen; el umbral se define en Ajustes. Cada página de cada informe lleva el aviso de versión preliminar, y un informe hecho a partir de la base de datos de demostración se marca como ficticio.
+- "Crear informe..." escribe el informe PDF de la fecha de referencia, interno o anonimizado. El informe anonimizado contiene solo recuentos, y los recuentos por debajo de un umbral se suprimen; el umbral se define en Ajustes. Un informe hecho a partir de la base de datos de demostración se marca como ficticio.
 - "Exportar archivos CSV..." escribe los datos de los módulos en archivos CSV, un archivo por tipo de datos, en una carpeta que usted elige.
 - "Exportación de validación..." escribe los archivos para la validación de los indicadores, construidos a partir de las instantáneas y de las ediciones de ejercicios. Puede registrar instantáneas retroactivas para las ediciones que no tienen una instantánea anterior e informa de cuántas.
 - "Importar archivo CSV..." y "Escribir plantillas..." (véase Importación).

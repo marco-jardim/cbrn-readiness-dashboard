@@ -127,7 +127,7 @@ Three kinds of alert come from the stock: a lot that has expired and still has s
 
 The Reports page offers:
 
-- "Create report..." writes the PDF report of the as-of date, either internal or anonymised. The anonymised report contains counts only, and counts below a threshold are suppressed; the threshold is set in Settings. Every page of every report carries the preliminary notice, and a report made from the demo database is marked as fictitious.
+- "Create report..." writes the PDF report of the as-of date, either internal or anonymised. The anonymised report contains counts only, and counts below a threshold are suppressed; the threshold is set in Settings. A report made from the demo database is marked as fictitious.
 - "Export CSV files..." writes the data of the modules as CSV files, one file per kind of data, into a folder that you choose.
 - "Validation export..." writes the files for the validation of the indicators, built from the snapshots and the exercise editions. It can record retroactive snapshots for editions that have no earlier snapshot, and it tells you how many.
 - "Import CSV file..." and "Write templates..." (see Import).

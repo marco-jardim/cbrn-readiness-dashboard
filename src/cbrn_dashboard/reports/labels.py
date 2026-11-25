@@ -8,7 +8,7 @@ asks them directly. Nothing is installed, removed or changed in the application,
 locale is not touched.
 
 Texts that belong to the report are literal ``texts.translate("Reports", "<English>")`` calls (the
-catalogues ``reports_<lang>.ts`` hold them). Texts shared with the UI (the preliminary notice, the
+catalogues ``reports_<lang>.ts`` hold them). Texts shared with the UI (the
 certificate statuses, the built-in asset types and funding sources, the degree levels) are looked
 up through :mod:`cbrn_dashboard.reports.message_keys` in the catalogues of the UI. A code that has
 no label is shown as itself, never as an error.
@@ -29,7 +29,6 @@ from cbrn_dashboard.reports.message_keys import (
     EXERCISE_KIND_KEYS,
     FUNDING_SOURCE_KEYS,
     LOT_STATUS_KEYS,
-    PRELIMINARY_KEY,
     SHARED_AREAS,
     STOCK_CATEGORY_KEYS,
     MessageKey,
@@ -333,10 +332,6 @@ class ReportTexts:
         """The label of a stock lot status (shared with the stock page)."""
         key = LOT_STATUS_KEYS.get(code)
         return code if key is None else self.lookup(key)
-
-    def preliminary_notice(self, code: str) -> str:
-        """The preliminary-version notice (I06, P07); another code is shown as itself."""
-        return self.lookup(PRELIMINARY_KEY) if code == "PRELIMINARY" else code
 
     # ------------------------------------------------------------------ figures and charts
 

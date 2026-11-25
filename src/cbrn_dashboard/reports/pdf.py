@@ -5,13 +5,13 @@ Two steps, so that tests can look at the content without reading a PDF:
 
 1. :func:`build_layout` is a pure function of the :class:`ReportDocument` and a
    :class:`~cbrn_dashboard.reports.labels.ReportTexts`: it returns a :class:`ReportLayout` with the
-   HTML of the report (Qt's rich-text subset), its plain text, the chart data, the footer notice and
+   HTML of the report (Qt's rich-text subset), its plain text, the chart data, the page template and
    the watermark. Every time value comes from the document (never from the clock). Numbers, dates,
    money and percentages are formatted with :mod:`cbrn_dashboard.ui.shell.formatting` in the
    language of the report.
 2. :func:`write_report_pdf` lays the HTML out in a ``QTextDocument`` and paginates it by hand with
    a ``QPainter`` on a ``QPdfWriter`` (A4), because ``QTextDocument.print()`` has no per-page
-   footer: every page gets the preliminary notice and "Page i of n", and, for a demo document, the
+   footer: every page gets "Page i of n" and, for a demo document, the
    "DEMO - FICTITIOUS DATA" watermark. Charts go through the T6.4 adapter.
 
 What is printed (and what is not):
@@ -132,7 +132,6 @@ class ReportLayout:
     title: str
     html: str
     text: str
-    footer_notice: str
     page_template: str
     watermark: str
     charts: tuple[ChartData, ...]
@@ -550,8 +549,6 @@ def build_layout(
     if watermark:
         doc.box(watermark, bold=True)
     doc.table((), _header_rows(document, texts, fmt, internal))
-    notice = texts.preliminary_notice(document.preliminary_notice_code)
-    doc.box(notice, bold=True)
     if internal and document.handling_notice:
         handling_label = texts.translate("Reports", "Handling notice")
         pattern = texts.translate("Reports", "%1: %2")
@@ -580,7 +577,6 @@ def build_layout(
         title=pdf_title,
         html="<html><body>" + "".join(doc.html) + "</body></html>",
         text="\n".join(doc.text),
-        footer_notice=notice,
         page_template=texts.translate("Reports", "Page %1 of %2"),
         watermark=watermark,
         charts=tuple(doc.charts),
@@ -643,14 +639,7 @@ def _draw_footer(
         painter.setPen(QColor("#000000"))
         painter.drawLine(0, top, width, top)
         gap = max(4, height // 8)
-        number_width = width // 5
-        notice_area = QRectF(0.0, top + gap, float(width - number_width), float(height - gap))
-        number_area = QRectF(
-            float(width - number_width), top + gap, float(number_width), float(height - gap)
-        )
-        notice_option = QTextOption(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        notice_option.setWrapMode(QTextOption.WrapMode.WordWrap)
-        painter.drawText(notice_area, layout.footer_notice, notice_option)
+        number_area = QRectF(0.0, top + gap, float(width), float(height - gap))
         number = fill(layout.page_template, str(page[0]), str(page[1]))
         painter.drawText(
             number_area,

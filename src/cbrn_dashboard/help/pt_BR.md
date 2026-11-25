@@ -127,7 +127,7 @@ Três tipos de alerta vêm do estoque: um lote vencido que ainda tem estoque (cr
 
 A página Relatórios oferece:
 
-- "Criar relatório..." grava o relatório PDF da data de referência, interno ou anonimizado. O relatório anonimizado contém apenas contagens, e contagens abaixo de um limite são suprimidas; o limite é definido em Configurações. Toda página de todo relatório traz o aviso de versão preliminar, e um relatório feito a partir do banco de demonstração é marcado como fictício.
+- "Criar relatório..." grava o relatório PDF da data de referência, interno ou anonimizado. O relatório anonimizado contém apenas contagens, e contagens abaixo de um limite são suprimidas; o limite é definido em Configurações. Um relatório feito a partir do banco de demonstração é marcado como fictício.
 - "Exportar arquivos CSV..." grava os dados dos módulos em arquivos CSV, um arquivo por tipo de dado, em uma pasta que você escolhe.
 - "Exportação de validação..." grava os arquivos para a validação dos indicadores, montados a partir dos instantâneos e das edições de exercícios. Ela pode registrar instantâneos retroativos para edições sem instantâneo anterior e informa quantos.
 - "Importar arquivo CSV..." e "Gravar modelos..." (veja Importação).
