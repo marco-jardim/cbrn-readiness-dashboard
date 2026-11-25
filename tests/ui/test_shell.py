@@ -43,12 +43,6 @@ from tests.ui.conftest import NOW, StartApp
 
 pytestmark = pytest.mark.ui
 
-PRELIMINARY = "Preliminary version \u2014 indicators not institutionally validated."
-PRELIMINARY_BY_LANGUAGE = {
-    "en-US": PRELIMINARY,
-    "pt-BR": "Vers\u00e3o preliminar \u2014 indicadores n\u00e3o validados institucionalmente.",
-    "es-ES": "Versi\u00f3n preliminar \u2014 indicadores no validados institucionalmente.",
-}
 DEMO_TEXT = "DEMO \u2014 fictitious data"
 LOCKED_TEXT = "Another instance is already using this data folder. Close it and start again."
 TOO_NEW_TEXT = "The database was written by a newer version of this application."
@@ -815,32 +809,26 @@ def test_a_real_database_has_no_demo_banner(started_app: StartApp) -> None:
     assert BannerCode.DEMO.value not in _banners(handle)
 
 
-@pytest.mark.parametrize("mode", ["real", "demo", "read_only"])
-def test_the_preliminary_notice_is_always_visible_and_cannot_be_hidden(
-    started_app: StartApp, tmp_path: Path, mode: str
+def test_no_preliminary_banner_exists(started_app: StartApp) -> None:
+    # T12.4 (D39): the preliminary notice is gone; only the DEMO banner is permanent.
+    assert "PRELIMINARY" not in BannerCode.__members__
+    plain = expect_handle(started_app(demo=False)).window.banners
+    assert plain.visible_codes() == ()
+    assert plain.findChild(QFrame, "banner_PRELIMINARY") is None
+    with pytest.raises(ValueError, match="PRELIMINARY"):
+        plain.show_banner("PRELIMINARY")
+
+
+def test_a_demo_start_shows_the_demo_banner_first_and_it_cannot_be_hidden(
+    started_app: StartApp,
 ) -> None:
-    if mode == "read_only":
-        handle = _read_only_app(started_app, tmp_path)
-    else:
-        handle = expect_handle(started_app(demo=mode == "demo"))
-    banners = handle.window.banners
-    assert "PRELIMINARY" in banners.visible_codes()
-    assert banners.text("PRELIMINARY") == PRELIMINARY
-    banners.hide_banner("PRELIMINARY")
-    assert "PRELIMINARY" in banners.visible_codes()
-    _assert_banner_really_shown(banners, "PRELIMINARY")
-
-
-@pytest.mark.parametrize("lang", sorted(PRELIMINARY_BY_LANGUAGE))
-def test_the_preliminary_wording_in_three_languages(started_app: StartApp, lang: str) -> None:
-    handle = expect_handle(started_app(lang=lang))
-    assert handle.window.banners.text("PRELIMINARY") == PRELIMINARY_BY_LANGUAGE[lang]
-
-
-def test_the_preliminary_notice_follows_a_language_switch(started_app: StartApp) -> None:
-    handle = expect_handle(started_app(lang="en-US"))
-    handle.window.language_actions["pt_BR"].trigger()
-    assert handle.window.banners.text("PRELIMINARY") == PRELIMINARY_BY_LANGUAGE["pt-BR"]
+    banners = expect_handle(started_app(demo=True)).window.banners
+    before = banners.visible_codes()
+    assert before[0] == "DEMO"
+    assert "PRELIMINARY" not in before
+    banners.hide_banner("DEMO")
+    assert banners.visible_codes() == before
+    _assert_banner_really_shown(banners, "DEMO")
 
 
 def test_location_warnings_get_a_banner_each(started_app: StartApp) -> None:
@@ -856,20 +844,19 @@ def test_location_warnings_get_a_banner_each(started_app: StartApp) -> None:
         assert code in visible
         assert handle.window.banners.text(code)
         _assert_banner_really_shown(handle.window.banners, code)
-    assert visible[-1] == "PRELIMINARY"
 
 
 def test_banners_can_be_shown_and_hidden(started_app: StartApp) -> None:
     banners = expect_handle(started_app()).window.banners
-    assert banners.visible_codes() == ("PRELIMINARY",)
+    assert banners.visible_codes() == ()
     clock_frame = banners.findChild(QFrame, "banner_CLOCK_SUSPECT")
     assert clock_frame is not None
     assert clock_frame.isHidden()
     banners.show_banner("CLOCK_SUSPECT")
-    assert banners.visible_codes() == ("CLOCK_SUSPECT", "PRELIMINARY")
+    assert banners.visible_codes() == ("CLOCK_SUSPECT",)
     _assert_banner_really_shown(banners, "CLOCK_SUSPECT")
     banners.hide_banner("CLOCK_SUSPECT")
-    assert banners.visible_codes() == ("PRELIMINARY",)
+    assert banners.visible_codes() == ()
     assert clock_frame.isHidden()
     with pytest.raises(ValueError, match="NOPE"):
         banners.show_banner("NOPE")
@@ -1078,7 +1065,7 @@ def test_a_context_without_a_database_has_no_services(
     window = MainWindow(bare)
     qtbot.addWidget(window)
     assert window.windowTitle() == "CBRN Readiness Dashboard"
-    assert window.banners.visible_codes() == ("PRELIMINARY",)
+    assert window.banners.visible_codes() == ()
 
 
 def test_fake_prompts_record_calls_and_use_scripted_answers(fake_prompts: FakePrompts) -> None:
@@ -1230,7 +1217,7 @@ def test_shown_banners_have_a_visible_frame_an_icon_and_a_text(
     )
     banners = handle.window.banners
     shown = banners.visible_codes()
-    assert {"READ_ONLY", "ONEDRIVE", "PRELIMINARY"} <= set(shown)
+    assert {"READ_ONLY", "ONEDRIVE"} <= set(shown)
     for code in BannerCode:
         frame = banners.findChild(QFrame, f"banner_{code.value}")
         assert frame is not None

@@ -5,7 +5,7 @@
 The window is built from an :class:`~cbrn_dashboard.ui.shell.context.AppContext`. The navigation
 and the page stack are filled from the page registry; the toolbar holds the as-of date selector
 (D13), bound both ways to ``context.as_of``; the banner area shows the demo, read-only, location,
-clock, backup-reminder and translation banners and the permanent preliminary notice.
+clock, backup-reminder and translation banners; the demo banner cannot be hidden.
 
 The File menu holds "Back up...", "Restore..." and "Open data folder" (T7.4, the actions of
 :class:`~cbrn_dashboard.ui.backup.actions.BackupActions`; the folder is opened by the single helper

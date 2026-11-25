@@ -2,8 +2,8 @@
 """The About dialog (PLAN.md T10.2, section 8 "Licences", P07).
 
 It shows the application name, the version (``cbrn_dashboard.__version__``), the GPL-3.0-or-later
-notice with the absence of any warranty, the source URL as plain, selectable text, the preliminary
-notice, and one line per component of the third-party licence index that the bundle ships.
+notice with the absence of any warranty, the source URL as plain, selectable text, and one line per
+component of the third-party licence index that the bundle ships.
 
 The index is ``licenses\\index.json``, written beside the executable by ``scripts/build_exe.py``
 (``scripts/collect_licenses.py`` produces it). It is looked up only when the program is frozen;
@@ -33,7 +33,6 @@ from PySide6.QtWidgets import (
 )
 
 from cbrn_dashboard import __version__
-from cbrn_dashboard.ui.shell.banners import BannerCode, banner_text
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.i18n import app_display_name
 from cbrn_dashboard.ui.shell.widgets import follow_language, mark_data
@@ -120,7 +119,7 @@ def component_line(component: Component) -> str:
 
 
 class AboutDialog(QDialog):
-    """Version, licence, source, preliminary notice and the third-party components.
+    """Version, licence, source and the third-party components.
 
     ``locate_index`` returns the path of the licence index or ``None``; the default looks beside
     the frozen executable. It is read once, when the dialog is built.
@@ -162,7 +161,6 @@ class AboutDialog(QDialog):
             | Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
         mark_data(self.source_label)  # the URL is not translated
-        self.notice_label = self._label("about_preliminary_notice")
         self.components_caption = self._label("about_components_caption")
         self.components_status = self._label("about_components_status")
         self.components_list = QListWidget(self)
@@ -186,7 +184,6 @@ class AboutDialog(QDialog):
             self.licenses_label,
             self.source_caption,
             self.source_label,
-            self.notice_label,
             self.components_caption,
             self.components_status,
         ):
@@ -242,7 +239,6 @@ class AboutDialog(QDialog):
             )
         )
         self.source_caption.setText(QCoreApplication.translate("Shell", "Source code:"))
-        self.notice_label.setText(banner_text(BannerCode.PRELIMINARY))
         self.components_caption.setText(
             QCoreApplication.translate("Shell", "Third-party components")
         )

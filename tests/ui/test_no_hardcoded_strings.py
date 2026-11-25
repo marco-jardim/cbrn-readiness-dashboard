@@ -205,7 +205,6 @@ def test_the_shell_walk_is_not_vacuous(pseudo_app: AppHandle) -> None:
         _t("Main toolbar"),
         _t("Navigation"),
         _t("DEMO \u2014 fictitious data"),
-        _t("Preliminary version \u2014 indicators not institutionally validated."),
     }
     assert expected <= texts
     assert any(text.startswith(_t("Data folder: ")[:-1]) for text in texts)

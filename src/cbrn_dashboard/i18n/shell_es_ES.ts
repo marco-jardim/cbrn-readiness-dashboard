@@ -137,10 +137,6 @@
         <translation type="unfinished">No se pudieron leer las preferencias guardadas y se restablecieron a sus valores predeterminados.</translation>
     </message>
     <message>
-        <source>Preliminary version — indicators not institutionally validated.</source>
-        <translation type="unfinished">Versión preliminar — indicadores no validados institucionalmente.</translation>
-    </message>
-    <message>
         <source>Open alerts</source>
         <extracomment>Emitted when the button of the ``ALERT_SUMMARY`` banner is pressed (open the Alerts page).</extracomment>
         <translation type="unfinished">Abrir alertas</translation>

@@ -137,10 +137,6 @@
         <translation>The saved preferences could not be read and were reset to their defaults.</translation>
     </message>
     <message>
-        <source>Preliminary version — indicators not institutionally validated.</source>
-        <translation>Preliminary version — indicators not institutionally validated.</translation>
-    </message>
-    <message>
         <source>Open alerts</source>
         <extracomment>Emitted when the button of the ``ALERT_SUMMARY`` banner is pressed (open the Alerts page).</extracomment>
         <translation>Open alerts</translation>

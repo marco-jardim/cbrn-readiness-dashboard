@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The banner area above the pages (PLAN.md T1.9, D02, D23, D25, I06, P07).
 
-Each banner has a code and is drawn as an ICON plus TEXT, never colour alone (D23). The
-``PRELIMINARY`` notice is permanent, and so is ``DEMO`` once shown: ``hide_banner`` leaves them
-alone. Texts go through
+Each banner has a code and is drawn as an ICON plus TEXT, never colour alone (D23). ``DEMO`` is
+permanent once shown: ``hide_banner`` leaves it alone. Texts go through
 ``QCoreApplication.translate("Shell", ...)`` and are re-applied by :meth:`BannerArea.retranslate`.
 
 The ``ALERT_SUMMARY`` banner (T6.6) is the start-up alert summary: its text carries the number of
@@ -103,11 +102,10 @@ class BannerCode(StrEnum):
     ALERT_SUMMARY = "ALERT_SUMMARY"
     PREFERENCES_RESET = "PREFERENCES_RESET"
     TRANSLATIONS_MISSING = "TRANSLATIONS_MISSING"
-    PRELIMINARY = "PRELIMINARY"
 
 
 # Banners that carry an informational icon; every other banner carries a warning icon.
-_INFORMATION = frozenset({BannerCode.DEMO, BannerCode.PRELIMINARY})
+_INFORMATION = frozenset({BannerCode.DEMO})
 
 # The banners keep their own light colours whatever the system palette is (a dark system theme
 # would otherwise give the labels and the action button light text on the light background), so
@@ -176,14 +174,10 @@ def banner_text(code: BannerCode) -> str:
             return QCoreApplication.translate(
                 "Shell", "Translations are not compiled: the English source text is shown."
             )
-        case BannerCode.PRELIMINARY:
-            return QCoreApplication.translate(
-                "Shell", "Preliminary version — indicators not institutionally validated."
-            )
 
 
 class BannerArea(QWidget):
-    """Zero or more banners stacked vertically; ``PRELIMINARY`` is always visible."""
+    """Zero or more banners stacked vertically; ``DEMO`` cannot be hidden once shown."""
 
     #: Emitted when the button of the ``ALERT_SUMMARY`` banner is pressed (open the Alerts page).
     alerts_requested = Signal()
@@ -198,7 +192,7 @@ class BannerArea(QWidget):
         self._frames: dict[BannerCode, QFrame] = {}
         self._labels: dict[BannerCode, QLabel] = {}
         self._shown: set[BannerCode] = set()
-        self._permanent: set[BannerCode] = {BannerCode.PRELIMINARY}
+        self._permanent: set[BannerCode] = set()
         style = self.style()
         ratio = device_pixel_ratio()
         for code in BannerCode:
@@ -231,7 +225,6 @@ class BannerArea(QWidget):
             frame.setVisible(False)
             self._frames[code] = frame
             self._labels[code] = text
-        self.show_banner(BannerCode.PRELIMINARY)
         self.retranslate()
 
     # ------------------------------------------------------------------ API
@@ -254,7 +247,7 @@ class BannerArea(QWidget):
         self.show_banner(banner)
 
     def hide_banner(self, code: str) -> None:
-        """Hide the banner ``code``; permanent banners (``PRELIMINARY``, a shown ``DEMO``) stay."""
+        """Hide the banner ``code``; permanent banners (a shown ``DEMO``) stay."""
         banner = BannerCode(code)
         if banner in self._permanent:
             return

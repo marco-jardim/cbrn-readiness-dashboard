@@ -5,7 +5,8 @@ The help files are checked as plain text (same topics and heading structure in e
 topic for every registered page, no link and no image, the UI names they quote are the ones the
 catalogues give) and through the viewer (loads in each language, follows a language switch, renders
 without anchors). The About dialog is checked against ``__version__``, the licence notice, the
-preliminary notice and a licence index written by the real ``scripts/collect_licenses.py`` renderer.
+absence of any preliminary notice and a licence index written by the real
+``scripts/collect_licenses.py`` renderer.
 The pseudo-locale walks at the end need the new ``Shell`` strings in the catalogues (run
 ``python scripts/i18n.py update`` first, as for every new string).
 """
@@ -20,7 +21,7 @@ from types import ModuleType
 
 import pytest
 from PySide6.QtCore import QCoreApplication, Qt
-from PySide6.QtWidgets import QListWidget, QWidget
+from PySide6.QtWidgets import QLabel, QListWidget, QWidget
 from pytestqt.qtbot import QtBot
 
 from cbrn_dashboard import __version__, i18n
@@ -36,7 +37,6 @@ from cbrn_dashboard.ui.shell.about import (
     licence_index_path,
     read_licence_index,
 )
-from cbrn_dashboard.ui.shell.banners import BannerCode, banner_text
 from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.help import (
     HelpDialog,
@@ -145,7 +145,6 @@ def test_the_three_files_have_the_same_topics_in_the_same_order() -> None:
         "backup_folder",
         "settings",
         "privacy",
-        "preliminary",
         "infrastructure_stock",
     }
     assert {key for key, _level in reference} == expected_keys
@@ -275,7 +274,6 @@ def test_the_help_quotes_the_names_the_interface_shows(
     for context, source in QUOTED_NAMES:
         shown = QCoreApplication.translate(context, source)
         assert f'"{shown}"' in text, (language, context, source, shown)
-    assert f'"{banner_text(BannerCode.PRELIMINARY)}"' in text
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
@@ -517,8 +515,8 @@ def test_the_about_dialog_shows_version_licence_notice_and_source(
         dialog.gpl_label.text()
     )
     assert dialog.warranty_label.text().startswith("This program comes with ABSOLUTELY NO WARRANTY")
-    assert dialog.notice_label.text() == banner_text(BannerCode.PRELIMINARY)
-    assert dialog.notice_label.text().startswith("Preliminary version")
+    assert dialog.findChild(QLabel, "about_preliminary_notice") is None
+    assert not hasattr(dialog, "notice_label")
     assert dialog.source_label.text() == SOURCE_URL
     assert SOURCE_URL == "https://github.com/marco-jardim/cbrn-readiness-dashboard"
 
@@ -590,7 +588,7 @@ def test_the_about_text_follows_the_language(app_context: AppContext, qtbot: QtB
         assert dialog.version_label.text() == (
             QCoreApplication.translate("Shell", "Version %1").replace("%1", __version__)
         )
-        assert dialog.notice_label.text() == banner_text(BannerCode.PRELIMINARY)
+        assert dialog.source_caption.text() == QCoreApplication.translate("Shell", "Source code:")
         assert __version__ in dialog.version_label.text()
 
 

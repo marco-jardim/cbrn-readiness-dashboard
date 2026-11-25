@@ -133,7 +133,7 @@ has none marked. The count was made over the `.ts` files in `src/cbrn_dashboard/
 message, one `type="unfinished"` translation); a test compares it with the files. No message was
 added or changed at the opening of this cycle.
 
-- Messages still marked unfinished: 2476 (1238 in the pt-BR catalogues and 1238 in the es-ES
+- Messages still marked unfinished: 2474 (1237 in the pt-BR catalogues and 1237 in the es-ES
   catalogues), pending terminology review (Q14)
 
 ### Known limits
