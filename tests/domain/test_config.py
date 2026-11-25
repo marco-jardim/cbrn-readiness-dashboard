@@ -58,28 +58,28 @@ G = PlaceholderKind.GENERIC_DEFAULT
 
 # (id, kind, fields, question, flag)
 EXPECTED_REGISTRY: list[tuple[str, PlaceholderKind, tuple[str, ...], str | None, bool]] = [
-    ("P01", G, ("cert_warning_days",), "Q2", True),
-    ("P02", G, ("maintenance_warning_days",), "Q6", True),
-    ("P03", L, (), "Q1", True),
-    ("P04", G, ("snapshot_monthly", "snapshot_on_report"), "Q9", True),
-    ("P05", G, ("min_passphrase_length",), "Q11", True),
-    ("P06", G, ("daily_backups_kept",), None, True),
-    ("P07", G, (), "Q15", True),
-    ("P08", G, ("budget_prorate_target",), "Q8", True),
-    ("P09", G, ("backup_reminder_days",), "Q11", True),
-    ("P10", L, ("report_handling_notice",), "Q10", True),
-    ("A02", G, ("ppe_hierarchy_enabled", "ppe_hierarchy"), "Q2", True),
-    ("A04", G, ("ppe_validity_months",), "Q2", True),
-    ("A05", G, ("degraded_counts_as_available",), "Q5", True),
-    ("A06", G, (), "Q6", True),
-    ("A07", G, (), "Q7", True),
-    ("A08", G, ("default_currency",), "Q8", True),
-    ("A09", G, (), "Q3", True),
-    ("A10", G, (), "Q3", True),
-    ("A11", G, ("small_count_threshold",), "Q10", True),
-    ("D18", L, ("institution_name", "unit_name"), "Q17", True),
-    ("P11", G, ("stock_expiry_warning_days",), "Q28", True),
-    ("P12", L, (), "Q26", True),
+    ("P01", G, ("cert_warning_days",), "Q2", False),
+    ("P02", G, ("maintenance_warning_days",), "Q6", False),
+    ("P03", L, (), "Q1", False),
+    ("P04", G, ("snapshot_monthly", "snapshot_on_report"), "Q9", False),
+    ("P05", G, ("min_passphrase_length",), "Q11", False),
+    ("P06", G, ("daily_backups_kept",), None, False),
+    # P07 (preliminary-version notice wording) is withdrawn by D39.
+    ("P08", G, ("budget_prorate_target",), "Q8", False),
+    ("P09", G, ("backup_reminder_days",), "Q11", False),
+    ("P10", L, ("report_handling_notice",), "Q10", False),
+    ("A02", G, ("ppe_hierarchy_enabled", "ppe_hierarchy"), "Q2", False),
+    ("A04", G, ("ppe_validity_months",), "Q2", False),
+    ("A05", G, ("degraded_counts_as_available",), "Q5", False),
+    ("A06", G, (), "Q6", False),
+    ("A07", G, (), "Q7", False),
+    ("A08", G, ("default_currency",), "Q8", False),
+    ("A09", G, (), "Q3", False),
+    ("A10", G, (), "Q3", False),
+    ("A11", G, ("small_count_threshold",), "Q10", False),
+    ("D18", L, ("institution_name", "unit_name"), "Q17", False),
+    ("P11", G, ("stock_expiry_warning_days",), "Q28", False),
+    ("P12", L, (), "Q26", False),
 ]
 
 
@@ -147,7 +147,7 @@ def test_with_changes_none_keeps_the_current_value_and_false_or_zero_change_it()
 # --------------------------------------------------------------------------- local-only values
 
 
-def test_local_only_values_have_no_code_default_and_are_marked() -> None:
+def test_local_only_values_have_empty_code_defaults_and_are_not_flagged() -> None:
     config = ReadinessConfig()
     assert config.institution_name == ""
     assert config.unit_name == ""
@@ -157,17 +157,18 @@ def test_local_only_values_have_no_code_default_and_are_marked() -> None:
     )
     for placeholder_id in ("P03", "P10", "D18", "P12"):
         assert placeholder(placeholder_id).kind is PlaceholderKind.LOCAL_ONLY
-        assert placeholder(placeholder_id).placeholder is True
+        assert placeholder(placeholder_id).placeholder is False
+        assert placeholder_id not in flagged_placeholder_ids()
     assert placeholder("P03").fields == ()  # the targets live in their own table
 
 
-def test_p12_minimum_stock_is_flagged_local_only_with_no_code_default_and_no_field() -> None:
+def test_p12_minimum_stock_is_local_only_unflagged_with_no_code_default_and_no_field() -> None:
     item = placeholder("P12")
     assert item.kind is PlaceholderKind.LOCAL_ONLY
-    assert item.placeholder is True
+    assert item.placeholder is False
     assert item.question == "Q26"
     assert item.fields == ()  # the minimum lives in stock_item_type, not in the configuration
-    assert "P12" in flagged_placeholder_ids()
+    assert "P12" not in flagged_placeholder_ids()
     names = {spec.name for spec in dataclasses.fields(ReadinessConfig)}
     assert not {name for name in names if "minimum" in name}
 
@@ -178,7 +179,7 @@ def test_p11_stock_expiry_window_is_a_generic_default_of_90_days() -> None:
     assert item.kind is PlaceholderKind.GENERIC_DEFAULT
     assert item.fields == ("stock_expiry_warning_days",)
     assert item.question == "Q28"
-    assert item.placeholder is True
+    assert item.placeholder is False
     found = placeholder_for_field("stock_expiry_warning_days")
     assert found is not None
     assert found.id == "P11"
@@ -198,21 +199,21 @@ def test_registry_equals_the_explicit_table() -> None:
     assert actual == EXPECTED_REGISTRY
 
 
-def test_flagged_placeholder_ids_in_registry_order() -> None:
-    assert flagged_placeholder_ids() == tuple(row[0] for row in EXPECTED_REGISTRY if row[4])
-    assert flagged_placeholder_ids() == (
-        "P01", "P02", "P03", "P04", "P05", "P06", "P07", "P08", "P09", "P10",
-        "A02", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "D18", "P11", "P12",
-    )  # fmt: skip
+def test_no_placeholder_is_flagged_since_d39() -> None:
+    assert flagged_placeholder_ids() == ()
     assert isinstance(flagged_placeholder_ids(), tuple)
+    assert not any(item.placeholder for item in PLACEHOLDERS)
+    assert "P07" not in {item.id for item in PLACEHOLDERS}
+    with pytest.raises(KeyError):
+        placeholder("P07")
 
 
 def test_flagged_ids_follow_the_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    cleared = dataclasses.replace(PLACEHOLDERS[0], placeholder=False)
+    flagged = dataclasses.replace(PLACEHOLDERS[0], placeholder=True)
     with monkeypatch.context() as patch:
-        patch.setattr(cfg, "PLACEHOLDERS", (cleared, *PLACEHOLDERS[1:]))
-        assert flagged_placeholder_ids() == tuple(p.id for p in PLACEHOLDERS[1:])
-    assert flagged_placeholder_ids()[0] == "P01"
+        patch.setattr(cfg, "PLACEHOLDERS", (flagged, *PLACEHOLDERS[1:]))
+        assert flagged_placeholder_ids() == ("P01",)
+    assert flagged_placeholder_ids() == ()
 
 
 def test_placeholder_lookup() -> None:
@@ -245,8 +246,8 @@ def test_registry_check_detects_broken_invariants(monkeypatch: pytest.MonkeyPatc
         (*PLACEHOLDERS, cfg.Placeholder("X01", G, ("cert_warning_days",), None)),  # field twice
         (*PLACEHOLDERS, cfg.Placeholder("P01", G, (), None)),  # id twice
         (*PLACEHOLDERS, cfg.Placeholder("X01", G, ("operator_label",), None)),
-        (*PLACEHOLDERS, cfg.Placeholder("X01", L, ("default_currency",), None)),  # not empty
-        (*PLACEHOLDERS, cfg.Placeholder("X01", L, (), None, placeholder=False)),
+        # a local-only field with a non-empty default
+        (*PLACEHOLDERS, cfg.Placeholder("X01", L, ("default_currency",), None)),
     ]
     for broken in broken_sets:
         with monkeypatch.context() as patch:

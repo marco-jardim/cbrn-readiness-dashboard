@@ -6,15 +6,16 @@ The checks read plain files; nothing here tags, builds or publishes anything. Th
 * the version: one source (``__init__.py``), read by hatch, equal to the installed metadata, and
   stated by the documents that talk about the release;
 * ``CHANGELOG.md``: an entry for the version, listing exactly the placeholders still flagged in
-  ``domain/config.py`` (local-only ones marked), the assumptions without a setting, and every open
-  question by its status only;
+  ``domain/config.py`` (none since D39), the local-only values (marked), the assumptions without a
+  setting, and every open question by its status only;
 * the release machinery (workflow, release-body template) and the manual smoke-test script exist;
 * the documents do not claim that a release was published, tested on real machines or signed.
 
-T10.5 extends this module for version 1.0: the 1.0.0 entry lists the placeholders still flagged,
-the local-only values stay flagged with an empty default, the number of unfinished translation
-messages stated equals the number found, every question Q1 to Q29 has one of the three status
-phrases, and the manual test script for the committee names every registered page.
+T10.5 extends this module for version 1.0: the entry lists the placeholders still flagged, the
+local-only values keep an empty default (T12.13: they are listed, not flagged), the number of
+unfinished translation messages stated equals the number found, every question Q1 to Q29 has one of
+the three status phrases, and the manual test script for the committee names every registered
+page.
 """
 
 from __future__ import annotations
@@ -67,7 +68,7 @@ PUBLISHED_ENTRY_SHA256: dict[str, str] = {
 #: The questions of PLAN.md section 12 that the changelog lists: Q1 to Q29.
 QUESTION_NUMBERS = range(1, 30)
 
-#: The local-only placeholders (PLAN.md 3.5): flagged in code, never given a code default.
+#: The local-only values (PLAN.md 3.5): never given a code default, not flagged since D39.
 LOCAL_ONLY_IDS = ("P03", "P10", "D18", "P12")
 
 #: Every registered page (registry key) and its Brazilian Portuguese navigation title. The manual
@@ -307,27 +308,31 @@ def test_the_changelog_lists_exactly_the_flagged_placeholders() -> None:
             assert match.group(1) not in listed, f"{match.group(1)} is listed twice"
             listed[match.group(1)] = line
     assert set(listed) == set(flagged_placeholder_ids())
+    if not flagged_placeholder_ids():
+        # D39: no flag is set; the section says so in a sentence and has no bullet.
+        assert not [line for line in lines if line.startswith("- ")]
+        assert "no placeholder is flagged" in _one_line(" ".join(lines))
 
 
-def test_the_changelog_marks_the_local_only_values() -> None:
-    lines = _section(_entry(__version__), "Placeholders still flagged")
-    marked = {
-        match.group(1)
-        for line in lines
-        if (match := re.match(r"^- `([A-Z]\d\d)`.*\(local-only\)$", line)) is not None
-    }
+def test_the_changelog_lists_the_local_only_values_marked_local_only() -> None:
+    lines = _section(_entry(__version__), "Local-only values")
+    bullets = [line for line in lines if line.startswith("- ")]
+    listed: dict[str, str] = {}
+    for line in bullets:
+        match = re.match(r"^- `([A-Z]\d\d)` - .+ \(local-only\)$", line)
+        assert match is not None, f"not of the form '- `Xnn` - text (local-only)': {line!r}"
+        assert match.group(1) not in listed, f"{match.group(1)} is listed twice"
+        listed[match.group(1)] = line
     local_only = {item.id for item in PLACEHOLDERS if item.kind is PlaceholderKind.LOCAL_ONLY}
     assert local_only
-    assert marked == local_only
+    assert set(listed) == local_only
 
 
-def test_the_local_only_values_are_flagged_and_have_no_code_default() -> None:
-    flagged = set(flagged_placeholder_ids())
+def test_the_local_only_values_have_empty_code_defaults() -> None:
     defaults = ReadinessConfig()
     for placeholder_id in LOCAL_ONLY_IDS:
         item = placeholder(placeholder_id)
         assert item.kind is PlaceholderKind.LOCAL_ONLY, placeholder_id
-        assert placeholder_id in flagged, f"{placeholder_id} lost its flag"
         for name in item.fields:
             assert getattr(defaults, name) in ("", None), f"{name} has a code default"
     # The indicator targets (P03) live in their own table and have no config field at all.

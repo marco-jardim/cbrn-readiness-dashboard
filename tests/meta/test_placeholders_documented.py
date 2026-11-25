@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PLAN = ROOT / "PLAN.md"
 
 TABLE_ROW = re.compile(r"^\| ([AP]\d\d) \|")
+_EM_DASH = "\u2014"  # "Configurable in" of an assumption without a setting or a withdrawn row
 
 
 def _section_3_5() -> str:
@@ -32,12 +33,18 @@ def test_section_is_found_and_contains_the_table() -> None:
     assert "| ID | Assumption or placeholder |" in section
 
 
-def test_every_flagged_placeholder_is_documented_in_the_plan() -> None:
+def test_no_placeholder_is_flagged_and_the_plan_says_so() -> None:
     section = _section_3_5()
     flagged = flagged_placeholder_ids()
-    assert flagged  # a release always has flagged placeholders until the owner clears them
-    for placeholder_id in flagged:
+    assert flagged == ()  # D39: since 1.2.0 no flag is set
+    assert "From 1.2.0 (D39) no flag is set" in section
+    for placeholder_id in flagged:  # kept for a future release that flags a value again
         assert re.search(rf"\b{re.escape(placeholder_id)}\b", section), placeholder_id
+
+
+def test_the_withdrawn_p07_is_not_declared_in_the_code() -> None:
+    assert "P07" not in {item.id for item in PLACEHOLDERS}
+    assert _table_rows().get("P07") == _EM_DASH
 
 
 def _table_rows() -> dict[str, str]:
@@ -58,7 +65,8 @@ def test_every_configurable_row_of_the_plan_is_declared_in_the_code() -> None:
     assert any(key.startswith("A") for key in rows)  # the pattern must match both kinds
     assert any(key.startswith("P") for key in rows)
     for row_id, configurable_in in rows.items():
-        if configurable_in != "\u2014":  # an em dash: an assumption without a setting
+        # An em dash: an assumption without a setting, or a withdrawn row (P07, D39).
+        if configurable_in != _EM_DASH:
             assert row_id in declared, row_id
 
 
@@ -66,6 +74,7 @@ def test_every_placeholder_in_the_code_has_a_row_in_the_plan() -> None:
     rows = _table_rows()
     # D18 is declared in the code but documented in section 3.4 (decisions register), not in the
     # section 3.5 table: it is the one documented exception.
+    # P07 is withdrawn (D39): its row stays in the plan with "Configurable in" an em dash.
     exceptions = {"D18"}
     for item in PLACEHOLDERS:
         if item.id in exceptions:

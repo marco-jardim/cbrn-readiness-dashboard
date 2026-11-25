@@ -412,7 +412,8 @@ Some entities need a note:
 * `stock_item_type` follows the rule of the other lists: built-in types are never created or
   changed by an import (an existing built-in code is `DUPLICATE_KEY`, any other row with
   `built_in` = 1 is `BUILT_IN_NOT_ALLOWED`), so import the user-defined types only. A minimum
-  stock that comes with a type is stored as it is and does not confirm the placeholder P12.
+  stock that comes with a type is stored as it is (P12 is a local-only value: a real database has no
+  minimum until it is set).
 * `stock_lot` creates the lot only, with NO movement: the quantity of a lot comes from
   `stock_movement`, which you import next. Until then the lots have no stock and show as not yet
   received. The report of the file gives their number as the warning `LOT_WITHOUT_MOVEMENTS`

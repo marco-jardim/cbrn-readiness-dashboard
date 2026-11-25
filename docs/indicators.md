@@ -7,9 +7,8 @@ one its module, unit, direction, dimension keys, source and proposal flag, must 
 `src/cbrn_dashboard/domain/registry.py`; every placeholder of `src/cbrn_dashboard/domain/config.py`
 must have a row in the placeholder table. A new indicator without an entry here fails that test.
 
-**Preliminary version — indicators not institutionally validated.** The indicator list is a design
-proposal that the committee has not confirmed (Q1). All examples in this repository are
-fictitious; demo records start with `DEMO`.
+The indicator list is a design proposal (Q1); the registry marks each indicator that is one. All
+examples in this repository are fictitious; demo records start with `DEMO`.
 
 ## How an indicator is computed
 
@@ -327,43 +326,42 @@ Indicator alerts need a target, so with the default of no targets they never app
 
 ## Placeholders and assumptions
 
-Every value that needs confirmation is declared in `domain/config.py` with a code-level flag. The
-flag is the release-level truth. There are two kinds:
+Every configurable value is declared in `domain/config.py`. Since decision D39 (1.2.0) no
+placeholder flag is set: every row below says `cleared`, and `flagged_placeholder_ids()` returns an
+empty list. Settings shows no badge and has no Confirm action. There are two kinds:
 
 - `local_only`: targets (P03), institution and unit names (D18) and the report handling notice
-  (P10) and the minimum stock per item type (P12). They never get a code default, their flag is never cleared in code, and they are
-  confirmed per installation in Settings only.
-- `generic_default`: all the others. The flag may be cleared, and the default changed, only by a
-  release commit when the project owner judges that the value is not sensitive.
+  (P10) and the minimum stock per item type (P12). Their code default is empty, and each
+  installation sets them in Settings.
+- `generic_default`: all the others. They are confirmed code defaults. Changing one in a later
+  release needs a step that pins the old value on existing databases (K24).
 
-Settings shows a "placeholder — to be confirmed" badge until the operator confirms or changes a
-value. That per-installation state only hides the badge; it never changes the flag in code. The
-column "Code flag" says `set` while the flag in the code is set.
+`P07` (the wording of the preliminary-version notice) is withdrawn and has no row. The column "Code
+flag" says `cleared` while the flag in the code is not set.
 
 | ID | Kind | Config fields | Default in code | Code flag | Question |
 |---|---|---|---|---|---|
-| P01 | `generic_default` | `cert_warning_days` | 90 days | set | Q2 |
-| P02 | `generic_default` | `maintenance_warning_days` | 30 days | set | Q6 |
-| P03 | `local_only` | none (targets have their own table) | no targets, so "no target" | set | Q1 |
-| P04 | `generic_default` | `snapshot_monthly`, `snapshot_on_report` | on, on | set | Q9 |
-| P05 | `generic_default` | `min_passphrase_length` | 12 characters (hard floor 12) | set | Q11 |
-| P06 | `generic_default` | `daily_backups_kept` | 7 copies (hard floor 2) | set | none |
-| P07 | `generic_default` | none (wording lives in the translations) | translated notice | set | Q15 |
-| P08 | `generic_default` | `budget_prorate_target` | on (linear) | set | Q8 |
-| P09 | `generic_default` | `backup_reminder_days` | 30 days | set | Q11 |
-| P10 | `local_only` | `report_handling_notice` | empty | set | Q10 |
-| A02 | `generic_default` | `ppe_hierarchy_enabled`, `ppe_hierarchy` | off, empty | set | Q2 |
-| A04 | `generic_default` | `ppe_validity_months` | not set | set | Q2 |
-| A05 | `generic_default` | `degraded_counts_as_available` | off | set | Q5 |
-| A06 | `generic_default` | none (intervals live in the asset tables) | interval not set | set | Q6 |
-| A07 | `generic_default` | none (metrics live in their table) | no metrics | set | Q7 |
-| A08 | `generic_default` | `default_currency` | BRL | set | Q8 |
-| A09 | `generic_default` | none (the course list is a table) | empty list | set | Q3 |
-| A10 | `generic_default` | none (the status is per degree) | completed | set | Q3 |
-| A11 | `generic_default` | `small_count_threshold` | 5 | set | Q10 |
-| D18 | `local_only` | `institution_name`, `unit_name` | empty | set | Q17 |
-| P11 | `generic_default` | `stock_expiry_warning_days` | 90 days | set | Q28 |
-| P12 | `local_only` | none (the minimum lives in the stock item type table) | no minimum | set | Q26 |
+| P01 | `generic_default` | `cert_warning_days` | 90 days | cleared | Q2 |
+| P02 | `generic_default` | `maintenance_warning_days` | 30 days | cleared | Q6 |
+| P03 | `local_only` | none (targets have their own table) | no targets, so "no target" | cleared | Q1 |
+| P04 | `generic_default` | `snapshot_monthly`, `snapshot_on_report` | on, on | cleared | Q9 |
+| P05 | `generic_default` | `min_passphrase_length` | 12 characters (hard floor 12) | cleared | Q11 |
+| P06 | `generic_default` | `daily_backups_kept` | 7 copies (hard floor 2) | cleared | none |
+| P08 | `generic_default` | `budget_prorate_target` | on (linear) | cleared | Q8 |
+| P09 | `generic_default` | `backup_reminder_days` | 30 days | cleared | Q11 |
+| P10 | `local_only` | `report_handling_notice` | empty | cleared | Q10 |
+| A02 | `generic_default` | `ppe_hierarchy_enabled`, `ppe_hierarchy` | off, empty | cleared | Q2 |
+| A04 | `generic_default` | `ppe_validity_months` | not set | cleared | Q2 |
+| A05 | `generic_default` | `degraded_counts_as_available` | off | cleared | Q5 |
+| A06 | `generic_default` | none (intervals live in the asset tables) | interval not set | cleared | Q6 |
+| A07 | `generic_default` | none (metrics live in their table) | no metrics | cleared | Q7 |
+| A08 | `generic_default` | `default_currency` | BRL | cleared | Q8 |
+| A09 | `generic_default` | none (the course list is a table) | empty list | cleared | Q3 |
+| A10 | `generic_default` | none (the status is per degree) | completed | cleared | Q3 |
+| A11 | `generic_default` | `small_count_threshold` | 5 | cleared | Q10 |
+| D18 | `local_only` | `institution_name`, `unit_name` | empty | cleared | Q17 |
+| P11 | `generic_default` | `stock_expiry_warning_days` | 90 days | cleared | Q28 |
+| P12 | `local_only` | none (the minimum lives in the stock item type table) | no minimum | cleared | Q26 |
 
 The configuration also holds `operator_label` (D05), which is not a placeholder.
 
@@ -390,7 +388,6 @@ each one that a placeholder waits for is:
 | Q9 | readiness reading and predictive validity |
 | Q10 | reports |
 | Q11 | information security |
-| Q15 | preliminary notice |
 | Q17 | report headers |
 | Q26 | units of issue and minimum stock |
 | Q28 | stock expiry rules |

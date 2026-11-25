@@ -44,7 +44,7 @@ Labels used in this plan:
 - **F**: fixed decision by the project owner.
 - **I**: implicit requirement, a necessary consequence of R or F.
 - **D**: design decision made in this plan.
-- **A / P**: assumption or placeholder default that needs confirmation, linked to an open question **Q**.
+- **A / P**: assumption or placeholder default, linked to an open question **Q**. Since 1.2.0 (D39) no placeholder flag is set (§3.5).
 - **O**: owner request outside Appendix A (dated, §3.1b).
 - **T**: task (§10). **X**: deferred item (§10.4).
 
@@ -209,13 +209,13 @@ These requests come from the project owner, not from the appendix, so they carry
 New A, P and D identifiers are assigned at merge time (next free number). Design decisions go to this register and assumptions or placeholders to §3.5 (§10.1).
 
 ### 3.5 Assumptions and placeholder defaults
-None of the items below is stated in the appendix. Each is an assumption (A) or a placeholder default (P) that needs confirmation, and each is linked to an open question (§12) except P06, which is purely technical.
+None of the items below is stated in the appendix. Each is an assumption (A) or a placeholder default (P), and each is linked to an open question (§12) except P06, which is purely technical.
 
-Every placeholder is declared in `domain/config.py` with a `placeholder` flag. That code-level flag is the release-level truth. Placeholders are of two kinds:
-- *Local-only values:* the indicator targets (P03), the institution and unit names (D18) and the internal report's handling notice. They never get a code default, their flag is never cleared in code, and they are confirmed per installation in Settings only.
-- *Generic defaults:* all the others (warning windows, snapshot cadence, passphrase length, backup counts, pro-rating, reminder days, small-count threshold, disclaimer wording). The code flag may be cleared, and the default changed, only by a commit made when the project owner judges that the value is not sensitive. The commit and the changelog record only the status, never the committee's reasoning (§12).
+Every placeholder is declared in `domain/config.py` with a `placeholder` flag (a code-level constant of the release). Placeholders are of two kinds:
+- *Local-only values:* the indicator targets (P03), the institution and unit names (D18), the internal report's handling notice (P10) and the minimum stock per item type (P12). They never get a code default (the code default is empty) and each installation sets them in Settings.
+- *Generic defaults:* all the others (warning windows, snapshot cadence, passphrase length, backup counts, pro-rating, reminder days, small-count threshold). They are confirmed code defaults. The commit and the changelog record only the status, never the committee's reasoning (§12).
 
-Settings shows a "placeholder — to be confirmed" badge until the operator confirms or changes the value; this per-database "confirmed" state only hides the badge on that installation and never changes the flag in code. Release notes and the changelog list the code-level flags.
+From 1.2.0 (D39) no flag is set; `confirmed.<ID>` rows written before 1.2.0 are kept and never read; changing a generic default needs a step that pins the old value on existing databases (K24). Settings shows no "placeholder — to be confirmed" badge and has no Confirm action. P07 is withdrawn (its row stays below with "Configurable in" an em dash). The changelog lists the local-only values.
 
 A-items without a setting (A01, A03, A12, A13, A14, A15, A16) are assumptions, not placeholders. They carry no flag and appear in the changelog only as open questions.
 
@@ -243,12 +243,12 @@ A-items without a setting (A01, A03, A12, A13, A14, A15, A16) are assumptions, n
 | P04 | Automatic snapshots (D21) | monthly (first start in a month) and on every report | Settings | Q9 |
 | P05 | Minimum backup passphrase length. Settings cannot go below the hard floor of 12 characters | 12 characters | Settings | Q11 |
 | P06 | Number of automatic daily local backups kept. Settings cannot go below the hard floor of 2 copies | 7 | Settings | — (technical) |
-| P07 | Disclaimer wording (I06) — withdrawn by D39 (T12.4, T12.13) | "Preliminary version — indicators not institutionally validated." | translations | Q15 |
+| P07 | Disclaimer wording (I06) — withdrawn by D39 (T12.4, T12.13) | "Preliminary version — indicators not institutionally validated." | — | Q15 |
 | P08 | Pro-rating of the `BUD_EXEC_RATE` target over the fiscal year (the target is multiplied by the elapsed fraction of the year, linear) | linear, on | Settings → Budget | Q8 |
 | P09 | Reminder banner when the last encrypted backup is older than this many days | 30 days | Settings → Backup | Q11 |
-| P10 | Handling notice printed on the internal report (local-only value: no code default, flag never cleared in code) | empty | Settings → Reports | Q10 |
+| P10 | Handling notice printed on the internal report (local-only value: empty code default) | empty | Settings → Reports | Q10 |
 | P11 | Warning window before a stock lot expires (D34): a lot is "expiring" when its expiry date is on or before the as-of date plus this many days | 90 days | Settings → Alerts | Q28 |
-| P12 | Minimum stock per item type (D35; local-only value: no code default, no config field, flag never cleared in code; stored in `stock_item_type`) | empty (no minimum) | Settings → Infrastructure | Q26 |
+| P12 | Minimum stock per item type (D35; local-only value: empty code default, no config field; stored in `stock_item_type`) | empty (no minimum) | Settings → Infrastructure | Q26 |
 
 ---
 

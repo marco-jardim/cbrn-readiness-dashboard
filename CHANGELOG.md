@@ -30,42 +30,26 @@ code yet; each item states what the owner decided and what the release is meant 
   real data until Q19, Q4, Q11 and Q13 are answered, and the "Placeholder - to be confirmed" badges
   of the settings page together with their Confirm action.
 - The DEMO banner stays: it marks the fictitious demo data and is not part of that change.
-- The code-level flags of the placeholders (see the next section) are not part of this plan; the
-  list below is the state of the code at the opening of the cycle.
+- Decision D39 also clears the code-level flags of the placeholders and withdraws `P07` (see the
+  next section).
 - This entry will be rewritten with what actually shipped, replacing this section, when the
   release is prepared. Nothing is claimed about the result of any review or test until it has
   happened.
 
 ### Placeholders still flagged in `domain/config.py`
 
-These are the code-level flags of section 3.5 of the plan, as returned by
-`flagged_placeholder_ids()`; a test compares this list with the code. No flag was cleared and no
-default was changed at the opening of this cycle.
+Since decision D39 (2026-11-24) no placeholder is flagged: `flagged_placeholder_ids()` in
+`domain/config.py` returns an empty list, and a test compares this section with the code. The
+generic defaults (`P01`, `P02`, `P04`, `P05`, `P06`, `P08`, `P09`, `P11`, `A02`, `A04`, `A05`,
+`A06`, `A07`, `A08`, `A09`, `A10`, `A11`) are confirmed code defaults, and `P07` (the wording of
+the preliminary-version notice) is withdrawn and removed from the registry. No default value was
+changed. Rows `confirmed.<ID>` written to a database before 1.2.0 are kept and never read. The
+snapshot configuration hash does not change: the flags were never part of the hashed configuration.
 
-Generic defaults (the flag may be cleared in code only when the project owner judges the value not
-sensitive):
+### Local-only values
 
-- `P01` - warning window before a PPE qualification expires
-- `P02` - warning window before maintenance is due
-- `P04` - automatic snapshots
-- `P05` - minimum backup passphrase length
-- `P06` - number of automatic daily local backups kept
-- `P07` - wording of the preliminary-version notice
-- `P08` - pro-rating of the budget execution target
-- `P09` - backup reminder period
-- `P11` - warning window before a stock lot expires
-- `A02` - PPE levels counted independently
-- `A04` - PPE qualification validity period per level
-- `A05` - degraded assets count as unavailable
-- `A06` - maintenance intervals
-- `A07` - evaluation metrics
-- `A08` - default currency
-- `A09` - course list
-- `A10` - degree status
-- `A11` - small-count threshold of the anonymised report
-
-Local-only values (never given a code default, flag never cleared in code, confirmed per
-installation in Settings only):
+These values never get a code default (their code default is empty); each installation sets them
+in Settings. They are not flagged and are not shown as placeholders.
 
 - `P03` - indicator targets (local-only)
 - `P10` - handling notice of the internal report (local-only)
@@ -120,10 +104,9 @@ records no answer to any of them.
 - Q28: open
 - Q29: open
 
-Q19 (formal classification), Q4, Q11 and Q13 gate the entry of real data. Until they are answered,
-use only demo data. "Sensitive" is a working label of this project, not a classification. Q25 to
-Q29 (stock by lot) were added to the plan on 2026-11-20 with the stock module; none of them gates
-the entry of real data.
+Q19 (formal classification), Q4, Q11 and Q13 gate the entry of real data. "Sensitive" is a working
+label of this project, not a classification. Q25 to Q29 (stock by lot) were added to the plan on
+2026-11-20 with the stock module; none of them gates the entry of real data.
 
 ### Translations (Q14)
 

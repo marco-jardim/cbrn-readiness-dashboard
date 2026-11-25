@@ -145,9 +145,8 @@ decontaminant: `DEMO-L001` to `DEMO-L003` and `DEMO-L005` to `DEMO-L008`, and `D
 data only: quantities, lots, expiry dates, prices and movements.
 
 The demo database holds two minimums, set only in the demo database (a real database has none):
-20 for the radiological and nuclear antidote and 5 for the biological antidote. They are written
-without confirming the placeholder, so P12 keeps its "Placeholder - to be confirmed" badge in
-Settings, as in a real database.
+20 for the radiological and nuclear antidote and 5 for the biological antidote. P12 is a local-only
+value with an empty code default, so a real database has no minimum until one is set.
 
 | Reading | Dimension | Value on the creation day |
 |---|---|---|
@@ -289,9 +288,7 @@ The Settings page has one tab per group of settings; each tab holds one box per 
   funding sources), the backup settings, the settings of reports and anonymisation, and the
   snapshot settings.
 
-A setting that is still a placeholder shows a "Placeholder - to be confirmed" badge with a Confirm
-button. Changes made in the demo database stay in it; they are lost if the demo data is created
-again.
+Changes made in the demo database stay in it; they are lost if the demo data is created again.
 
 ## The File menu
 

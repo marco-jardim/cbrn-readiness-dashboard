@@ -355,7 +355,7 @@ movements): no column or field holds a dose, an indication or a protocol (D38).
   movement dated after today is `DATE_IN_FUTURE`; an adjustment needs a note.
 - **Statuses** (D34), in this order: not received, empty, expired, expiring, valid. A lot is valid
   on a date when its expiry date is empty or not before that date. "Expiring" uses the warning
-  window of placeholder P11 (default 90 days). The expiry date is required for antidotes and
+  window P11 (default 90 days). The expiry date is required for antidotes and
   decontaminants. A status is always shown as text plus icon plus colour (D23).
 - **Indicators and alerts.** `domain/stock.py` registers `STOCK_VALID_QTY`, `STOCK_LOTS_EXPIRING`,
   `STOCK_LOTS_EXPIRED` and `STOCK_TYPES_BELOW_MIN` under `Module.STOCK` (dimension keys `category`
@@ -363,8 +363,8 @@ movements): no column or field holds a dose, an indication or a protocol (D38).
   type summaries of `domain/stock.py`): `LOT_EXPIRED` and `LOW_STOCK` (critical) and
   `LOT_EXPIRING` (warning), with the subject kinds `LOT` and `ITEM_TYPE`. An empty lot never raises an alert. The
   minimum stock is not an indicator target (D35): a type is below it when its valid quantity is
-  strictly less, and a type with no minimum is never below it. It is placeholder P12 and is
-  local-only (no code default).
+  strictly less, and a type with no minimum is never below it. It is the local-only value P12
+  (empty code default).
 - **Shared panel.** `ui/stock/panel.py` holds one `StockPanel` (summary per type, lots, movements of
   the selected lot) used twice: as the tab "Estoque (lotes)" of the `infrastructure` page, with
   every category and a Tipo filter that also lists the asset types, and as the first tab of the
@@ -499,10 +499,13 @@ Suppose a new area, "x". Follow the order below; each step is one small, reviewa
 10. **Tests and docs.** Add tests under the matching `tests/` folder and name the new package in
     this document; the package list is checked.
 
-If the module adds a placeholder (a default that needs confirmation), declare it in
-`PLACEHOLDERS` in `domain/config.py` with its kind and question, and add its row to the table in
-[indicators.md](indicators.md). Values that identify an institution or set a readiness target are
-`local_only`: they never get a code default.
+If the module adds a configurable value, declare it in `PLACEHOLDERS` in `domain/config.py` with its
+kind and question, and add its row to the table in [indicators.md](indicators.md). Since D39 (1.2.0)
+no entry sets the `placeholder` flag and Settings shows no badge or Confirm action. Values that
+identify an institution or set a readiness target are `local_only`: they never get a code default.
+Changing a generic default in a later release needs a step that pins the old value on existing
+databases (K24). `confirmed.<ID>` rows that earlier versions wrote to the `setting` table are kept
+and never read.
 
 ## 13. Tests and checks
 

@@ -6,12 +6,13 @@ Pure module: no Qt, no I/O, no storage imports, codes only (the UI translates th
 * :class:`ReadinessConfig` holds every configurable value of the readiness rules with the
   defaults of the plan. :func:`validate` rejects invalid values with a :class:`ConfigError` that
   carries a stable ``code`` and the offending ``field``.
-* :data:`PLACEHOLDERS` is the code-level registry of section 3.5. Its ``placeholder`` flags are
-  the release-level truth: constants of the release that are never changed at run time. The
-  per-installation "confirmed" state lives in the database (``storage/settings_repo.py``) and only
-  hides the badge there. Two kinds exist: ``LOCAL_ONLY`` values never get a code default and their
-  flag is never cleared in code; ``GENERIC_DEFAULT`` values may be cleared only by a release
-  commit.
+* :data:`PLACEHOLDERS` is the code-level registry of section 3.5. Since decision D39 (1.2.0) no
+  ``placeholder`` flag is set: the generic defaults are confirmed code defaults and the local-only
+  values are set per installation and not shown as placeholders. The flag and
+  :func:`flagged_placeholder_ids` stay as the mechanism for a future release. Two kinds exist:
+  ``LOCAL_ONLY`` values never get a code default (their code default is empty);
+  ``GENERIC_DEFAULT`` values are code defaults, and changing one needs a step that pins the old
+  value on existing databases (K24).
 * :func:`to_settings` / :func:`from_settings` convert the configuration to and from the flat
   ``config.<field>`` keys of the ``setting`` table.
 """
@@ -333,14 +334,14 @@ class Placeholder:
 
     ``fields`` are the :class:`ReadinessConfig` fields it governs (possibly none), ``question`` the
     open question (``None`` when the item is purely technical) and ``placeholder`` the code-level
-    flag, a constant of the release.
+    flag, a constant of the release (set on no entry since D39).
     """
 
     id: str
     kind: PlaceholderKind
     fields: tuple[str, ...]
     question: str | None
-    placeholder: bool = True
+    placeholder: bool = False
 
 
 _LOCAL = PlaceholderKind.LOCAL_ONLY
@@ -354,8 +355,7 @@ PLACEHOLDERS: tuple[Placeholder, ...] = (
     Placeholder("P04", _GENERIC, ("snapshot_monthly", "snapshot_on_report"), "Q9"),
     Placeholder("P05", _GENERIC, ("min_passphrase_length",), "Q11"),
     Placeholder("P06", _GENERIC, ("daily_backups_kept",), None),
-    # The disclaimer wording lives in the translations, so no config field.
-    Placeholder("P07", _GENERIC, (), "Q15"),
+    # P07 (the preliminary-version notice wording) was withdrawn by D39.
     Placeholder("P08", _GENERIC, ("budget_prorate_target",), "Q8"),
     Placeholder("P09", _GENERIC, ("backup_reminder_days",), "Q11"),
     Placeholder("P10", _LOCAL, ("report_handling_notice",), "Q10"),
@@ -423,8 +423,8 @@ def check_registry() -> None:
     """Raise :class:`ConfigError` (``REGISTRY_INVALID``) when the registry breaks an invariant.
 
     Called at import time and by the tests: every named field exists on :class:`ReadinessConfig`,
-    no id or field is declared twice, every local-only field defaults to empty and keeps its flag,
-    and ``operator_label`` belongs to no placeholder.
+    no id or field is declared twice, every local-only field defaults to empty, and
+    ``operator_label`` belongs to no placeholder.
     """
     specs = {spec.name: spec for spec in dataclasses.fields(ReadinessConfig)}
     seen_ids: set[str] = set()
@@ -433,8 +433,6 @@ def check_registry() -> None:
         if item.id in seen_ids:
             raise ConfigError("REGISTRY_INVALID", item.id)
         seen_ids.add(item.id)
-        if item.kind is PlaceholderKind.LOCAL_ONLY and not item.placeholder:
-            raise ConfigError("REGISTRY_INVALID", item.id)
         for name in item.fields:
             if name not in specs or name in seen_fields:
                 raise ConfigError("REGISTRY_INVALID", name)
