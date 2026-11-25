@@ -379,7 +379,7 @@
     </message>
     <message>
         <source>Add asset</source>
-        <extracomment>The configuration field of the A05 switch. The data of a stock type in the type filter is this prefix and the code of the type. An asset type code never has a colon (list codes allow letters, digits, dot, hyphen and underscore). The positions of the two tabs.</extracomment>
+        <extracomment>The data of a stock type in the type filter is this prefix and the code of the type. An asset type code never has a colon (list codes allow letters, digits, dot, hyphen and underscore). The positions of the two tabs.</extracomment>
         <translation>Add asset</translation>
     </message>
     <message>
@@ -518,12 +518,8 @@
         <translation>Delete asset type</translation>
     </message>
     <message>
-        <source>Confirm</source>
-        <translation>Confirm</translation>
-    </message>
-    <message>
         <source>Asset types</source>
-        <extracomment>The placeholder whose badge is due, and the error code of a configuration that cannot be read (both ``None`` while there is nothing to show).</extracomment>
+        <extracomment>The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation>Asset types</translation>
     </message>
     <message>
@@ -533,10 +529,6 @@
     <message>
         <source>Count degraded units as available</source>
         <translation>Count degraded units as available</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation>Placeholder - to be confirmed</translation>
     </message>
     <message>
         <source>Delete asset type %1?</source>

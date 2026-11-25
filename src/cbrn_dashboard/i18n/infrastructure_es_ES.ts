@@ -379,7 +379,7 @@
     </message>
     <message>
         <source>Add asset</source>
-        <extracomment>The configuration field of the A05 switch. The data of a stock type in the type filter is this prefix and the code of the type. An asset type code never has a colon (list codes allow letters, digits, dot, hyphen and underscore). The positions of the two tabs.</extracomment>
+        <extracomment>The data of a stock type in the type filter is this prefix and the code of the type. An asset type code never has a colon (list codes allow letters, digits, dot, hyphen and underscore). The positions of the two tabs.</extracomment>
         <translation type="unfinished">Añadir activo</translation>
     </message>
     <message>
@@ -518,12 +518,8 @@
         <translation type="unfinished">Eliminar tipo de activo</translation>
     </message>
     <message>
-        <source>Confirm</source>
-        <translation type="unfinished">Confirmar</translation>
-    </message>
-    <message>
         <source>Asset types</source>
-        <extracomment>The placeholder whose badge is due, and the error code of a configuration that cannot be read (both ``None`` while there is nothing to show).</extracomment>
+        <extracomment>The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation type="unfinished">Tipos de activo</translation>
     </message>
     <message>
@@ -533,10 +529,6 @@
     <message>
         <source>Count degraded units as available</source>
         <translation type="unfinished">Contar unidades degradadas como disponibles</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Valor provisional - por confirmar</translation>
     </message>
     <message>
         <source>Delete asset type %1?</source>

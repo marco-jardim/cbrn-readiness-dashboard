@@ -212,10 +212,6 @@
         <translation type="unfinished">Uma configuração armazenada não pode ser lida.</translation>
     </message>
     <message>
-        <source>The placeholder is not known.</source>
-        <translation type="unfinished">O valor provisório não é conhecido.</translation>
-    </message>
-    <message>
         <source>Level %1</source>
         <extracomment>A missing value in a cell (data, not a translatable text).</extracomment>
         <translation type="unfinished">Nível %1</translation>
@@ -327,7 +323,6 @@
     </message>
     <message>
         <source>Add person</source>
-        <extracomment>The configuration fields the placeholder badges of this section refer to.</extracomment>
         <translation type="unfinished">Adicionar pessoa</translation>
     </message>
     <message>
@@ -495,12 +490,8 @@
         <translation type="unfinished">Excluir a titulação selecionada?</translation>
     </message>
     <message>
-        <source>Confirm</source>
-        <extracomment>The state of the rule inputs: A02 switch, mapping pairs, typed A04 months per level. The rule inputs as last loaded from the configuration (``None`` before the first load). The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
-        <translation type="unfinished">Confirmar</translation>
-    </message>
-    <message>
         <source>Save rules</source>
+        <extracomment>The state of the rule inputs: A02 switch, mapping pairs, typed A04 months per level. The rule inputs as last loaded from the configuration (``None`` before the first load). The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation type="unfinished">Salvar regras</translation>
     </message>
     <message>
@@ -518,10 +509,6 @@
     <message>
         <source>Courses</source>
         <translation type="unfinished">Cursos</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation type="unfinished">Valor provisório - a confirmar</translation>
     </message>
     <message>
         <source>Delete course %1?</source>

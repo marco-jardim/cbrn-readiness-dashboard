@@ -89,10 +89,6 @@ __all__ = [
     "settings_section_title",
 ]
 
-#: The configuration fields the placeholder badges of this section refer to.
-_A02_FIELDS = ("ppe_hierarchy_enabled", "ppe_hierarchy")
-_A04_FIELDS = ("ppe_validity_months",)
-
 
 def _open(dialog: QDialog) -> None:
     """Show ``dialog`` window-modally without blocking; it deletes itself when closed."""
@@ -608,7 +604,6 @@ class PersonnelSettingsSection(QWidget):
         self.setObjectName("personnel_section")
         self.context = context
         self.courses_model = CoursesModel(self)
-        self._badge_ids: dict[str, str | None] = {"A02": None, "A04": None}
         #: The rule inputs as last loaded from the configuration (``None`` before the first load).
         self._loaded_rules: _RuleState | None = None
         #: The error code of a configuration that cannot be read (``None`` while it can be).
@@ -639,18 +634,9 @@ class PersonnelSettingsSection(QWidget):
                 self.mapping_checks[(level.value, other.value)] = box
                 grid.addWidget(box, row, column)
                 column += 1
-        self.a02_badge = QLabel(self.mapping_box)
-        self.a02_badge.setObjectName("a02_badge")
-        self.confirm_a02_action = self._action(
-            lambda: QCoreApplication.translate("Personnel", "Confirm"), self.confirm_a02
-        )
-        a02_row = QHBoxLayout()
-        a02_row.addWidget(self.a02_badge)
-        a02_row.addLayout(action_row((self.confirm_a02_action,), self.mapping_box))
         mapping_layout = QVBoxLayout(self.mapping_box)
         mapping_layout.addWidget(self.hierarchy_check)
         mapping_layout.addLayout(grid)
-        mapping_layout.addLayout(a02_row)
 
         # A04: the validity months
         self.validity_box = QGroupBox(self)
@@ -667,17 +653,8 @@ class PersonnelSettingsSection(QWidget):
             self.months_edits[level.value] = edit
             validity_grid.addWidget(caption, row, 0)
             validity_grid.addWidget(edit, row, 1)
-        self.a04_badge = QLabel(self.validity_box)
-        self.a04_badge.setObjectName("a04_badge")
-        self.confirm_a04_action = self._action(
-            lambda: QCoreApplication.translate("Personnel", "Confirm"), self.confirm_a04
-        )
-        a04_row = QHBoxLayout()
-        a04_row.addWidget(self.a04_badge)
-        a04_row.addLayout(action_row((self.confirm_a04_action,), self.validity_box))
         validity_layout = QVBoxLayout(self.validity_box)
         validity_layout.addLayout(validity_grid)
-        validity_layout.addLayout(a04_row)
 
         self.save_action = self._action(
             lambda: QCoreApplication.translate("Personnel", "Save rules"), self.save_rules
@@ -712,8 +689,6 @@ class PersonnelSettingsSection(QWidget):
         courses_layout.addLayout(action_row(self._course_actions, self.courses_box))
 
         self._actions: tuple[EditAction, ...] = (
-            self.confirm_a02_action,
-            self.confirm_a04_action,
             self.save_action,
             *self._course_actions,
         )
@@ -775,9 +750,6 @@ class PersonnelSettingsSection(QWidget):
             edit.setPlaceholderText(QCoreApplication.translate("Personnel", "Not set"))
         self.courses_box.setTitle(QCoreApplication.translate("Personnel", "Courses"))
         self.courses_view.setAccessibleName(QCoreApplication.translate("Personnel", "Courses"))
-        badge = QCoreApplication.translate("Personnel", "Placeholder - to be confirmed")
-        self.a02_badge.setText(badge)
-        self.a04_badge.setText(badge)
         for action in self._actions:
             action.retranslate()
         self._show_config_error()
@@ -799,14 +771,6 @@ class PersonnelSettingsSection(QWidget):
     def selected_course(self) -> CourseView | None:
         row = self.courses_model.selected_row(self.courses_view)
         return row if isinstance(row, CourseView) else None
-
-    @staticmethod
-    def _badge_for(config: Any, fields: tuple[str, ...]) -> str | None:
-        for name in fields:
-            badge = config.badge_for_field(name)
-            if badge:
-                return str(badge)
-        return None
 
     def _typed_rules(self) -> _RuleState:
         """What the rule inputs show now: switch, mapping pairs and the typed months."""
@@ -847,7 +811,7 @@ class PersonnelSettingsSection(QWidget):
         self._loaded_rules = self._typed_rules()
 
     def refresh(self, *_args: object) -> None:
-        """Read the courses and the badges again.
+        """Read the courses and the rule inputs again.
 
         The rule inputs are reloaded only the first time and when they hold no unsaved edit: a
         change signalled by the course list or by another page must not discard what was typed.
@@ -855,16 +819,10 @@ class PersonnelSettingsSection(QWidget):
         until a later refresh can read it.
         """
         config = self._config()
-        self._badge_ids = {"A02": None, "A04": None}
         if config is not None:
             try:
                 stored = config.load()
-                self._badge_ids = {
-                    "A02": self._badge_for(config, _A02_FIELDS),
-                    "A04": self._badge_for(config, _A04_FIELDS),
-                }
             except ServiceError as error:
-                self._badge_ids = {"A02": None, "A04": None}
                 self._config_error = error.code
             else:
                 self._config_error = None
@@ -873,8 +831,6 @@ class PersonnelSettingsSection(QWidget):
         else:
             self._config_error = None
         self._show_config_error()
-        self.a02_badge.setVisible(self._badge_ids["A02"] is not None)
-        self.a04_badge.setVisible(self._badge_ids["A04"] is not None)
         service = self.context.services.personnel
         previous = self.selected_course()
         courses = [] if service is None else service.list_courses(include_inactive=True)
@@ -893,30 +849,12 @@ class PersonnelSettingsSection(QWidget):
         for widget in self._inputs:
             enable(widget, config)
         enable(self.save_action, config)
-        enable(self.confirm_a02_action, config and self._badge_ids["A02"] is not None)
-        enable(self.confirm_a04_action, config and self._badge_ids["A04"] is not None)
         enable(self.add_course_action, has_service)
         enable(self.edit_course_action, has_service and course is not None)
         enable(self.deactivate_course_action, has_service and course is not None and course.active)
         enable(self.delete_course_action, has_service and course is not None)
 
     # ----- configuration
-
-    def confirm_a02(self) -> None:
-        self._confirm("A02")
-
-    def confirm_a04(self) -> None:
-        self._confirm("A04")
-
-    def _confirm(self, key: str) -> None:
-        config = self._config()
-        badge = self._badge_ids[key]
-        if (
-            config is not None
-            and badge is not None
-            and apply_change(self.context, self, error_label, lambda: config.confirm(badge))
-        ):
-            self.reload_rules()
 
     def _read_months(self) -> dict[str, int | None]:
         months: dict[str, int | None] = {}

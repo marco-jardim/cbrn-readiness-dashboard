@@ -12,7 +12,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QCoreApplication
 
 from cbrn_dashboard.domain.personnel import CertStatus, DegreeLevel, DegreeStatus
-from cbrn_dashboard.services.config import CONFIG_ERROR_CODES
+from cbrn_dashboard.services.config import CONFIG_ERROR_CODES, UNKNOWN_PLACEHOLDER
 from cbrn_dashboard.services.errors import (
     CODE_IMMUTABLE,
     INVALID_CODE,
@@ -205,14 +205,17 @@ _ERROR_LABELS: dict[str, Callable[[], str]] = {
     "CORRUPT_SETTING": lambda: QCoreApplication.translate(
         "Personnel", "A stored setting cannot be read."
     ),
-    "UNKNOWN_PLACEHOLDER": lambda: QCoreApplication.translate(
-        "Personnel", "The placeholder is not known."
-    ),
 }
 
 #: Every error code the personnel UI can present (for the completeness test); the codes of the
-#: configuration service that are not in the table are listed too, so the test shows the gap.
-ALL_ERROR_CODES: tuple[str, ...] = tuple(dict.fromkeys((*_ERROR_LABELS, *CONFIG_ERROR_CODES)))
+#: configuration service that are not in the table are listed too, so the test shows the gap. The
+#: personnel UI no longer confirms placeholders, so it cannot receive UNKNOWN_PLACEHOLDER (the
+#: service still lists it until its placeholder machinery is removed, PLAN.md T12.12).
+ALL_ERROR_CODES: tuple[str, ...] = tuple(
+    dict.fromkeys(
+        (*_ERROR_LABELS, *(code for code in CONFIG_ERROR_CODES if code != UNKNOWN_PLACEHOLDER))
+    )
+)
 
 
 def error_label(code: str) -> str:

@@ -62,7 +62,7 @@ from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from cbrn_dashboard.ui.stock import labels as stock_labels
 from cbrn_dashboard.ui.stock.dialogs import LotDialog
 from tests.ui._fakes import FakePrompts
-from tests.ui._walk import assert_fully_translated
+from tests.ui._walk import assert_fully_translated, collect_texts
 
 pytestmark = pytest.mark.ui
 
@@ -566,27 +566,22 @@ def test_the_a05_switch_changes_the_availability_summary(
     assert _availability(page)["bed"] == (0, 1)
 
 
-def test_the_a05_placeholder_badge_and_confirm_button(
-    app_context: AppContext, qtbot: QtBot
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_section_shows_no_placeholder_badge_or_confirm_button(
+    app_context: AppContext, qtbot: QtBot, lang: str
 ) -> None:
-    config = app_context.services.config
-    assert config is not None
-    field = "degraded_counts_as_available"
-    placeholder = config.badge_for_field(field)
-    if placeholder is None:  # confirmed in this database: un-confirm it through the service API
-        placeholder = next(item.id for item in config.placeholders() if field in item.fields)
-        config.unconfirm(placeholder)
-    assert config.badge_for_field(field) == placeholder
+    """D39: the A05 switch is a confirmed default, so nothing is "to be confirmed"."""
+    app_context.translator_manager.set_language(lang)
     section = InfrastructureSettingsSection(app_context)
     qtbot.addWidget(section)
-    assert section.badge_label.text() == "Placeholder - to be confirmed"
-    assert section.badge_label.isVisibleTo(section)
-    assert section.confirm_button.isVisibleTo(section)
-    assert section.confirm_action.isEnabled()
-    section.confirm_action.trigger()
-    assert config.badge_for_field(field) is None
-    assert not section.badge_label.isVisibleTo(section)
-    assert not section.confirm_button.isVisibleTo(section)
+    names = [widget.objectName() for widget in section.findChildren(QWidget)]
+    assert not [name for name in names if name.endswith(("_badge", "_confirm"))], names
+    assert not hasattr(section, "badge_label")
+    assert not hasattr(section, "confirm_action")
+    for item in collect_texts(section):
+        assert "Placeholder" not in item.text, item
+        assert "Valor provis" not in item.text, item
+        assert item.text not in ("Confirm", "Confirmar"), item
 
 
 def _corrupt_setting(context: AppContext) -> None:
@@ -617,9 +612,6 @@ def test_an_unreadable_setting_is_explained_and_the_switch_waits_for_the_repair(
     assert not section.config_error_label.isHidden()
     assert section.config_error_label.text() == "A stored setting cannot be read."
     assert not section.degraded_check.isEnabled()
-    assert not section.confirm_action.isEnabled()
-    assert section.badge_label.isHidden()
-    assert section.confirm_button.isHidden()
     assert fake_prompts.calls == []
 
     app_context.translator_manager.set_language("pt_BR")
@@ -1164,7 +1156,7 @@ def test_read_only_mode_disables_every_edit_action(app_context: AppContext, qtbo
     page.history_view.selectRow(0)
     section.view.selectRow(0)
     actions = [*page._actions, *section._actions]
-    assert len(actions) == 13
+    assert len(actions) == 12
     targets = app_context.edit_targets()
     for action in actions:
         assert action in targets

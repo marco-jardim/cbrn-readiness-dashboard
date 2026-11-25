@@ -212,10 +212,6 @@
         <translation>A stored setting cannot be read.</translation>
     </message>
     <message>
-        <source>The placeholder is not known.</source>
-        <translation>The placeholder is not known.</translation>
-    </message>
-    <message>
         <source>Level %1</source>
         <extracomment>A missing value in a cell (data, not a translatable text).</extracomment>
         <translation>Level %1</translation>
@@ -327,7 +323,6 @@
     </message>
     <message>
         <source>Add person</source>
-        <extracomment>The configuration fields the placeholder badges of this section refer to.</extracomment>
         <translation>Add person</translation>
     </message>
     <message>
@@ -495,12 +490,8 @@
         <translation>Delete the selected degree?</translation>
     </message>
     <message>
-        <source>Confirm</source>
-        <extracomment>The state of the rule inputs: A02 switch, mapping pairs, typed A04 months per level. The rule inputs as last loaded from the configuration (``None`` before the first load). The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
-        <translation>Confirm</translation>
-    </message>
-    <message>
         <source>Save rules</source>
+        <extracomment>The state of the rule inputs: A02 switch, mapping pairs, typed A04 months per level. The rule inputs as last loaded from the configuration (``None`` before the first load). The error code of a configuration that cannot be read (``None`` while it can be).</extracomment>
         <translation>Save rules</translation>
     </message>
     <message>
@@ -518,10 +509,6 @@
     <message>
         <source>Courses</source>
         <translation>Courses</translation>
-    </message>
-    <message>
-        <source>Placeholder - to be confirmed</source>
-        <translation>Placeholder - to be confirmed</translation>
     </message>
     <message>
         <source>Delete course %1?</source>

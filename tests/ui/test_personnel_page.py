@@ -60,7 +60,7 @@ from cbrn_dashboard.ui.shell.context import AppContext
 from cbrn_dashboard.ui.shell.formatting import from_qdate
 from cbrn_dashboard.ui.shell.i18n import TranslatorManager
 from tests.ui._fakes import FakePrompts
-from tests.ui._walk import assert_fully_translated
+from tests.ui._walk import assert_fully_translated, collect_texts
 
 pytestmark = pytest.mark.ui
 
@@ -155,12 +155,6 @@ class FakeConfig:
 
     def __init__(self) -> None:
         self.config = ReadinessConfig()
-        self.badges: dict[str, str] = {
-            "ppe_hierarchy_enabled": "A02",
-            "ppe_hierarchy": "A02",
-            "ppe_validity_months": "A04",
-        }
-        self.confirmed: list[str] = []
 
     def load(self) -> ReadinessConfig:
         return self.config
@@ -168,13 +162,6 @@ class FakeConfig:
     def save(self, config: ReadinessConfig) -> tuple[str, ...]:
         self.config = config
         return ()
-
-    def badge_for_field(self, field: str) -> str | None:
-        return self.badges.get(field)
-
-    def confirm(self, placeholder_id: str) -> None:
-        self.confirmed.append(placeholder_id)
-        self.badges = {k: v for k, v in self.badges.items() if v != placeholder_id}
 
 
 def _attach_fake_config(context: AppContext) -> FakeConfig:
@@ -869,7 +856,7 @@ def test_read_only_mode_disables_every_edit_action(app_context: AppContext, qtbo
     page.certificates_view.selectRow(0)
     section.courses_view.selectRow(0)
     actions = [*page._actions, *section._actions]
-    assert len(actions) == 16 + 7
+    assert len(actions) == 21
     targets = app_context.edit_targets()
     for action in actions:
         assert action in targets
@@ -985,8 +972,6 @@ def test_an_unreadable_setting_is_explained_and_the_inputs_wait_for_the_repair(
     assert not any(widget.isEnabled() for widget in inputs)
     assert not any(box.isEnabled() for box in section.mapping_checks.values())
     assert not section.save_action.isEnabled()
-    assert section.a02_badge.isHidden()
-    assert section.a04_badge.isHidden()
     section.reload_rules()  # also safe to call directly
     assert fake_prompts.calls == []
 
@@ -1020,8 +1005,6 @@ def test_the_section_builds_without_a_config_service(app_context: AppContext, qt
     vars(app_context.services)["config"] = None
     section = PersonnelSettingsSection(app_context)
     qtbot.addWidget(section)
-    assert section.a02_badge.isHidden()
-    assert section.a04_badge.isHidden()
     assert not section.save_action.isEnabled()
     assert not section.hierarchy_check.isEnabled()
     assert not section.months_edits["A"].isEnabled()
@@ -1082,27 +1065,22 @@ def test_a_badly_typed_validity_is_refused_and_nothing_is_saved(
     assert fake.config == ReadinessConfig()
 
 
-def test_the_placeholder_badges_show_until_confirmed(app_context: AppContext, qtbot: QtBot) -> None:
-    _english(app_context)
-    fake = _attach_fake_config(app_context)
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_section_shows_no_placeholder_badge_or_confirm_button(
+    app_context: AppContext, qtbot: QtBot, lang: str
+) -> None:
+    """D39: the PPE rules (A02, A04) are confirmed defaults, so nothing is "to be confirmed"."""
+    app_context.translator_manager.set_language(lang)
     section = PersonnelSettingsSection(app_context)
     qtbot.addWidget(section)
-    section.show()
-    assert section.a02_badge.text() == "Placeholder - to be confirmed"
-    assert section.a02_badge.isVisibleTo(section)
-    assert section.a04_badge.isVisibleTo(section)
-    assert section.confirm_a02_action.isEnabled()
-    assert section.confirm_a02_action.text() == "Confirm"
-
-    section.confirm_a04_action.trigger()
-    assert fake.confirmed == ["A04"]
-    assert section.a04_badge.isHidden()
-    assert section.a02_badge.isVisibleTo(section)
-    assert not section.confirm_a04_action.isEnabled()
-
-    section.confirm_a02_action.trigger()
-    assert fake.confirmed == ["A04", "A02"]
-    assert section.a02_badge.isHidden()
+    names = [widget.objectName() for widget in section.findChildren(QWidget)]
+    assert not [name for name in names if name.endswith(("_badge", "_confirm"))], names
+    assert not hasattr(section, "a02_badge")
+    assert not hasattr(section, "confirm_a04_action")
+    for item in collect_texts(section):
+        assert "Placeholder" not in item.text, item
+        assert "Valor provis" not in item.text, item
+        assert item.text not in ("Confirm", "Confirmar"), item
 
 
 # --------------------------------------------------------------- review fixes P2-03 .. P2-08

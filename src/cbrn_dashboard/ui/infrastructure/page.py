@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QTabWidget,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -86,9 +85,6 @@ __all__ = [
     "page_title",
     "settings_section_title",
 ]
-
-#: The configuration field of the A05 switch.
-DEGRADED_FIELD = "degraded_counts_as_available"
 
 #: The data of a stock type in the type filter is this prefix and the code of the type. An asset
 #: type code never has a colon (list codes allow letters, digits, dot, hyphen and underscore).
@@ -608,22 +604,13 @@ class InfrastructureSettingsSection(QWidget):
             lambda: QCoreApplication.translate("Infrastructure", "Delete asset type"),
             self.delete_type,
         )
-        self.confirm_action = make_edit_action(
-            context,
-            self,
-            lambda: QCoreApplication.translate("Infrastructure", "Confirm"),
-            self.confirm_placeholder,
-        )
         self._actions: tuple[EditAction, ...] = (
             self.add_action,
             self.edit_action,
             self.deactivate_action,
             self.delete_action,
-            self.confirm_action,
         )
-        #: The placeholder whose badge is due, and the error code of a configuration that
-        #: cannot be read (both ``None`` while there is nothing to show).
-        self._badge_id: str | None = None
+        #: The error code of a configuration that cannot be read (``None`` while it can be).
         self._config_error: str | None = None
         self.config_error_label = QLabel(self)
         self.config_error_label.setObjectName("config_error_label")
@@ -633,24 +620,14 @@ class InfrastructureSettingsSection(QWidget):
         self.degraded_check = QCheckBox(self)
         self.degraded_check.setObjectName("degraded_check")
         context.register_edit_action(self.degraded_check)
-        self.badge_label = QLabel(self)
-        self.badge_label.setObjectName("degraded_badge")
-        self.confirm_button = QToolButton(self)
-        self.confirm_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self.confirm_button.setDefaultAction(self.confirm_action)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.types_caption)
         layout.addWidget(self.view, 1)
-        layout.addLayout(action_row(self._actions[:4], self))
+        layout.addLayout(action_row(self._actions, self))
         layout.addWidget(self.rule_caption)
         layout.addWidget(self.config_error_label)
-        rule_row = QHBoxLayout()
-        rule_row.addWidget(self.degraded_check)
-        rule_row.addWidget(self.badge_label)
-        rule_row.addWidget(self.confirm_button)
-        rule_row.addStretch(1)
-        layout.addLayout(rule_row)
+        layout.addWidget(self.degraded_check)
 
         selection = self.view.selectionModel()
         if selection is not None:
@@ -666,9 +643,6 @@ class InfrastructureSettingsSection(QWidget):
         self.rule_caption.setText(QCoreApplication.translate("Infrastructure", "Availability rule"))
         self.degraded_check.setText(
             QCoreApplication.translate("Infrastructure", "Count degraded units as available")
-        )
-        self.badge_label.setText(
-            QCoreApplication.translate("Infrastructure", "Placeholder - to be confirmed")
         )
         for action in self._actions:
             action.retranslate()
@@ -690,13 +664,6 @@ class InfrastructureSettingsSection(QWidget):
         row = self.model.selected_row(self.view)
         return row if isinstance(row, AssetTypeView) else None
 
-    def _badge(self) -> str | None:
-        config = _config_service(self.context)
-        if config is None:
-            return None
-        badge = config.badge_for_field(DEGRADED_FIELD)
-        return None if badge is None else str(badge)
-
     def refresh(self) -> None:
         service = self.context.services.infrastructure
         previous = self.selected_type()
@@ -708,23 +675,18 @@ class InfrastructureSettingsSection(QWidget):
                     self.view.selectRow(row)
         config = _config_service(self.context)
         checked: bool | None = None
-        self._badge_id = None
         self._config_error = None
         if config is not None:
             try:
                 checked = bool(config.load().degraded_counts_as_available)
-                self._badge_id = self._badge()
             except ServiceError as error:
                 checked = None
-                self._badge_id = None
                 self._config_error = error.code
         self._show_config_error()
         self.degraded_check.blockSignals(True)
         if checked is not None:
             self.degraded_check.setChecked(checked)
         self.degraded_check.blockSignals(False)
-        self.badge_label.setVisible(self._badge_id is not None)
-        self.confirm_button.setVisible(self._badge_id is not None)
         self._update_actions()
 
     def _update_actions(self, *_args: object) -> None:
@@ -737,7 +699,6 @@ class InfrastructureSettingsSection(QWidget):
         enable(self.delete_action, has_service and asset_type is not None)
         config = _config_service(self.context) is not None and self._config_error is None
         enable(self.degraded_check, config)
-        enable(self.confirm_action, config and self._badge_id is not None)
 
     # ----- the A05 switch
 
@@ -751,12 +712,6 @@ class InfrastructureSettingsSection(QWidget):
 
         if not apply_change(self.context, self, error_label, save):
             self.refresh()
-
-    def confirm_placeholder(self) -> None:
-        config = _config_service(self.context)
-        badge = self._badge_id
-        if config is not None and badge is not None and self._config_error is None:
-            apply_change(self.context, self, error_label, lambda: config.confirm(badge))
 
     # ----- the types
 
