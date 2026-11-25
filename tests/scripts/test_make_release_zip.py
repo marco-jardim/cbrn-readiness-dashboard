@@ -336,10 +336,13 @@ def template_text() -> str:
     return TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
-def test_template_has_the_preliminary_notice_and_unsigned_statement(template_text: str) -> None:
-    notice = "Preliminary version \u2014 indicators not institutionally validated."
-    assert notice in template_text
+def test_template_has_no_preliminary_notice_and_has_the_unsigned_statement(
+    template_text: str,
+) -> None:
     lowered = template_text.lower()
+    assert "preliminary" not in lowered
+    assert "not institutionally validated" not in lowered
+    assert "real data" not in lowered
     assert "unsigned" in lowered
     assert "smartscreen" in lowered
     assert "smart app control" in lowered
@@ -614,11 +617,17 @@ NOTE_NAMES: dict[str, str] = {
 EXAMPLE_NAME = "portable.ini.example"
 ROOT_FILE_NAMES: list[str] = [*NOTE_NAMES.values(), EXAMPLE_NAME]
 
-#: The preliminary notice, verbatim, per language.
+#: Text that must not appear in the notes (the preliminary notice and the real-data gate; D39).
 NOTICES: dict[str, str] = {
     "en-US": "Preliminary version \u2014 indicators not institutionally validated.",
     "pt-BR": "Vers\u00e3o preliminar \u2014 indicadores n\u00e3o validados institucionalmente.",
     "es-ES": "Versi\u00f3n preliminar \u2014 indicadores no validados institucionalmente.",
+}
+#: Lower-case fragments of the removed notice and gate, per language.
+REMOVED_FRAGMENTS: dict[str, tuple[str, ...]] = {
+    "en-US": ("preliminary", "institutionally", "real data"),
+    "pt-BR": ("preliminar", "institucionalmente", "dados reais"),
+    "es-ES": ("preliminar", "institucionalmente", "datos reales"),
 }
 #: The sentence saying that "sensitive" is a working label and not a classification.
 NOT_A_CLASSIFICATION: dict[str, str] = {
@@ -645,10 +654,6 @@ COMMON_PHRASES: tuple[str, ...] = (
     "licenses\\",
     "GPL-3.0-or-later",
     SOURCE_URL,
-    "Q4",
-    "Q11",
-    "Q13",
-    "Q19",
 )
 HEADING = re.compile(r"^(\d{1,2})\. \S", re.MULTILINE)
 
@@ -777,15 +782,19 @@ def test_the_three_notes_have_the_same_numbered_sections() -> None:
 
 
 @pytest.mark.parametrize("language", sorted(NOTE_NAMES))
-def test_note_has_its_languages_preliminary_notice_verbatim(language: str) -> None:
-    assert NOTICES[language] in _flat(_note_text(language))
+def test_note_has_no_preliminary_notice_and_no_real_data_gate(language: str) -> None:
+    flat = _flat(_note_text(language))
+    assert NOTICES[language] not in flat
+    lowered = flat.lower()
+    for fragment in REMOVED_FRAGMENTS[language]:
+        assert fragment not in lowered, (language, fragment)
+    for code in ("Q19", "Q4:", "Q11", "Q13"):
+        assert code not in flat, (language, code)
 
 
 @pytest.mark.parametrize("language", sorted(NOTE_NAMES))
 def test_note_says_that_sensitive_is_not_a_classification(language: str) -> None:
-    flat = _flat(_note_text(language))
-    assert NOT_A_CLASSIFICATION[language] in flat
-    assert "Q19" in flat
+    assert NOT_A_CLASSIFICATION[language] in _flat(_note_text(language))
 
 
 @pytest.mark.parametrize("language", sorted(NOTE_NAMES))
@@ -796,10 +805,10 @@ def test_note_names_the_commands_files_and_paths(language: str) -> None:
 
 
 def test_the_notes_do_not_mix_up_the_languages() -> None:
-    for language, notice in NOTICES.items():
+    for language, phrase in NOT_A_CLASSIFICATION.items():
         for other in NOTE_NAMES:
             if other != language:
-                assert notice not in _flat(_note_text(other)), (language, other)
+                assert phrase not in _flat(_note_text(other)), (language, other)
 
 
 def test_portable_example_parses_and_explains_portable_mode() -> None:

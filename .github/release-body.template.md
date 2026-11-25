@@ -1,10 +1,6 @@
 # CBRN Readiness Dashboard {{version}}
 
-**Preliminary version — indicators not institutionally validated.**
-
-This is a Windows desktop program that helps a hospital look at its own CBRN readiness. The
-indicators it shows are not yet validated by any institution; do not use them for decisions that
-need a validated tool.
+This is a Windows desktop program that helps a hospital look at its own CBRN readiness.
 
 <!-- installer:start -->
 ## Installer (recommended)
@@ -87,10 +83,7 @@ What these checks prove, and what they do not:
 
 ## Placeholders still flagged
 
-Some values in the program are placeholders that still have to be confirmed. The ones that are
-still flagged in the code in this release:
-
-{{flagged_placeholders}}
+Placeholders still flagged in the code in this release: {{flagged_placeholders}}.
 
 <!-- source-archives:start -->
 ## Source code of Qt and PySide6 (LGPL-3.0)

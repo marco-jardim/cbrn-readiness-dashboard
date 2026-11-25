@@ -151,8 +151,12 @@ def test_the_notice_says_what_the_first_run_notes_say(language: str) -> None:
     path = INSTALLER_DIR / f"before-install.{language}.txt"
     text = " ".join(path.read_text(encoding="ascii").split())
     data_folder = "%LOCALAPPDATA%\\cbrn-readiness-dashboard"
-    for needle in ("Q19", "Q4", "Q11", "Q13", data_folder, "--demo"):
+    for needle in (data_folder, "--demo"):
         assert needle in text, (language, needle)
+    # The preliminary notice and the real-data gate are gone (D39).
+    lowered = text.lower()
+    for removed in ("q19", "prelimin"):
+        assert removed not in lowered, (language, removed)
     assert len(text) < 1500  # short on purpose
 
 

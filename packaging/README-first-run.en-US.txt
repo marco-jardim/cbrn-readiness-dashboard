@@ -9,19 +9,11 @@ Draft text. The committee still has to review the wording (Q14).
    The CBRN Readiness Dashboard is a desktop tool for Windows. It works offline.
    It has no network code.
 
-   Preliminary version — indicators not institutionally validated.
-
-   Do not use the indicators for decisions that need a validated tool.
-
-2. Before entering real data
+2. Data protection
 
    "Sensitive" is a working label of this project. It is not a formal classification.
-   Do not enter real data yet. Wait until the institution has answered these questions:
-   - Q19: the formal classification of the data.
-   - Q4: personal data.
-   - Q11: information security.
-   - Q13: deployment.
-   Until then, use the demo mode. Its data is fictitious:
+   The data stays on your computer (see sections 9 and 11).
+   To try the program with fictitious data, use the demo mode:
 
       cbrn-dashboard.exe --demo
 

@@ -9,19 +9,11 @@ Texto en borrador. El comité aún debe revisar la terminología (Q14).
    CBRN Readiness Dashboard es una herramienta de escritorio para Windows.
    Funciona sin conexión. No tiene ningún código de red.
 
-   Versión preliminar — indicadores no validados institucionalmente.
-
-   No use los indicadores en decisiones que exijan una herramienta validada.
-
-2. Antes de introducir datos reales
+2. Protección de datos
 
    «Sensible» es una etiqueta de trabajo de este proyecto. No es una clasificación formal.
-   No introduzca datos reales todavía. Espere a que la institución responda a estas preguntas:
-   - Q19: la clasificación formal de los datos.
-   - Q4: datos personales.
-   - Q11: seguridad de la información.
-   - Q13: despliegue.
-   Hasta entonces, use el modo de demostración. Sus datos son ficticios:
+   Los datos permanecen en su equipo (véanse los apartados 9 y 11).
+   Para probar el programa con datos ficticios, use el modo de demostración:
 
       cbrn-dashboard.exe --demo
 

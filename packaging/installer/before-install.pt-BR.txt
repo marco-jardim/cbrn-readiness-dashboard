@@ -1,12 +1,7 @@
 CBRN Readiness Dashboard - antes de instalar
 
-Versao preliminar - indicadores nao validados institucionalmente.
-
-- Nao use os indicadores em decisoes que exijam uma ferramenta validada.
-- Nao insira dados reais ainda. Espere ate que a instituicao responda as perguntas Q19
-  (classificacao formal dos dados), Q4 (dados pessoais), Q11 (seguranca da informacao) e
-  Q13 (implantacao). Ate la, use o modo de demonstracao (cbrn-dashboard.exe --demo): os
-  dados dele sao ficticios.
+- Para experimentar o programa com dados ficticios, use o modo de demonstracao
+  (cbrn-dashboard.exe --demo).
 - O programa funciona offline. Seus dados ficam neste computador, em
   %LOCALAPPDATA%\cbrn-readiness-dashboard, fora da pasta do programa.
 - Desinstalar remove somente o programa. Seus dados sao mantidos. Para apaga-los, remova essa

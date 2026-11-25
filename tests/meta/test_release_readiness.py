@@ -443,10 +443,10 @@ def test_the_release_workflow_exists_and_uses_the_release_script() -> None:
     assert "--draft" in text
 
 
-def test_the_release_body_template_exists_and_states_the_preliminary_status() -> None:
+def test_the_release_body_template_exists_without_the_preliminary_notice() -> None:
     text = _read(TEMPLATE)
     assert "{{version}}" in text
-    assert "Preliminary version" in text
+    assert "Preliminary version" not in text
     assert "unsigned" in text
 
 
